@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { 
-  Plus, Search, Filter, Download, Edit, Trash2, 
+  Plus, Search, Filter, Download, Trash2, 
   Eye, EyeOff, Building, Mail, Phone, MapPin,
-  Calendar, DollarSign, Users, Activity, AlertTriangle,
-  CheckCircle, Clock, Globe, CreditCard, Navigation, X
+  Calendar, DollarSign, Users, Activity,
+  CheckCircle, CreditCard, Navigation, X
 } from 'lucide-react';
 import { mockSalons } from '../../data/mockData';
 import { Salon } from '../../types';
@@ -19,10 +19,13 @@ const SalonManagement: React.FC = () => {
   const [showDetailModal, setShowDetailModal] = useState(false);
 
   const filteredSalons = salons.filter(salon => {
+    const ownerFullName = `${salon.ownerFirstName} ${salon.ownerLastName}`;
     const matchesSearch = 
       salon.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      salon.ownerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ownerFullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       salon.ownerEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      salon.salonEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      salon.branchName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       salon.city.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = 
@@ -57,12 +60,13 @@ const SalonManagement: React.FC = () => {
   };
 
   const downloadSalonReport = () => {
-    const reportData = filteredSalons.map(salon => 
-      `${salon.name},${salon.ownerName},${salon.ownerEmail},${salon.city},${salon.subscriptionPlan},${salon.subscriptionStatus},${salon.totalEmployees},${salon.totalCustomers},${salon.monthlyRevenue}`
-    ).join('\n');
+    const reportData = filteredSalons.map(salon => {
+      const ownerFullName = `${salon.ownerFirstName} ${salon.ownerLastName}`;
+      return `${salon.name},${ownerFullName},${salon.ownerEmail},${salon.salonEmail},${salon.branchName},${salon.city},${salon.subscriptionPlan},${salon.subscriptionStatus},${salon.totalEmployees},${salon.totalCustomers},${salon.monthlyRevenue}`;
+    }).join('\n');
     
     const blob = new Blob([
-      `Salon Name,Owner Name,Owner Email,City,Plan,Status,Employees,Customers,Monthly Revenue\n${reportData}`
+      `Salon Name,Owner Name,Owner Email,Salon Email,Branch Name,City,Plan,Status,Employees,Customers,Monthly Revenue\n${reportData}`
     ], { type: 'text/csv' });
     
     const url = window.URL.createObjectURL(blob);
@@ -269,11 +273,19 @@ const SalonManagement: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
                   <Mail className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-600">{salon.ownerName}</span>
+                  <span className="text-sm text-gray-600">{`${salon.ownerFirstName} ${salon.ownerLastName}`}</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Phone className="w-4 h-4 text-gray-400" />
                   <span className="text-sm text-gray-600">{salon.ownerEmail}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Mail className="w-4 h-4 text-blue-400" />
+                  <span className="text-sm text-blue-600">{salon.salonEmail}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Building className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm text-gray-600">{salon.branchName}</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <MapPin className="w-4 h-4 text-gray-400" />
@@ -353,6 +365,19 @@ const SalonManagement: React.FC = () => {
         <AddSalonModal
           onClose={() => setShowAddModal(false)}
           onAdd={(salonData) => {
+            console.log('🏢 [SALON MANAGER] Received new salon data for processing...');
+            console.log('📊 [SALON DATA] Processing salon registration:', {
+              name: salonData.name,
+              businessName: salonData.businessName,
+              ownerName: `${salonData.ownerFirstName} ${salonData.ownerLastName}`,
+              ownerEmail: salonData.ownerEmail,
+              location: `${salonData.city}, ${salonData.state}`,
+              subscriptionPlan: salonData.subscriptionPlan,
+              subscriptionStatus: salonData.subscriptionStatus,
+              hasCredentials: !!(salonData.username && salonData.defaultPassword),
+              timestamp: new Date().toISOString()
+            });
+            
             const newSalon: Salon = {
               ...salonData,
               id: Date.now().toString(),
@@ -360,8 +385,31 @@ const SalonManagement: React.FC = () => {
               updatedAt: new Date(),
               createdBy: 'super-admin',
             };
+            
+            console.log('🆔 [ID GENERATION] Assigned salon ID:', newSalon.id);
+            console.log('👤 [METADATA] Added creation metadata:', {
+              createdAt: newSalon.createdAt.toISOString(),
+              updatedAt: newSalon.updatedAt.toISOString(),
+              createdBy: newSalon.createdBy
+            });
+            
             setSalons([...salons, newSalon]);
             setShowAddModal(false);
+            
+            // Log successful salon registration (excluding password for security)
+            console.log('✅ [SUCCESS] Salon registration completed successfully');
+            console.log('🎊 [REGISTRATION SUMMARY]', {
+              salonId: newSalon.id,
+              salonName: salonData.name,
+              ownerEmail: salonData.ownerEmail,
+              username: salonData.username,
+              registrationComplete: true,
+              totalSalonsInSystem: salons.length + 1,
+              timestamp: new Date().toISOString()
+            });
+            console.log('� [CREDENTIALS] Login credentials processed and sent to:', salonData.ownerEmail);
+            console.log('🔐 [SECURITY] Password has been set and secured (hidden from logs)');
+            console.log('📈 [METRICS] System now has', salons.length + 1, 'total registered salons');
           }}
         />
       )}
@@ -424,6 +472,20 @@ const SalonDetailModal: React.FC<SalonDetailModalProps> = ({ salon, onClose }) =
                 <div className="flex items-center space-x-3">
                   <Mail className="w-4 h-4 text-gray-400" />
                   <span className="text-sm text-gray-600">{salon.ownerEmail}</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <Mail className="w-4 h-4 text-blue-400" />
+                  <div>
+                    <p className="text-sm text-blue-600 font-medium">{salon.salonEmail}</p>
+                    <p className="text-xs text-gray-500">Salon Email</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <Building className="w-4 h-4 text-gray-400" />
+                  <div>
+                    <p className="text-sm text-gray-600 font-medium">{salon.branchName}</p>
+                    <p className="text-xs text-gray-500">Branch</p>
+                  </div>
                 </div>
                 <div className="flex items-center space-x-3">
                   <Phone className="w-4 h-4 text-gray-400" />

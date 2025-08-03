@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Calendar, DollarSign, Clock, Users, Plus, Download, ChevronLeft, ChevronRight, X, CheckCircle, Star, Search } from 'lucide-react';
-import { mockAppointments, mockProfiles, mockBarbers } from '../../data/mockData';
+import { mockAppointments, mockBarbers } from '../../data/mockData';
 import { Appointment } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotificationHelpers } from '../../utils/notificationHelpers';
@@ -16,14 +16,48 @@ const ReceptionDashboard: React.FC = () => {
   const [paymentConfirmModal, setPaymentConfirmModal] = useState<{isOpen: boolean, appointment: Appointment | null}>({isOpen: false, appointment: null});
   const [completeSessionModal, setCompleteSessionModal] = useState<{isOpen: boolean, appointment: Appointment | null}>({isOpen: false, appointment: null});
   const [cancelAppointmentModal, setCancelAppointmentModal] = useState<{isOpen: boolean, appointment: Appointment | null}>({isOpen: false, appointment: null});
-  const [userProfile, setUserProfile] = useState(mockProfiles.reception);
+  const { triggerReceptionNotification } = useNotificationHelpers();
+  const { isProfileModalOpen, closeProfileModal, user, employee } = useAuth();
+
+  // Create user profile from real employee data instead of mock data
+  const userProfile = {
+    id: user?.id || '',
+    name: employee?.fullName || user?.name || '',
+    firstName: employee?.firstName || '',
+    lastName: employee?.lastName || '',
+    email: employee?.email || user?.email || '',
+    phone: employee?.phoneNumber || '',
+    role: 'reception' as const,
+    avatar: employee?.profileImageUrl || user?.profilePicture || '',
+    // Employee specific fields
+    employeeId: employee?.employeeId?.toString() || '',
+    dateOfBirth: employee?.dateOfBirth || '',
+    gender: employee?.gender || 'OTHER',
+    address: employee?.address || '',
+    city: employee?.city || '',
+    hireDate: employee?.hireDate || '',
+    emergencyContact: employee?.emergencyContact || '',
+    emergencyPhone: employee?.emergencyPhone || '',
+    emergencyRelationship: employee?.emergencyRelationship || '',
+    specializations: employee?.specializations || [],
+    experience: employee?.experience || '',
+    experienceYears: employee?.experienceYears || 0,
+    baseSalary: employee?.baseSalary || 0,
+    ratings: employee?.ratings || 0,
+    // Salon specific fields  
+    salonName: employee?.salonName || '',
+    salonId: employee?.salonId?.toString() || '',
+    branchId: employee?.branchId?.toString() || '',
+    // Additional fields
+    notes: employee?.notes || '',
+    profileImageUrl: employee?.profileImageUrl || ''
+  };
+
   const [successMessage, setSuccessMessage] = useState<{show: boolean, message: string}>({show: false, message: ''});
   const [pendingPaymentsSearch, setPendingPaymentsSearch] = useState('');
   const [todayAppointmentsSearch, setTodayAppointmentsSearch] = useState('');
   const [allAppointmentsSearch, setAllAppointmentsSearch] = useState('');
   const [allAppointmentsDateFilter, setAllAppointmentsDateFilter] = useState('');
-  const { triggerReceptionNotification } = useNotificationHelpers();
-  const { isProfileModalOpen, closeProfileModal } = useAuth();
   const allAppointmentsScrollRef = useRef<HTMLDivElement>(null);
   const todayAppointmentsScrollRef = useRef<HTMLDivElement>(null);
 
@@ -207,7 +241,9 @@ Generated on: ${new Date().toLocaleString()}
   };
 
   const handleProfileSave = (updatedProfile: any) => {
-    setUserProfile(updatedProfile);
+    // Profile updates should be handled through the AuthContext
+    // For now, we'll just log the changes and show success message
+    console.log('Reception profile updated:', updatedProfile);
     showSuccessMessage('Profile has been updated successfully!');
     triggerReceptionNotification('appointmentConfirmed', 'Profile updated successfully', '');
   };

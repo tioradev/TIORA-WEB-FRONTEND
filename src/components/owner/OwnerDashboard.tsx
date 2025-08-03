@@ -5,7 +5,7 @@ import {
   TrendingUp, Star, Search,
   Sparkles, Shield, Target, Briefcase
 } from 'lucide-react';
-import { mockAppointments, mockEarnings, mockLeaveRequests, mockBarbers, mockProfiles, mockServices } from '../../data/mockData';
+import { mockAppointments, mockEarnings, mockLeaveRequests, mockBarbers, mockServices } from '../../data/mockData';
 import { LeaveRequest, Service } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import LeaveRequestCard from './LeaveRequestCard';
@@ -13,7 +13,7 @@ import ServiceManagementModal from './ServiceManagementModal';
 import ServiceListView from './ServiceListView';
 import ExpenseManagement from '../super-admin/ExpenseManagement';
 import BranchManagement from '../super-admin/BranchManagement';
-import StaffManagement from './StaffManagement';
+import EmployeeManagement from './EmployeeManagement';
 import AdvancedAnalytics from './AdvancedAnalytics';
 import PaymentBilling from './PaymentBilling';
 import ProfileModal from '../shared/ProfileModal';
@@ -24,11 +24,41 @@ const OwnerDashboard: React.FC = () => {
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'staff' | 'analytics' | 'payments' | 'services' | 'leaves' | 'expenses' | 'branches'>('overview');
-  const [userProfile, setUserProfile] = useState(mockProfiles.owner);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [servicesSearch, setServicesSearch] = useState<string>('');
   const [leaveRequestsSearch, setLeaveRequestsSearch] = useState<string>('');
-  const { isProfileModalOpen, closeProfileModal } = useAuth();
+  const { isProfileModalOpen, closeProfileModal, user, salon } = useAuth();
+
+  // Create user profile from real salon data instead of mock data
+  const userProfile = {
+    id: user?.id || '',
+    name: salon?.fullOwnerName || user?.name || '',
+    firstName: salon?.ownerFirstName || '',
+    lastName: salon?.ownerLastName || '',
+    fullOwnerName: salon?.fullOwnerName || '',
+    email: salon?.email || user?.email || '',
+    phone: salon?.phoneNumber || '',
+    role: 'owner' as const,
+    avatar: salon?.ownerImgUrl || salon?.imageUrl || user?.profilePicture || '',
+    profilePicture: salon?.ownerImgUrl || user?.profilePicture || '',
+    // Owner specific fields
+    ownerFirstName: salon?.ownerFirstName || '',
+    ownerLastName: salon?.ownerLastName || '',
+    ownerPhone: salon?.ownerPhone || '',
+    ownerEmail: salon?.ownerEmail || '',
+    // Salon specific fields
+    salonName: salon?.name || '',
+    salonId: salon?.salonId?.toString() || '',
+    address: salon?.address || '',
+    district: salon?.district || '',
+    postalCode: salon?.postalCode || '',
+    brNumber: salon?.brNumber || '',
+    salonImageUrl: salon?.imageUrl || '',
+    ownerImgUrl: salon?.ownerImgUrl || '',
+    // Business fields
+    businessName: salon?.name || '',
+    taxId: salon?.taxId || ''
+  };
 
   const todayEarnings = mockEarnings.reduce((sum, earning) => sum + earning.finalAmount, 0);
   const pendingLeaves = leaveRequests.filter(req => req.status === 'pending');
@@ -132,7 +162,8 @@ const OwnerDashboard: React.FC = () => {
   };
 
   const handleProfileSave = (updatedProfile: any) => {
-    setUserProfile(updatedProfile);
+    // Profile updates should be handled through the AuthContext
+    // For now, we'll just log the changes
     console.log('Owner profile updated:', updatedProfile);
   };
 
@@ -543,7 +574,7 @@ const OwnerDashboard: React.FC = () => {
         )}
 
         {/* Enhanced Feature Tabs */}
-        {activeTab === 'staff' && <StaffManagement />}
+        {activeTab === 'staff' && <EmployeeManagement />}
         {activeTab === 'analytics' && <AdvancedAnalytics />}
         {activeTab === 'payments' && <PaymentBilling />}
 

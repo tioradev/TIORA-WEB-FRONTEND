@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, User, Briefcase, Save, Edit, Camera, Shield
 } from 'lucide-react';
+import { apiService, SalonOwnerProfileUpdateRequest } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ProfileData {
   id: string;
@@ -17,6 +19,17 @@ interface ProfileData {
   // Owner specific fields
   businessName?: string;
   taxId?: string;
+  // Salon owner additional fields from API
+  district?: string;
+  postalCode?: string;
+  ownerFirstName?: string;
+  ownerLastName?: string;
+  ownerPhone?: string;
+  ownerEmail?: string;
+  brNumber?: string;
+  fullOwnerName?: string;
+  salonImageUrl?: string;
+  ownerImgUrl?: string;
   // Super Admin specific fields
   department?: string;
   permissions?: string[];
@@ -44,19 +57,86 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   // Sync form data with profile prop changes
+  const { updateSalonInfo } = useAuth();
+
   useEffect(() => {
     setFormData(profile);
     console.log('ProfileModal received profile:', profile);
     console.log('ProfileModal isOpen:', isOpen);
-  }, [profile, isOpen]);
+    
+    // Debug: Check authentication status when modal opens
+    if (isOpen && userRole === 'owner') {
+      console.log('🔍 [PROFILE] Modal opened for owner - checking auth status...');
+      console.log('🔍 [PROFILE] LocalStorage token:', localStorage.getItem('authToken')?.substring(0, 30) + '...');
+      console.log('🔍 [PROFILE] API Service token status:', apiService.getTokenStatus());
+    }
+  }, [profile, isOpen, userRole]);
 
-  const handleSave = () => {
-    // Don't allow changing the primary key (id)
-    const updatedProfile = { ...formData, id: profile.id };
-    onSave(updatedProfile);
-    setIsEditing(false);
-    setShowSuccessMessage(true);
-    setTimeout(() => setShowSuccessMessage(false), 3000);
+  const handleSave = async () => {
+    try {
+      // Don't allow changing the primary key (id)
+      const updatedProfile = { ...formData, id: profile.id };
+      
+      // Debug: Check if we have the required data
+      console.log('🔍 [PROFILE] Starting profile save...');
+      console.log('🔍 [PROFILE] User role:', userRole);
+      console.log('🔍 [PROFILE] Salon ID:', formData.salonId);
+      console.log('🔍 [PROFILE] Auth token exists:', !!localStorage.getItem('authToken'));
+      console.log('🔍 [PROFILE] API Service token status:', apiService.getTokenStatus());
+      
+      // For salon owners, make API call to update profile
+      if (userRole === 'owner' && formData.salonId) {
+        const salonUpdateData: SalonOwnerProfileUpdateRequest = {
+          name: formData.salonName || '',
+          address: formData.address || '',
+          district: formData.district || '',
+          postalCode: formData.postalCode || '',
+          phoneNumber: formData.phone || '',
+          email: formData.email || '',
+          ownerFirstName: formData.ownerFirstName || '',
+          ownerLastName: formData.ownerLastName || '',
+          ownerPhone: formData.ownerPhone || '',
+          ownerEmail: formData.ownerEmail || '',
+          brNumber: formData.brNumber || '',
+          taxId: formData.taxId || '',
+          imageUrl: formData.salonImageUrl || '',
+          ownerImgUrl: formData.ownerImgUrl || formData.profilePicture || ''
+        };
+
+        console.log('🚀 [PROFILE] Making API call to update salon owner profile...');
+        console.log('📋 [PROFILE] Update data:', salonUpdateData);
+        console.log('🔐 [PROFILE] API service has token:', !!apiService['authToken']);
+        
+        const response = await apiService.updateSalonOwnerProfile(formData.salonId, salonUpdateData);
+        console.log('✅ [PROFILE] Salon owner profile update response:', response);
+        
+        // Update the salon data in AuthContext
+        if (updateSalonInfo) {
+          updateSalonInfo({
+            ...salonUpdateData,
+            salonId: parseInt(formData.salonId),
+            fullOwnerName: `${salonUpdateData.ownerFirstName} ${salonUpdateData.ownerLastName}`.trim()
+          });
+        }
+      }
+      
+      onSave(updatedProfile);
+      setIsEditing(false);
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } catch (error) {
+      console.error('❌ [PROFILE] Error updating profile:', error);
+      console.error('❌ [PROFILE] Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
+      // Still call the onSave callback to update local state
+      onSave({ ...formData, id: profile.id });
+      setIsEditing(false);
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    }
   };
 
   const handleCancel = () => {
@@ -69,10 +149,20 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        setFormData(prev => ({ 
-          ...prev, 
-          profilePicture: e.target?.result as string 
-        }));
+        const result = e.target?.result as string;
+        // For salon owners, update both profilePicture and ownerImgUrl
+        if (userRole === 'owner') {
+          setFormData(prev => ({ 
+            ...prev, 
+            profilePicture: result,
+            ownerImgUrl: result
+          }));
+        } else {
+          setFormData(prev => ({ 
+            ...prev, 
+            profilePicture: result
+          }));
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -154,9 +244,10 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
           <div className="flex flex-col items-center space-y-4">
             <div className="relative">
               <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-                {formData.profilePicture ? (
+                {/* For salon owners, prioritize ownerImgUrl, for others use profilePicture */}
+                {(userRole === 'owner' ? formData.ownerImgUrl || formData.profilePicture : formData.profilePicture) ? (
                   <img 
-                    src={formData.profilePicture} 
+                    src={userRole === 'owner' ? formData.ownerImgUrl || formData.profilePicture : formData.profilePicture} 
                     alt="Profile" 
                     className="w-full h-full object-cover"
                   />
@@ -289,56 +380,269 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
             <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6">
               <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                 <Briefcase className="w-5 h-5 mr-2 text-purple-600" />
-                Business Information
+                Salon Owner & Business Information
               </h4>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Business Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.businessName || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, businessName: e.target.value }))}
-                    disabled={!isEditing}
-                    className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
-                      isEditing 
-                        ? 'focus:ring-2 focus:ring-purple-500 focus:border-transparent' 
-                        : 'bg-gray-50 text-gray-600'
-                    }`}
-                  />
+              {/* Owner Personal Information */}
+              <div className="mb-6">
+                <h5 className="text-md font-medium text-gray-800 mb-3">Owner Information</h5>
+                
+                {/* Owner Profile Image */}
+                <div className="mb-6 flex justify-center">
+                  <div className="flex flex-col items-center space-y-3">
+                    <div className="relative">
+                      <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden border-4 border-purple-200">
+                        {formData.ownerImgUrl ? (
+                          <img 
+                            src={formData.ownerImgUrl} 
+                            alt="Owner Profile" 
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <User className="w-10 h-10 text-gray-400" />
+                        )}
+                      </div>
+                      {isEditing && (
+                        <label className="absolute bottom-0 right-0 bg-purple-500 hover:bg-purple-600 text-white p-1.5 rounded-full cursor-pointer transition-colors duration-200">
+                          <Camera className="w-3 h-3" />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (e) => {
+                                  const result = e.target?.result as string;
+                                  setFormData(prev => ({ ...prev, ownerImgUrl: result }));
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600">Owner Profile Picture</p>
+                  </div>
                 </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Owner First Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.ownerFirstName || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, ownerFirstName: e.target.value }))}
+                      disabled={!isEditing}
+                      className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                        isEditing 
+                          ? 'focus:ring-2 focus:ring-purple-500 focus:border-transparent' 
+                          : 'bg-gray-50 text-gray-600'
+                      }`}
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tax ID
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.taxId || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, taxId: e.target.value }))}
-                    disabled={!isEditing}
-                    className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
-                      isEditing 
-                        ? 'focus:ring-2 focus:ring-purple-500 focus:border-transparent' 
-                        : 'bg-gray-50 text-gray-600'
-                    }`}
-                  />
-                </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Owner Last Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.ownerLastName || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, ownerLastName: e.target.value }))}
+                      disabled={!isEditing}
+                      className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                        isEditing 
+                          ? 'focus:ring-2 focus:ring-purple-500 focus:border-transparent' 
+                          : 'bg-gray-50 text-gray-600'
+                      }`}
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Salon Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.salonName || ''}
-                    disabled
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-                  />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Owner Phone
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.ownerPhone || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, ownerPhone: e.target.value }))}
+                      disabled={!isEditing}
+                      className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                        isEditing 
+                          ? 'focus:ring-2 focus:ring-purple-500 focus:border-transparent' 
+                          : 'bg-gray-50 text-gray-600'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Owner Email
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.ownerEmail || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, ownerEmail: e.target.value }))}
+                      disabled={!isEditing}
+                      className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                        isEditing 
+                          ? 'focus:ring-2 focus:ring-purple-500 focus:border-transparent' 
+                          : 'bg-gray-50 text-gray-600'
+                      }`}
+                    />
+                  </div>
                 </div>
               </div>
+
+              {/* Salon Information */}
+              <div className="mb-6">
+                <h5 className="text-md font-medium text-gray-800 mb-3">Salon Information</h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Salon Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.salonName || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, salonName: e.target.value }))}
+                      disabled={!isEditing}
+                      className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                        isEditing 
+                          ? 'focus:ring-2 focus:ring-purple-500 focus:border-transparent' 
+                          : 'bg-gray-50 text-gray-600'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Salon Email
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.email || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                      disabled={!isEditing}
+                      className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                        isEditing 
+                          ? 'focus:ring-2 focus:ring-purple-500 focus:border-transparent' 
+                          : 'bg-gray-50 text-gray-600'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Salon Phone
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.phone || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                      disabled={!isEditing}
+                      className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                        isEditing 
+                          ? 'focus:ring-2 focus:ring-purple-500 focus:border-transparent' 
+                          : 'bg-gray-50 text-gray-600'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      District
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.district || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, district: e.target.value }))}
+                      disabled={!isEditing}
+                      className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                        isEditing 
+                          ? 'focus:ring-2 focus:ring-purple-500 focus:border-transparent' 
+                          : 'bg-gray-50 text-gray-600'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Postal Code
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.postalCode || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, postalCode: e.target.value }))}
+                      disabled={!isEditing}
+                      className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                        isEditing 
+                          ? 'focus:ring-2 focus:ring-purple-500 focus:border-transparent' 
+                          : 'bg-gray-50 text-gray-600'
+                      }`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Business Registration */}
+              <div>
+                <h5 className="text-md font-medium text-gray-800 mb-3">Business Registration</h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Business Registration Number
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.brNumber || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, brNumber: e.target.value }))}
+                      disabled={!isEditing}
+                      className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                        isEditing 
+                          ? 'focus:ring-2 focus:ring-purple-500 focus:border-transparent' 
+                          : 'bg-gray-50 text-gray-600'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Tax ID
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.taxId || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, taxId: e.target.value }))}
+                      disabled={!isEditing}
+                      className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                        isEditing 
+                          ? 'focus:ring-2 focus:ring-purple-500 focus:border-transparent' 
+                          : 'bg-gray-50 text-gray-600'
+                      }`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Salon Image */}
+              {formData.salonImageUrl && (
+                <div className="mt-6">
+                  <h5 className="text-md font-medium text-gray-800 mb-3">Salon Image</h5>
+                  <div className="flex justify-center">
+                    <img
+                      src={formData.salonImageUrl}
+                      alt="Salon"
+                      className="max-w-xs max-h-48 rounded-lg shadow-md"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

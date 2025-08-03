@@ -5,15 +5,83 @@ export interface User {
   role: 'reception' | 'owner' | 'super-admin';
   profilePicture?: string;
   salonId?: string; // For reception and owner roles
+  salon?: SalonInfo; // For owner role - will contain full salon details
+  employee?: EmployeeInfo; // For reception role - will contain employee details
+}
+
+export interface EmployeeInfo {
+  employeeId: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  username: string;
+  phoneNumber: string;
+  dateOfBirth: string | null;
+  gender: "MALE" | "FEMALE" | "OTHER";
+  address: string;
+  city: string | null;
+  role: "RECEPTIONIST" | "BARBER";
+  status: "ACTIVE" | "INACTIVE";
+  hireDate: string;
+  terminationDate: string | null;
+  baseSalary: number;
+  experience: string | null;
+  specializations: string[];
+  emergencyContact: string;
+  emergencyPhone: string;
+  emergencyRelationship: string;
+  ratings: number;
+  experienceYears: number | null;
+  notes: string | null;
+  profileImageUrl: string | null;
+  salonName: string;
+  salonId: number;
+  branchId: number;
+  employeeWeeklySchedule: string;
+  createdAt: string;
+  updatedAt: string;
+  active: boolean;
+  fullName: string;
+}
+
+export interface SalonInfo {
+  salonId: number;
+  name: string;
+  address: string;
+  district: string;
+  postalCode: string;
+  phoneNumber: string;
+  email: string;
+  ownerFirstName: string;
+  ownerLastName: string;
+  ownerPhone: string;
+  ownerEmail: string;
+  brNumber: string;
+  taxId: string;
+  imageUrl: string;
+  ownerImgUrl?: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  username?: string;
+  userRole?: string;
+  defaultBranchId?: number;
+  defaultBranchName?: string;
+  fullOwnerName: string;
 }
 
 export interface Salon {
   id: string;
   name: string;
   businessName: string;
-  ownerName: string;
+  salonEmail: string;
+  branchName: string;
+  ownerFirstName: string;
+  ownerLastName: string;
   ownerEmail: string;
   ownerPhone: string;
+  username?: string;
+  defaultPassword?: string;
   address: string;
   city: string;
   state: string;

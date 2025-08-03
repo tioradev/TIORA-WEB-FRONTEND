@@ -7,7 +7,9 @@ import {
 
 interface Staff {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
+  gender: 'male' | 'female';
   email: string;
   phone: string;
   role: 'barber' | 'reception';
@@ -41,7 +43,9 @@ interface StaffModalProps {
 
 const StaffModal: React.FC<StaffModalProps> = ({ isOpen, onClose, staff, onSave, branches }) => {
   const [formData, setFormData] = useState<Omit<Staff, 'id'>>({
-    name: staff?.name || '',
+    firstName: staff?.firstName || '',
+    lastName: staff?.lastName || '',
+    gender: staff?.gender || 'male',
     email: staff?.email || '',
     phone: staff?.phone || '',
     role: staff?.role || 'barber',
@@ -77,7 +81,9 @@ const StaffModal: React.FC<StaffModalProps> = ({ isOpen, onClose, staff, onSave,
   React.useEffect(() => {
     if (isOpen) {
       setFormData({
-        name: staff?.name || '',
+        firstName: staff?.firstName || '',
+        lastName: staff?.lastName || '',
+        gender: staff?.gender || 'male',
         email: staff?.email || '',
         phone: staff?.phone || '',
         role: staff?.role || 'barber',
@@ -110,8 +116,9 @@ const StaffModal: React.FC<StaffModalProps> = ({ isOpen, onClose, staff, onSave,
     }
   }, [isOpen, staff]);
 
-  const generateUsername = (name: string) => {
-    return name.toLowerCase().replace(/\s+/g, '.') + Math.floor(Math.random() * 100);
+  const generateUsername = (firstName: string, lastName: string) => {
+    const fullName = `${firstName} ${lastName}`;
+    return fullName.toLowerCase().replace(/\s+/g, '.') + Math.floor(Math.random() * 100);
   };
 
   const generatePassword = () => {
@@ -124,7 +131,7 @@ const StaffModal: React.FC<StaffModalProps> = ({ isOpen, onClose, staff, onSave,
   };
 
   const generateCredentials = () => {
-    const username = generateUsername(formData.name);
+    const username = generateUsername(formData.firstName, formData.lastName);
     const password = generatePassword();
     setFormData(prev => ({ ...prev, username, password }));
     setShowCredentials(true);
@@ -203,17 +210,47 @@ const StaffModal: React.FC<StaffModalProps> = ({ isOpen, onClose, staff, onSave,
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name
+                  First Name
                 </label>
                 <input
                   type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  value={formData.firstName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
                   required
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Last Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.lastName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Gender
+                </label>
+                <select
+                  value={formData.gender}
+                  onChange={(e) => setFormData(prev => ({ ...prev, gender: e.target.value as 'male' | 'female' }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                  required
+                >
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email Address
@@ -547,7 +584,9 @@ const StaffManagement: React.FC = () => {
   const [staff, setStaff] = useState<Staff[]>([
     {
       id: '1',
-      name: 'Sarah Johnson',
+      firstName: 'Sarah',
+      lastName: 'Johnson',
+      gender: 'female',
       email: 'sarah@salon.com',
       phone: '+94771234567',
       role: 'barber',
@@ -578,7 +617,9 @@ const StaffManagement: React.FC = () => {
     },
     {
       id: '2',
-      name: 'Mike Chen',
+      firstName: 'Mike',
+      lastName: 'Chen',
+      gender: 'male',
       email: 'mike@salon.com',
       phone: '+94771234568',
       role: 'reception',
@@ -630,7 +671,8 @@ const StaffManagement: React.FC = () => {
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; staff: Staff | null }>({ isOpen: false, staff: null });
 
   const filteredStaff = staff.filter(member => {
-    const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const fullName = `${member.firstName} ${member.lastName}`;
+    const matchesSearch = fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          member.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          member.phone.includes(searchTerm);
     const matchesRole = roleFilter === 'all' || member.role === roleFilter;
@@ -659,7 +701,7 @@ const StaffManagement: React.FC = () => {
             ? { ...staffData, id: editingStaff.id } 
             : s
         ));
-        setSuccessMessage(`${staffData.name} has been updated successfully!`);
+        setSuccessMessage(`${staffData.firstName} ${staffData.lastName} has been updated successfully!`);
       } else {
         // Add new staff
         const newStaff: Staff = {
@@ -667,7 +709,7 @@ const StaffManagement: React.FC = () => {
           id: Date.now().toString()
         };
         setStaff(prev => [...prev, newStaff]);
-        setSuccessMessage(`${staffData.name} has been added to the team successfully!`);
+        setSuccessMessage(`${staffData.firstName} ${staffData.lastName} has been added to the team successfully!`);
       }
       
       // Close modal and reset editing state
@@ -695,7 +737,7 @@ const StaffManagement: React.FC = () => {
     if (deleteConfirmation.staff) {
       try {
         setStaff(prev => prev.filter(s => s.id !== deleteConfirmation.staff!.id));
-        setSuccessMessage(`${deleteConfirmation.staff.name} has been removed from the team.`);
+        setSuccessMessage(`${deleteConfirmation.staff.firstName} ${deleteConfirmation.staff.lastName} has been removed from the team.`);
         setDeleteConfirmation({ isOpen: false, staff: null });
         
         // Auto-hide success message after 3 seconds
@@ -890,7 +932,7 @@ const StaffManagement: React.FC = () => {
                   {getRoleIcon(member.role)}
                 </div>
                 <div>
-                  <h3 className="font-bold text-gray-900 text-lg">{member.name}</h3>
+                  <h3 className="font-bold text-gray-900 text-lg">{`${member.firstName} ${member.lastName}`}</h3>
                   <p className="text-sm text-gray-600">{member.email}</p>
                 </div>
               </div>
@@ -1014,7 +1056,7 @@ const StaffManagement: React.FC = () => {
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Remove Staff Member</h3>
               <p className="text-gray-600 mb-6">
-                Are you sure you want to remove <span className="font-semibold text-gray-900">{deleteConfirmation.staff.name}</span> from your team? 
+                Are you sure you want to remove <span className="font-semibold text-gray-900">{`${deleteConfirmation.staff.firstName} ${deleteConfirmation.staff.lastName}`}</span> from your team? 
                 This action cannot be undone and will permanently delete their profile and access to the system.
               </p>
               <div className="flex space-x-3">

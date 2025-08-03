@@ -145,9 +145,10 @@ const AuditReports: React.FC = () => {
 
   const generateSalonOverviewCSV = (data: any) => {
     const headers = 'Salon ID,Salon Name,Owner Name,City,State,Plan,Status,Employees,Customers,Monthly Revenue,System Status,Last Active\n';
-    const rows = data.details.salons.map((salon: any) => 
-      `${salon.id},${salon.name},${salon.ownerName},${salon.city},${salon.state},${salon.subscriptionPlan},${salon.subscriptionStatus},${salon.totalEmployees},${salon.totalCustomers},${salon.monthlyRevenue},${salon.systemStatus},${salon.lastActiveDate}`
-    ).join('\n');
+    const rows = data.details.salons.map((salon: any) => {
+      const ownerFullName = `${salon.ownerFirstName} ${salon.ownerLastName}`;
+      return `${salon.id},${salon.name},${ownerFullName},${salon.city},${salon.state},${salon.subscriptionPlan},${salon.subscriptionStatus},${salon.totalEmployees},${salon.totalCustomers},${salon.monthlyRevenue},${salon.systemStatus},${salon.lastActiveDate}`;
+    }).join('\n');
     
     const summary = `\n\nSUMMARY\nTotal Salons,${data.summary.totalSalons}\nTotal Revenue,${data.details.salons.reduce((sum: number, s: any) => sum + s.monthlyRevenue, 0)}\nTotal Customers,${data.details.salons.reduce((sum: number, s: any) => sum + s.totalCustomers, 0)}\nTotal Employees,${data.details.salons.reduce((sum: number, s: any) => sum + s.totalEmployees, 0)}\n`;
     
