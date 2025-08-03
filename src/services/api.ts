@@ -11,6 +11,10 @@ const ENDPOINTS = {
   },
   BRANCHES: {
     ACTIVE: '/branches/active',
+    CREATE: '/branches',
+    UPDATE: '/branches',
+    STATISTICS: '/branches/salon',
+    COMPREHENSIVE: '/branches/salon',
   },
   EMPLOYEES: {
     CREATE: '/employees/comprehensive',
@@ -167,6 +171,59 @@ class ApiService {
     );
   }
 
+  // Create New Branch API
+  async createBranch(branchData: BranchCreateRequest): Promise<BranchCreateResponse> {
+    const endpoint = ENDPOINTS.BRANCHES.CREATE;
+    envLog.info('🌿 [API] Creating new branch...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🏢 [API] Branch data:', branchData);
+    
+    return this.request<BranchCreateResponse>(
+      endpoint,
+      {
+        method: 'POST',
+        body: JSON.stringify(branchData),
+      }
+    );
+  }
+
+  // Update Branch API
+  async updateBranch(branchId: string | number, branchData: BranchUpdateRequest): Promise<BranchUpdateResponse> {
+    const endpoint = `${ENDPOINTS.BRANCHES.UPDATE}/${branchId}`;
+    envLog.info('🔄 [API] Updating branch...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🏢 [API] Branch ID:', branchId);
+    envLog.info('📋 [API] Branch update data:', branchData);
+    
+    return this.request<BranchUpdateResponse>(
+      endpoint,
+      {
+        method: 'PUT',
+        body: JSON.stringify(branchData),
+      }
+    );
+  }
+
+  // Get branch statistics for a salon
+  async getBranchStatistics(salonId: string | number): Promise<BranchStatisticsResponse> {
+    const endpoint = `${ENDPOINTS.BRANCHES.STATISTICS}/${salonId}/statistics`;
+    envLog.info('📊 [API] Getting branch statistics...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🏢 [API] Salon ID:', salonId);
+    
+    return this.request<BranchStatisticsResponse>(endpoint);
+  }
+
+  // Get comprehensive branch data for a salon
+  async getComprehensiveBranches(salonId: string | number): Promise<ComprehensiveBranchResponse> {
+    const endpoint = `${ENDPOINTS.BRANCHES.COMPREHENSIVE}/${salonId}/comprehensive`;
+    envLog.info('🏢 [API] Getting comprehensive branch data...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🏢 [API] Salon ID:', salonId);
+    
+    return this.request<ComprehensiveBranchResponse>(endpoint);
+  }
+
   // Employee Management API
   async createEmployee(employeeData: EmployeeRegistrationRequest): Promise<EmployeeRegistrationResponse> {
     return this.request<EmployeeRegistrationResponse>(
@@ -191,6 +248,128 @@ export interface LoginRequest {
 export interface BranchResponse {
   branchId: number;
   branchName: string;
+}
+
+// Branch Creation types
+export interface BranchCreateRequest {
+  salonId: number;
+  branchName: string;
+  branchPhoneNumber: string;
+  branchEmail: string;
+  latitude: number;
+  longitude: number;
+  branchImage?: string;
+  weeklySchedule: {
+    schedule: {
+      [key: string]: {
+        open: boolean;
+        openingTime: string;
+        closingTime: string;
+      };
+    };
+  };
+}
+
+export interface BranchCreateResponse {
+  branchId: number;
+  salonId: number;
+  branchName: string;
+  branchPhoneNumber: string;
+  branchEmail: string;
+  latitude: number;
+  longitude: number;
+  branchImage?: string;
+  status: string;
+  weeklySchedule: {
+    schedule: {
+      [key: string]: {
+        open: boolean;
+        openingTime: string;
+        closingTime: string;
+      };
+    };
+  };
+  createdAt: string;
+  message: string;
+}
+
+// Branch Update types
+export interface BranchUpdateRequest {
+  branchName: string;
+  branchPhoneNumber: string;
+  branchEmail: string;
+  latitude: number;
+  longitude: number;
+  branchImage?: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'TEMPORARILY_CLOSED' | 'PERMANENTLY_CLOSED';
+  weeklySchedule: {
+    schedule: {
+      [key: string]: {
+        open: boolean;
+        openingTime: string;
+        closingTime: string;
+      };
+    };
+  };
+}
+
+export interface BranchUpdateResponse {
+  branchId: number;
+  branchName: string;
+  branchPhoneNumber: string;
+  branchEmail: string;
+  latitude: number;
+  longitude: number;
+  branchImage?: string;
+  status: string;
+  weeklySchedule: {
+    schedule: {
+      [key: string]: {
+        open: boolean;
+        openingTime: string;
+        closingTime: string;
+      };
+    };
+  };
+  updatedAt: string;
+  message: string;
+}
+
+export interface BranchStatisticsResponse {
+  salonId: number;
+  totalBranches: number;
+  activeBranches: number;
+  inactiveBranches: number;
+  message: string;
+}
+
+export interface ComprehensiveBranchData {
+  branchId: number;
+  salonId: number;
+  branchName: string;
+  branchPhoneNumber: string;
+  branchEmail: string;
+  longitude: number;
+  latitude: number;
+  branchImage?: string;
+  status: string;
+  weeklySchedule: {
+    schedule: {
+      [key: string]: {
+        open: boolean;
+        openingTime: string;
+        closingTime: string;
+      };
+    };
+  };
+  createdAt: string;
+  updatedAt: string;
+  employeeCount: number;
+}
+
+export interface ComprehensiveBranchResponse {
+  statistics: BranchStatisticsResponse;
+  branches: ComprehensiveBranchData[];
 }
 
 export interface LoginResponse {

@@ -279,6 +279,8 @@ export interface SalonBranch {
   email: string;
   managerId?: string;
   isActive: boolean;
+  image?: string;
+  employeeCount?: number;
   openingHours: {
     [key: string]: { open: string; close: string; isOpen: boolean };
   };

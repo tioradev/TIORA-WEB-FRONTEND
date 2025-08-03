@@ -1,11 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Edit, Trash2, MapPin, Phone, Mail, 
-  Clock, Users, Building, Eye, EyeOff, X, Save
+  Clock, Users, Building, Eye, EyeOff, X, Save, Camera
 } from 'lucide-react';
 import { SalonBranch } from '../../types';
+import { 
+  apiService, 
+  BranchCreateRequest, 
+  BranchUpdateRequest, 
+  BranchStatisticsResponse,
+  ComprehensiveBranchResponse,
+  ComprehensiveBranchData
+} from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 const BranchManagement: React.FC = () => {
+  const { getSalonId } = useAuth();
+  
+  // Statistics state
+  const [statistics, setStatistics] = useState<BranchStatisticsResponse | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+  
+  // Branch data state
   const [branches, setBranches] = useState<SalonBranch[]>([
     {
       id: '1',
@@ -53,12 +69,122 @@ const BranchManagement: React.FC = () => {
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [branchToDelete, setBranchToDelete] = useState<SalonBranch | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string>('');
 
   const filteredBranches = branches.filter(branch =>
     branch.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     branch.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
     branch.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Load comprehensive branch data from API
+  const loadComprehensiveBranchData = async () => {
+    try {
+      setLoadingStats(true);
+      const salonId = getSalonId();
+      
+      if (!salonId) {
+        console.error('❌ [BRANCH] No salon ID found');
+        return;
+      }
+
+      console.log('🔄 [BRANCH] Loading comprehensive branch data for salon:', salonId);
+      
+      const response = await apiService.getComprehensiveBranches(salonId);
+      console.log('✅ [BRANCH] Comprehensive data received:', response);
+      
+      // Set statistics
+      setStatistics(response.statistics);
+      
+      // Convert API branch data to SalonBranch format
+      const convertedBranches: SalonBranch[] = response.branches.map((branch: ComprehensiveBranchData) => ({
+        id: branch.branchId.toString(),
+        salonId: branch.salonId.toString(),
+        name: branch.branchName,
+        address: `${branch.latitude}, ${branch.longitude}`, // You might want to format this better
+        phone: branch.branchPhoneNumber,
+        email: branch.branchEmail,
+        isActive: branch.status === 'ACTIVE',
+        image: branch.branchImage,
+        openingHours: {
+          monday: branch.weeklySchedule.schedule.MONDAY ? {
+            open: branch.weeklySchedule.schedule.MONDAY.openingTime,
+            close: branch.weeklySchedule.schedule.MONDAY.closingTime,
+            isOpen: branch.weeklySchedule.schedule.MONDAY.open
+          } : { open: '09:00', close: '18:00', isOpen: false },
+          tuesday: branch.weeklySchedule.schedule.TUESDAY ? {
+            open: branch.weeklySchedule.schedule.TUESDAY.openingTime,
+            close: branch.weeklySchedule.schedule.TUESDAY.closingTime,
+            isOpen: branch.weeklySchedule.schedule.TUESDAY.open
+          } : { open: '09:00', close: '18:00', isOpen: false },
+          wednesday: branch.weeklySchedule.schedule.WEDNESDAY ? {
+            open: branch.weeklySchedule.schedule.WEDNESDAY.openingTime,
+            close: branch.weeklySchedule.schedule.WEDNESDAY.closingTime,
+            isOpen: branch.weeklySchedule.schedule.WEDNESDAY.open
+          } : { open: '09:00', close: '18:00', isOpen: false },
+          thursday: branch.weeklySchedule.schedule.THURSDAY ? {
+            open: branch.weeklySchedule.schedule.THURSDAY.openingTime,
+            close: branch.weeklySchedule.schedule.THURSDAY.closingTime,
+            isOpen: branch.weeklySchedule.schedule.THURSDAY.open
+          } : { open: '09:00', close: '18:00', isOpen: false },
+          friday: branch.weeklySchedule.schedule.FRIDAY ? {
+            open: branch.weeklySchedule.schedule.FRIDAY.openingTime,
+            close: branch.weeklySchedule.schedule.FRIDAY.closingTime,
+            isOpen: branch.weeklySchedule.schedule.FRIDAY.open
+          } : { open: '09:00', close: '18:00', isOpen: false },
+          saturday: branch.weeklySchedule.schedule.SATURDAY ? {
+            open: branch.weeklySchedule.schedule.SATURDAY.openingTime,
+            close: branch.weeklySchedule.schedule.SATURDAY.closingTime,
+            isOpen: branch.weeklySchedule.schedule.SATURDAY.open
+          } : { open: '09:00', close: '18:00', isOpen: false },
+          sunday: branch.weeklySchedule.schedule.SUNDAY ? {
+            open: branch.weeklySchedule.schedule.SUNDAY.openingTime,
+            close: branch.weeklySchedule.schedule.SUNDAY.closingTime,
+            isOpen: branch.weeklySchedule.schedule.SUNDAY.open
+          } : { open: '09:00', close: '18:00', isOpen: false },
+        },
+        employeeCount: branch.employeeCount,
+        createdAt: new Date(branch.createdAt),
+      }));
+      
+      setBranches(convertedBranches);
+      console.log('✅ [BRANCH] Converted branches set:', convertedBranches);
+      
+    } catch (error) {
+      console.error('❌ [BRANCH] Error loading comprehensive branch data:', error);
+      // Keep the mock data if API fails
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  // Load only statistics (lighter call)
+  const loadBranchStatistics = async () => {
+    try {
+      const salonId = getSalonId();
+      
+      if (!salonId) {
+        console.error('❌ [BRANCH] No salon ID found');
+        return;
+      }
+
+      console.log('📊 [BRANCH] Loading branch statistics for salon:', salonId);
+      
+      const statsResponse = await apiService.getBranchStatistics(salonId);
+      console.log('✅ [BRANCH] Statistics received:', statsResponse);
+      
+      setStatistics(statsResponse);
+      
+    } catch (error) {
+      console.error('❌ [BRANCH] Error loading branch statistics:', error);
+    }
+  };
+
+  // Load data on component mount
+  useEffect(() => {
+    loadComprehensiveBranchData();
+  }, []);
 
   // CRUD Functions
   const handleAddBranch = () => {
@@ -71,46 +197,196 @@ const BranchManagement: React.FC = () => {
     setShowAddModal(true);
   };
 
-  const handleSaveBranch = (branchData: Omit<SalonBranch, 'id' | 'salonId' | 'createdAt'>) => {
+  const handleSaveBranch = async (branchData: Omit<SalonBranch, 'id' | 'salonId' | 'createdAt'>) => {
     try {
+      setIsLoading(true);
+      const salonId = getSalonId();
+      
+      if (!salonId) {
+        throw new Error('Salon ID not found. Please ensure you are logged in.');
+      }
+
       if (editingBranch) {
-        // Update existing branch
-        setBranches(branches.map(b => 
-          b.id === editingBranch.id 
-            ? { ...b, ...branchData }
-            : b
-        ));
-        setShowSuccessPopup(true);
-      } else {
-        // Add new branch
-        const newBranch: SalonBranch = {
-          ...branchData,
-          id: Date.now().toString(),
-          salonId: 'salon1',
-          createdAt: new Date(),
+        // Update existing branch using API
+        console.log('🔄 [BRANCH] Updating existing branch:', editingBranch.id);
+        
+        const apiUpdateData: BranchUpdateRequest = {
+          branchName: branchData.name,
+          branchPhoneNumber: branchData.phone,
+          branchEmail: branchData.email,
+          latitude: 6.9271, // Default coordinates for Colombo, Sri Lanka
+          longitude: 79.8612,
+          branchImage: branchData.image || undefined,
+          status: branchData.isActive ? 'ACTIVE' : 'INACTIVE',
+          weeklySchedule: {
+            schedule: {
+              MONDAY: {
+                open: branchData.openingHours.monday.isOpen,
+                openingTime: branchData.openingHours.monday.open,
+                closingTime: branchData.openingHours.monday.close
+              },
+              TUESDAY: {
+                open: branchData.openingHours.tuesday.isOpen,
+                openingTime: branchData.openingHours.tuesday.open,
+                closingTime: branchData.openingHours.tuesday.close
+              },
+              WEDNESDAY: {
+                open: branchData.openingHours.wednesday.isOpen,
+                openingTime: branchData.openingHours.wednesday.open,
+                closingTime: branchData.openingHours.wednesday.close
+              },
+              THURSDAY: {
+                open: branchData.openingHours.thursday.isOpen,
+                openingTime: branchData.openingHours.thursday.open,
+                closingTime: branchData.openingHours.thursday.close
+              },
+              FRIDAY: {
+                open: branchData.openingHours.friday.isOpen,
+                openingTime: branchData.openingHours.friday.open,
+                closingTime: branchData.openingHours.friday.close
+              },
+              SATURDAY: {
+                open: branchData.openingHours.saturday.isOpen,
+                openingTime: branchData.openingHours.saturday.open,
+                closingTime: branchData.openingHours.saturday.close
+              },
+              SUNDAY: {
+                open: branchData.openingHours.sunday.isOpen,
+                openingTime: branchData.openingHours.sunday.open,
+                closingTime: branchData.openingHours.sunday.close
+              }
+            }
+          }
         };
-        setBranches([...branches, newBranch]);
+
+        console.log('🔄 [BRANCH] Updating branch with data:', apiUpdateData);
+        console.log('🖼️ [BRANCH] Has image:', !!branchData.image, 'Image size:', branchData.image?.length || 0);
+        
+        const response = await apiService.updateBranch(editingBranch.id, apiUpdateData);
+        console.log('✅ [BRANCH] Branch updated successfully:', response);
+        
+        // Update the branch in local state
+        const updatedBranch: SalonBranch = {
+          ...editingBranch,
+          name: response.branchName,
+          phone: response.branchPhoneNumber,
+          email: response.branchEmail,
+          isActive: response.status === 'ACTIVE',
+          image: response.branchImage,
+          openingHours: branchData.openingHours, // Use form data for display
+        };
+        
+        setBranches(branches.map(b => 
+          b.id === editingBranch.id ? updatedBranch : b
+        ));
+        setSuccessMessage(response.message || 'Branch updated successfully!');
         setShowSuccessPopup(true);
+        
+        // Reload comprehensive data to get updated statistics
+        await loadComprehensiveBranchData();
+      } else {
+        // Add new branch using API
+        setIsLoading(true);
+        const salonId = getSalonId();
+        
+        if (!salonId) {
+          throw new Error('Salon ID not found. Please ensure you are logged in.');
+        }
+
+        // Convert SalonBranch format to API format
+        const apiRequestData: BranchCreateRequest = {
+          salonId: salonId,
+          branchName: branchData.name,
+          branchPhoneNumber: branchData.phone,
+          branchEmail: branchData.email,
+          latitude: 6.9271, // Default coordinates for Colombo - should be from form
+          longitude: 79.8612,
+          branchImage: branchData.image || undefined,
+          weeklySchedule: {
+            schedule: {
+              MONDAY: {
+                open: branchData.openingHours.monday.isOpen,
+                openingTime: branchData.openingHours.monday.open,
+                closingTime: branchData.openingHours.monday.close
+              },
+              TUESDAY: {
+                open: branchData.openingHours.tuesday.isOpen,
+                openingTime: branchData.openingHours.tuesday.open,
+                closingTime: branchData.openingHours.tuesday.close
+              },
+              WEDNESDAY: {
+                open: branchData.openingHours.wednesday.isOpen,
+                openingTime: branchData.openingHours.wednesday.open,
+                closingTime: branchData.openingHours.wednesday.close
+              },
+              THURSDAY: {
+                open: branchData.openingHours.thursday.isOpen,
+                openingTime: branchData.openingHours.thursday.open,
+                closingTime: branchData.openingHours.thursday.close
+              },
+              FRIDAY: {
+                open: branchData.openingHours.friday.isOpen,
+                openingTime: branchData.openingHours.friday.open,
+                closingTime: branchData.openingHours.friday.close
+              },
+              SATURDAY: {
+                open: branchData.openingHours.saturday.isOpen,
+                openingTime: branchData.openingHours.saturday.open,
+                closingTime: branchData.openingHours.saturday.close
+              },
+              SUNDAY: {
+                open: branchData.openingHours.sunday.isOpen,
+                openingTime: branchData.openingHours.sunday.open,
+                closingTime: branchData.openingHours.sunday.close
+              }
+            }
+          }
+        };
+
+        console.log('🏢 [BRANCH] Creating branch with data:', apiRequestData);
+        console.log('⏳ [BRANCH] Loading state:', isLoading);
+        console.log('🖼️ [BRANCH] Has image:', !!branchData.image, 'Image size:', branchData.image?.length || 0);
+        
+        const response = await apiService.createBranch(apiRequestData);
+        console.log('✅ [BRANCH] Branch created successfully:', response);
+        
+        // Convert API response back to SalonBranch format and add to local state
+        const newBranch: SalonBranch = {
+          id: response.branchId.toString(),
+          salonId: response.salonId.toString(),
+          name: response.branchName,
+          address: branchData.address, // API doesn't return address, use form data
+          phone: response.branchPhoneNumber,
+          email: response.branchEmail,
+          isActive: response.status === 'ACTIVE',
+          openingHours: branchData.openingHours, // Use form data for display
+          image: response.branchImage,
+          createdAt: new Date(response.createdAt),
+        };
+        
+        setBranches([...branches, newBranch]);
+        setSuccessMessage(response.message || 'Branch created successfully!');
+        setShowSuccessPopup(true);
+        
+        // Reload comprehensive data to get updated statistics
+        await loadComprehensiveBranchData();
       }
       setShowAddModal(false);
       setEditingBranch(null);
     } catch (error) {
-      console.error('Error saving branch:', error);
-      alert('Error saving branch. Please try again.');
+      console.error('❌ [BRANCH] Error saving branch:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Error saving branch. Please try again.';
+      alert(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleToggleStatus = (branchId: string) => {
-    try {
-      setBranches(branches.map(branch =>
-        branch.id === branchId
-          ? { ...branch, isActive: !branch.isActive }
-          : branch
-      ));
-    } catch (error) {
-      console.error('Error updating branch status:', error);
-      alert('Error updating branch status. Please try again.');
-    }
+  const handleToggleStatus = async (branchId: string) => {
+    const branch = branches.find(b => b.id === branchId);
+    if (!branch) return;
+    
+    await handleToggleBranchStatus(branch);
   };
 
   const handleDeleteBranch = (branchId: string) => {
@@ -140,6 +416,90 @@ const BranchManagement: React.FC = () => {
     setBranchToDelete(null);
   };
 
+  // Toggle branch status (activate/deactivate)
+  const handleToggleBranchStatus = async (branch: SalonBranch) => {
+    try {
+      setIsLoading(true);
+      
+      const newStatus = branch.isActive ? 'INACTIVE' : 'ACTIVE';
+      console.log(`🔄 [BRANCH] Toggling branch ${branch.id} status to:`, newStatus);
+      
+      const apiUpdateData: BranchUpdateRequest = {
+        branchName: branch.name,
+        branchPhoneNumber: branch.phone,
+        branchEmail: branch.email,
+        latitude: (branch as any).latitude || 6.9271,
+        longitude: (branch as any).longitude || 79.8612,
+        branchImage: branch.image || undefined,
+        status: newStatus,
+        weeklySchedule: {
+          schedule: {
+            MONDAY: {
+              open: branch.openingHours.monday.isOpen,
+              openingTime: branch.openingHours.monday.open,
+              closingTime: branch.openingHours.monday.close
+            },
+            TUESDAY: {
+              open: branch.openingHours.tuesday.isOpen,
+              openingTime: branch.openingHours.tuesday.open,
+              closingTime: branch.openingHours.tuesday.close
+            },
+            WEDNESDAY: {
+              open: branch.openingHours.wednesday.isOpen,
+              openingTime: branch.openingHours.wednesday.open,
+              closingTime: branch.openingHours.wednesday.close
+            },
+            THURSDAY: {
+              open: branch.openingHours.thursday.isOpen,
+              openingTime: branch.openingHours.thursday.open,
+              closingTime: branch.openingHours.thursday.close
+            },
+            FRIDAY: {
+              open: branch.openingHours.friday.isOpen,
+              openingTime: branch.openingHours.friday.open,
+              closingTime: branch.openingHours.friday.close
+            },
+            SATURDAY: {
+              open: branch.openingHours.saturday.isOpen,
+              openingTime: branch.openingHours.saturday.open,
+              closingTime: branch.openingHours.saturday.close
+            },
+            SUNDAY: {
+              open: branch.openingHours.sunday.isOpen,
+              openingTime: branch.openingHours.sunday.open,
+              closingTime: branch.openingHours.sunday.close
+            }
+          }
+        }
+      };
+
+      console.log('🔄 [BRANCH] Status toggle data:', apiUpdateData);
+      
+      const response = await apiService.updateBranch(branch.id, apiUpdateData);
+      console.log('✅ [BRANCH] Branch status updated successfully:', response);
+      
+      // Update the branch in local state
+      setBranches(branches.map(b => 
+        b.id === branch.id 
+          ? { ...b, isActive: response.status === 'ACTIVE' }
+          : b
+      ));
+      
+      const statusText = newStatus === 'ACTIVE' ? 'activated' : 'deactivated';
+      setSuccessMessage(`Branch ${statusText} successfully!`);
+      setShowSuccessPopup(true);
+      
+      // Reload comprehensive data to get updated statistics
+      await loadComprehensiveBranchData();
+    } catch (error) {
+      console.error('❌ [BRANCH] Error toggling branch status:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Error updating branch status. Please try again.';
+      alert(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -163,7 +523,9 @@ const BranchManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Branches</p>
-              <p className="text-2xl font-bold text-gray-900">{branches.length}</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {loadingStats ? '...' : (statistics?.totalBranches ?? branches.length)}
+              </p>
             </div>
             <Building className="w-8 h-8 text-blue-500" />
           </div>
@@ -173,7 +535,9 @@ const BranchManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Active Branches</p>
-              <p className="text-2xl font-bold text-gray-900">{branches.filter(b => b.isActive).length}</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {loadingStats ? '...' : (statistics?.activeBranches ?? branches.filter(b => b.isActive).length)}
+              </p>
             </div>
             <Eye className="w-8 h-8 text-green-500" />
           </div>
@@ -183,13 +547,13 @@ const BranchManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Inactive Branches</p>
-              <p className="text-2xl font-bold text-gray-900">{branches.filter(b => !b.isActive).length}</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {loadingStats ? '...' : (statistics?.inactiveBranches ?? branches.filter(b => !b.isActive).length)}
+              </p>
             </div>
-            <Users className="w-8 h-8 text-purple-500" />
+            <EyeOff className="w-8 h-8 text-red-500" />
           </div>
         </div>
-        
-        {/* Removed Avg Revenue card and updated grid to 3 columns for proper alignment */}
       </div>
 
       {/* Search */}
@@ -303,11 +667,18 @@ const BranchManagement: React.FC = () => {
               {/* Stats */}
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100">
                 <div className="text-center">
-                  <div className="text-lg font-semibold text-gray-900">12</div>
+                  <div className="flex items-center justify-center space-x-1 mb-1">
+                    <Users className="w-4 h-4 text-gray-500" />
+                    <div className="text-lg font-semibold text-gray-900">{branch.employeeCount || 0}</div>
+                  </div>
                   <div className="text-xs text-gray-600">Employees</div>
                 </div>
                 <div className="text-center">
-                  {/* Removed Monthly Revenue as requested */}
+                  <div className="flex items-center justify-center space-x-1 mb-1">
+                    <div className={`w-2 h-2 rounded-full ${branch.isActive ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <div className="text-lg font-semibold text-gray-900">{branch.isActive ? 'Active' : 'Inactive'}</div>
+                  </div>
+                  <div className="text-xs text-gray-600">Status</div>
                 </div>
               </div>
             </div>
@@ -346,8 +717,8 @@ const BranchManagement: React.FC = () => {
               </svg>
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {editingBranch ? 'Branch Updated Successfully!' : 
-               branchToDelete ? 'Branch Deleted Successfully!' : 'Branch Added Successfully!'}
+              {successMessage || (editingBranch ? 'Branch Updated Successfully!' : 
+               branchToDelete ? 'Branch Deleted Successfully!' : 'Branch Added Successfully!')}
             </h3>
             <p className="text-gray-600 mb-4">
               {editingBranch ? 'The branch has been updated successfully.' : 
@@ -355,7 +726,10 @@ const BranchManagement: React.FC = () => {
                'New branch has been added to your salon network.'}
             </p>
             <button
-              onClick={() => setShowSuccessPopup(false)}
+              onClick={() => {
+                setShowSuccessPopup(false);
+                setSuccessMessage('');
+              }}
               className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
             >
               OK
@@ -426,6 +800,7 @@ const BranchModal: React.FC<BranchModalProps> = ({
     address: editingBranch?.address || '',
     phone: editingBranch?.phone || '',
     email: editingBranch?.email || '',
+    image: editingBranch?.image || '',
     isActive: editingBranch?.isActive ?? true,
     latitude: (editingBranch as any)?.latitude || null,
     longitude: (editingBranch as any)?.longitude || null,
@@ -525,6 +900,45 @@ const BranchModal: React.FC<BranchModalProps> = ({
     alert('Select your location on Google Maps, then copy the coordinates back to this form.');
   };
 
+  // Function to handle image upload
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      console.log('🖼️ [BRANCH] Image upload started:', file.name, file.size, file.type);
+      
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        console.error('❌ [BRANCH] Invalid file type:', file.type);
+        alert('Please select a valid image file.');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        console.error('❌ [BRANCH] File too large:', file.size);
+        alert('Please select an image smaller than 5MB.');
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        console.log('✅ [BRANCH] Image converted to base64, length:', result.length);
+        setFormData(prev => ({ 
+          ...prev, 
+          image: result
+        }));
+      };
+      
+      reader.onerror = (error) => {
+        console.error('❌ [BRANCH] Error reading file:', error);
+        alert('Error reading the selected file. Please try again.');
+      };
+      
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -595,6 +1009,72 @@ const BranchModal: React.FC<BranchModalProps> = ({
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Branch Image Upload */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Branch Image</label>
+              <div className="space-y-4">
+                {/* Image Preview */}
+                <div className="flex justify-center">
+                  <div className="relative">
+                    <div className="w-32 h-32 rounded-lg bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden">
+                      {formData.image ? (
+                        <img 
+                          src={formData.image} 
+                          alt="Branch Preview" 
+                          className="w-full h-full object-cover rounded-lg"
+                          onError={(e) => {
+                            console.error('Failed to load branch image preview');
+                            e.currentTarget.style.display = 'none';
+                          }}
+                          onLoad={() => {
+                            console.log('Branch image preview loaded successfully');
+                          }}
+                        />
+                      ) : (
+                        <div className="text-center">
+                          <Building className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                          <p className="text-sm text-gray-500">No image</p>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Upload Button */}
+                    <label className="absolute bottom-0 right-0 bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-full cursor-pointer transition-colors duration-200 shadow-lg">
+                      <Camera className="w-4 h-4" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                      />
+                    </label>
+                    
+                    {/* Remove Image Button */}
+                    {formData.image && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, image: '' }))}
+                        className="absolute top-0 right-0 bg-red-500 hover:bg-red-600 text-white p-1 rounded-full transition-colors duration-200 shadow-lg"
+                        title="Remove image"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Upload Instructions */}
+                <div className="text-center">
+                  <p className="text-sm text-gray-600">
+                    Upload a branch image (max 5MB). Recommended size: 400x400px
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Supported formats: JPG, PNG, WebP
+                  </p>
+                </div>
               </div>
             </div>
 

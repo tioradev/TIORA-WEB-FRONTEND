@@ -147,23 +147,49 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      console.log('📷 [PROFILE] Image upload started:', file.name, file.size, file.type);
+      
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        console.error('❌ [PROFILE] Invalid file type:', file.type);
+        alert('Please select a valid image file.');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        console.error('❌ [PROFILE] File too large:', file.size);
+        alert('Please select an image smaller than 5MB.');
+        return;
+      }
+      
       const reader = new FileReader();
       reader.onload = (e) => {
         const result = e.target?.result as string;
+        console.log('✅ [PROFILE] Image converted to base64, length:', result.length);
+        
         // For salon owners, update both profilePicture and ownerImgUrl
         if (userRole === 'owner') {
+          console.log('🏢 [PROFILE] Updating owner profile image');
           setFormData(prev => ({ 
             ...prev, 
             profilePicture: result,
             ownerImgUrl: result
           }));
         } else {
+          console.log('👤 [PROFILE] Updating employee profile image');
           setFormData(prev => ({ 
             ...prev, 
             profilePicture: result
           }));
         }
       };
+      
+      reader.onerror = (error) => {
+        console.error('❌ [PROFILE] Error reading file:', error);
+        alert('Error reading the selected file. Please try again.');
+      };
+      
       reader.readAsDataURL(file);
     }
   };
@@ -243,20 +269,33 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
           {/* Profile Picture Section */}
           <div className="flex flex-col items-center space-y-4">
             <div className="relative">
-              <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+              <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden border-4 border-gray-300">
                 {/* For salon owners, prioritize ownerImgUrl, for others use profilePicture */}
-                {(userRole === 'owner' ? formData.ownerImgUrl || formData.profilePicture : formData.profilePicture) ? (
-                  <img 
-                    src={userRole === 'owner' ? formData.ownerImgUrl || formData.profilePicture : formData.profilePicture} 
-                    alt="Profile" 
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <User className="w-16 h-16 text-gray-400" />
-                )}
+                {(() => {
+                  const imageUrl = userRole === 'owner' 
+                    ? (formData.ownerImgUrl || formData.profilePicture) 
+                    : formData.profilePicture;
+                  
+                  return imageUrl ? (
+                    <img 
+                      src={imageUrl}
+                      alt="Profile" 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        console.error('Failed to load profile image:', imageUrl);
+                        e.currentTarget.style.display = 'none';
+                      }}
+                      onLoad={() => {
+                        console.log('Profile image loaded successfully:', imageUrl);
+                      }}
+                    />
+                  ) : (
+                    <User className="w-16 h-16 text-gray-400" />
+                  );
+                })()}
               </div>
               {isEditing && (
-                <label className="absolute bottom-0 right-0 bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-full cursor-pointer transition-colors duration-200">
+                <label className="absolute bottom-0 right-0 bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-full cursor-pointer transition-colors duration-200 shadow-lg">
                   <Camera className="w-4 h-4" />
                   <input
                     type="file"
@@ -277,103 +316,105 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
             </div>
           </div>
 
-          {/* Basic Information */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6">
-            <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <User className="w-5 h-5 mr-2 text-blue-600" />
-              Basic Information
-            </h4>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Name - Always disabled for primary key protection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  disabled={!isEditing}
-                  className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
-                    isEditing 
-                      ? 'focus:ring-2 focus:ring-blue-500 focus:border-transparent' 
-                      : 'bg-gray-50 text-gray-600'
-                  }`}
-                />
-              </div>
-
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                  disabled={!isEditing}
-                  className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
-                    isEditing 
-                      ? 'focus:ring-2 focus:ring-blue-500 focus:border-transparent' 
-                      : 'bg-gray-50 text-gray-600'
-                  }`}
-                />
-              </div>
-
-              {/* Phone */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                  disabled={!isEditing}
-                  className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
-                    isEditing 
-                      ? 'focus:ring-2 focus:ring-blue-500 focus:border-transparent' 
-                      : 'bg-gray-50 text-gray-600'
-                  }`}
-                />
-              </div>
-
-              {/* Join Date - Read only */}
-              {formData.joinDate && (
+          {/* Basic Information - Only show for non-owner roles */}
+          {userRole !== 'owner' && (
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <User className="w-5 h-5 mr-2 text-blue-600" />
+                Basic Information
+              </h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Name - Always disabled for primary key protection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Join Date
+                    Full Name
                   </label>
                   <input
                     type="text"
-                    value={new Date(formData.joinDate).toLocaleDateString()}
-                    disabled
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                    value={formData.name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                    disabled={!isEditing}
+                    className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                      isEditing 
+                        ? 'focus:ring-2 focus:ring-blue-500 focus:border-transparent' 
+                        : 'bg-gray-50 text-gray-600'
+                    }`}
                   />
                 </div>
-              )}
-            </div>
 
-            {/* Address */}
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Address
-              </label>
-              <textarea
-                value={formData.address || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
-                disabled={!isEditing}
-                rows={3}
-                className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
-                  isEditing 
-                    ? 'focus:ring-2 focus:ring-blue-500 focus:border-transparent' 
-                    : 'bg-gray-50 text-gray-600'
-                }`}
-                placeholder="Enter full address"
-              />
+                {/* Email */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                    disabled={!isEditing}
+                    className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                      isEditing 
+                        ? 'focus:ring-2 focus:ring-blue-500 focus:border-transparent' 
+                        : 'bg-gray-50 text-gray-600'
+                    }`}
+                  />
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                    disabled={!isEditing}
+                    className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                      isEditing 
+                        ? 'focus:ring-2 focus:ring-blue-500 focus:border-transparent' 
+                        : 'bg-gray-50 text-gray-600'
+                    }`}
+                  />
+                </div>
+
+                {/* Join Date - Read only */}
+                {formData.joinDate && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Join Date
+                    </label>
+                    <input
+                      type="text"
+                      value={new Date(formData.joinDate).toLocaleDateString()}
+                      disabled
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Address */}
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Address
+                </label>
+                <textarea
+                  value={formData.address || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                  disabled={!isEditing}
+                  rows={3}
+                  className={`w-full px-4 py-3 border border-gray-300 rounded-lg transition-all duration-200 ${
+                    isEditing 
+                      ? 'focus:ring-2 focus:ring-blue-500 focus:border-transparent' 
+                      : 'bg-gray-50 text-gray-600'
+                  }`}
+                  placeholder="Enter full address"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Role-specific Information */}
           {userRole === 'owner' && (
@@ -386,47 +427,6 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
               {/* Owner Personal Information */}
               <div className="mb-6">
                 <h5 className="text-md font-medium text-gray-800 mb-3">Owner Information</h5>
-                
-                {/* Owner Profile Image */}
-                <div className="mb-6 flex justify-center">
-                  <div className="flex flex-col items-center space-y-3">
-                    <div className="relative">
-                      <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden border-4 border-purple-200">
-                        {formData.ownerImgUrl ? (
-                          <img 
-                            src={formData.ownerImgUrl} 
-                            alt="Owner Profile" 
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <User className="w-10 h-10 text-gray-400" />
-                        )}
-                      </div>
-                      {isEditing && (
-                        <label className="absolute bottom-0 right-0 bg-purple-500 hover:bg-purple-600 text-white p-1.5 rounded-full cursor-pointer transition-colors duration-200">
-                          <Camera className="w-3 h-3" />
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onload = (e) => {
-                                  const result = e.target?.result as string;
-                                  setFormData(prev => ({ ...prev, ownerImgUrl: result }));
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                            className="hidden"
-                          />
-                        </label>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-600">Owner Profile Picture</p>
-                  </div>
-                </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>

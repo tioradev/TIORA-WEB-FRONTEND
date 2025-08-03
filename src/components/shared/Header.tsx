@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import NotificationPanel from './NotificationPanel';
 
 const Header: React.FC = () => {
-  const { user, logout, openProfileModal } = useAuth();
+  const { user, salon, logout, openProfileModal } = useAuth();
 
   const getRoleColor = () => {
     switch (user?.role) {
@@ -77,8 +77,38 @@ const Header: React.FC = () => {
               onClick={openProfileModal}
               className="flex items-center space-x-4 bg-gray-50/70 rounded-2xl px-4 py-2 border border-gray-200/50 hover:bg-gray-100/70 transition-all duration-200 cursor-pointer"
             >
-              <div className={`w-10 h-10 bg-gradient-to-r ${getProfileGradient()} rounded-xl flex items-center justify-center shadow-lg transform hover:scale-105 transition-all duration-200`}>
-                <User className="w-5 h-5 text-white" />
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg transform hover:scale-105 transition-all duration-200 overflow-hidden`}>
+                {/* For salon owners, prioritize ownerImgUrl, for others use profilePicture */}
+                {(() => {
+                  const profileImageUrl = user?.role === 'owner' 
+                    ? (salon?.ownerImgUrl || user?.profilePicture) 
+                    : user?.profilePicture;
+                  
+                  return profileImageUrl ? (
+                    <img 
+                      src={profileImageUrl}
+                      alt="Profile" 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        console.error('Failed to load header profile image:', profileImageUrl);
+                        // Fallback to gradient background with User icon
+                        e.currentTarget.style.display = 'none';
+                        const parent = e.currentTarget.parentElement;
+                        if (parent) {
+                          parent.className = `w-10 h-10 bg-gradient-to-r ${getProfileGradient()} rounded-xl flex items-center justify-center shadow-lg transform hover:scale-105 transition-all duration-200`;
+                          parent.innerHTML = '<svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path></svg>';
+                        }
+                      }}
+                      onLoad={() => {
+                        console.log('Header profile image loaded successfully:', profileImageUrl);
+                      }}
+                    />
+                  ) : (
+                    <div className={`w-full h-full bg-gradient-to-r ${getProfileGradient()} rounded-xl flex items-center justify-center`}>
+                      <User className="w-5 h-5 text-white" />
+                    </div>
+                  );
+                })()}
               </div>
               <div className="hidden md:block">
                 <p className="text-sm font-semibold text-gray-900 leading-tight">{user?.name}</p>
