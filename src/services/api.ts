@@ -17,10 +17,22 @@ const ENDPOINTS = {
     COMPREHENSIVE: '/branches/salon',
   },
   EMPLOYEES: {
-    CREATE: '/employees/comprehensive',
+    CREATE_SALON: '/employees/salon',
     LIST: '/employees',
-    UPDATE: '/employees',
+    UPDATE_SALON: '/employees/salon',
     DELETE: '/employees',
+    BY_SALON: '/employees/salon',
+    RECEPTIONISTS: '/employees/salon', // /employees/salon/{salonId}/receptionists
+    BARBERS: '/employees/salon', // /employees/salon/{salonId}/barbers
+    DETAILS: '/employees', // /employees/{employeeId}/details
+  },
+  SERVICES: {
+    CREATE: '/services',
+    ACTIVE: '/services/active',
+    DETAIL: '/services',
+    UPDATE: '/services',
+    DELETE: '/services',
+    BOOKING: '/services/booking',
   },
 };
 
@@ -227,10 +239,209 @@ class ApiService {
   // Employee Management API
   async createEmployee(employeeData: EmployeeRegistrationRequest): Promise<EmployeeRegistrationResponse> {
     return this.request<EmployeeRegistrationResponse>(
-      ENDPOINTS.EMPLOYEES.CREATE,
+      ENDPOINTS.EMPLOYEES.CREATE_SALON,
       {
         method: 'POST',
         body: JSON.stringify(employeeData),
+      }
+    );
+  }
+
+  // Get employees by salon ID
+  async getEmployeesBySalon(salonId: string | number): Promise<EmployeesResponse> {
+    const endpoint = `${ENDPOINTS.EMPLOYEES.BY_SALON}/${salonId}`;
+    envLog.info('👥 [API] Getting employees by salon...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🏢 [API] Salon ID:', salonId);
+    
+    return this.request<EmployeesResponse>(endpoint);
+  }
+
+  // Update employee by ID
+  async updateEmployee(employeeId: string | number, employeeData: EmployeeUpdateRequest): Promise<EmployeeUpdateResponse> {
+    const endpoint = `${ENDPOINTS.EMPLOYEES.UPDATE_SALON}/${employeeId}`;
+    envLog.info('✏️ [API] Updating employee...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('👤 [API] Employee ID:', employeeId);
+    envLog.info('📋 [API] Employee update data:', employeeData);
+    
+    return this.request<EmployeeUpdateResponse>(
+      endpoint,
+      {
+        method: 'PUT',
+        body: JSON.stringify(employeeData),
+      }
+    );
+  }
+
+  // Get salon receptionists
+  async getSalonReceptionists(salonId: string | number): Promise<EmployeeRegistrationResponse[]> {
+    const endpoint = `${ENDPOINTS.EMPLOYEES.RECEPTIONISTS}/${salonId}/receptionists`;
+    envLog.info('👥 [API] Getting salon receptionists...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🏢 [API] Salon ID:', salonId);
+    
+    return this.request<EmployeeRegistrationResponse[]>(endpoint);
+  }
+
+  // Get salon barbers
+  async getSalonBarbers(salonId: string | number): Promise<EmployeeRegistrationResponse[]> {
+    const endpoint = `${ENDPOINTS.EMPLOYEES.BARBERS}/${salonId}/barbers`;
+    envLog.info('👥 [API] Getting salon barbers...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🏢 [API] Salon ID:', salonId);
+    
+    return this.request<EmployeeRegistrationResponse[]>(endpoint);
+  }
+
+  // Get employee details
+  async getEmployeeDetails(employeeId: string | number): Promise<EmployeeRegistrationResponse> {
+    const endpoint = `${ENDPOINTS.EMPLOYEES.DETAILS}/${employeeId}/details`;
+    envLog.info('👤 [API] Getting employee details...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('👤 [API] Employee ID:', employeeId);
+    
+    return this.request<EmployeeRegistrationResponse>(endpoint);
+  }
+
+  // Delete employee by ID
+  async deleteEmployee(employeeId: string | number): Promise<{ message: string; success: boolean }> {
+    const endpoint = `${ENDPOINTS.EMPLOYEES.DELETE}/${employeeId}`;
+    envLog.info('🗑️ [API] Deleting employee...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('👤 [API] Employee ID:', employeeId);
+    
+    return this.request<{ message: string; success: boolean }>(
+      endpoint,
+      {
+        method: 'DELETE',
+      }
+    );
+  }
+
+  // Service Management API
+  
+  // Create a new service
+  async createService(serviceData: ServiceCreateRequest): Promise<ServiceResponse> {
+    envLog.info('🆕 [API] Creating new service...');
+    envLog.info('📋 [API] Service data:', serviceData);
+    
+    return this.request<ServiceResponse>(
+      ENDPOINTS.SERVICES.CREATE,
+      {
+        method: 'POST',
+        body: JSON.stringify(serviceData),
+      }
+    );
+  }
+
+  // Get all active services for a salon
+  async getActiveServices(salonId: string | number): Promise<ServicesListResponse> {
+    const endpoint = `${ENDPOINTS.SERVICES.ACTIVE}?salonId=${salonId}`;
+    envLog.info('📋 [API] Getting active services...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🏢 [API] Salon ID:', salonId);
+    
+    try {
+      const response = await this.request<ServiceData[]>(endpoint);
+      envLog.info('📡 [API] Raw response received:', response);
+      
+      // Since the API returns an array directly, wrap it in the expected format
+      if (Array.isArray(response)) {
+        envLog.info('✅ [API] Response is array, wrapping in expected format');
+        return {
+          services: response,
+          message: 'Services loaded successfully',
+          success: true
+        };
+      } else {
+        // If it's already in the expected format, return as is
+        envLog.info('✅ [API] Response is already in expected format');
+        return response as ServicesListResponse;
+      }
+    } catch (error) {
+      envLog.error('❌ [API] Error getting active services:', error);
+      return {
+        services: [],
+        message: 'Failed to load services',
+        success: false
+      };
+    }
+  }
+
+  // Get services for booking screen with gender filter
+  async getBookingServices(salonId: string | number, gender: 'MALE' | 'FEMALE'): Promise<ServicesListResponse> {
+    const endpoint = `${ENDPOINTS.SERVICES.BOOKING}?salonId=${salonId}&gender=${gender}`;
+    envLog.info('📅 [API] Getting booking services...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🏢 [API] Salon ID:', salonId);
+    envLog.info('👤 [API] Gender filter:', gender);
+    
+    try {
+      const response = await this.request<ServiceData[]>(endpoint);
+      envLog.info('📡 [API] Raw booking services response received:', response);
+      
+      // Since the API returns an array directly, wrap it in the expected format
+      if (Array.isArray(response)) {
+        envLog.info('✅ [API] Booking services response is array, wrapping in expected format');
+        return {
+          services: response,
+          message: 'Booking services loaded successfully',
+          success: true
+        };
+      } else {
+        // If it's already in the expected format, return as is
+        envLog.info('✅ [API] Booking services response is already in expected format');
+        return response as ServicesListResponse;
+      }
+    } catch (error) {
+      envLog.error('❌ [API] Error getting booking services:', error);
+      return {
+        services: [],
+        message: 'Failed to load booking services',
+        success: false
+      };
+    }
+  }
+
+  // Get single service details
+  async getServiceDetails(serviceId: string | number): Promise<ServiceResponse> {
+    const endpoint = `${ENDPOINTS.SERVICES.DETAIL}/${serviceId}`;
+    envLog.info('🔍 [API] Getting service details...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🆔 [API] Service ID:', serviceId);
+    
+    return this.request<ServiceResponse>(endpoint);
+  }
+
+  // Update a service
+  async updateService(serviceId: string | number, serviceData: ServiceUpdateRequest): Promise<ServiceResponse> {
+    const endpoint = `${ENDPOINTS.SERVICES.UPDATE}/${serviceId}`;
+    envLog.info('✏️ [API] Updating service...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🆔 [API] Service ID:', serviceId);
+    envLog.info('📋 [API] Service update data:', serviceData);
+    
+    return this.request<ServiceResponse>(
+      endpoint,
+      {
+        method: 'PUT',
+        body: JSON.stringify(serviceData),
+      }
+    );
+  }
+
+  // Delete a service
+  async deleteService(serviceId: string | number): Promise<{ message: string; success: boolean }> {
+    const endpoint = `${ENDPOINTS.SERVICES.DELETE}/${serviceId}`;
+    envLog.info('🗑️ [API] Deleting service...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🆔 [API] Service ID:', serviceId);
+    
+    return this.request<{ message: string; success: boolean }>(
+      endpoint,
+      {
+        method: 'DELETE',
       }
     );
   }
@@ -510,37 +721,205 @@ export interface EmployeeWeeklySchedule {
 }
 
 export interface EmployeeRegistrationRequest {
-  firstName: string;
-  lastName: string;
-  gender: 'MALE' | 'FEMALE' | 'OTHER';
+  first_name: string;
+  last_name: string;
   email: string;
-  phoneNumber: string;
-  role: 'RECEPTIONIST' | 'BARBER';
-  branchId: number;
+  phone_number: string;
+  gender: 'MALE' | 'FEMALE' | 'OTHER';
+  date_of_birth: string;
   address: string;
-  specializations: string[];
-  baseSalary: number;
-  ratings: number;
-  emergencyContact: string;
-  emergencyPhone: string;
-  emergencyRelationship: string;
-  salonId: number;
-  username?: string; // Only for reception role
-  password?: string; // Only for reception role
-  experienceYears: number;
-  dateOfBirth: string;
-  employeeWeeklySchedule: EmployeeWeeklySchedule;
+  salon_id: number;
+  branch_id?: number; // Optional branch assignment
+  role: 'RECEPTIONIST' | 'BARBER';
+  base_salary: number;
+  experience_years: number;
+  emergency_contact_name: string;
+  emergency_contact_phone: string;
+  emergency_relationship: string;
+  username?: string; // Required for RECEPTIONIST role
+  password?: string; // Required for RECEPTIONIST role
+  specializations?: string[]; // For BARBER role
+  weekly_schedule: string; // JSON string format
+  ratings?: number;
+  profile_image_url?: string;
+  notes?: string;
 }
 
 export interface EmployeeRegistrationResponse {
-  employeeId: number;
-  firstName: string;
-  lastName: string;
+  employee_id: number;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  email: string;
+  phone_number: string;
+  gender: string;
+  date_of_birth: string;
+  age: number;
+  address: string;
+  city: string;
+  role: string;
+  base_salary: number;
+  experience_years: number;
+  hire_date: string;
+  emergency_contact_name: string;
+  emergency_contact_phone: string;
+  emergency_relationship: string;
+  specializations: string[] | null;
+  username: string | null;
+  ratings: number;
+  profile_image_url: string | null;
+  notes: string;
+  status: string;
+  salon_id: number;
+  salon_name: string;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+}
+
+export interface EmployeeData {
+  employee_id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone_number: string;
   role: string;
   status: string;
-  username: string | null;
-  mobUserPhone: string;
+  hire_date: string;
+  base_salary: number;
+  date_of_birth: string;
+  address: string;
+  specializations: string[];
+  branch_id: number;
+  branch_name: string;
+  profile_image?: string;
+  username: string;
+  commission_rate?: number;
+  emergency_contact_name: string;
+  emergency_contact_phone: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmployeeUpdateRequest {
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone_number?: string;
+  gender?: 'MALE' | 'FEMALE' | 'OTHER';
+  date_of_birth?: string;
+  address?: string;
+  city?: string;
+  branch_id?: number; // Branch assignment
+  base_salary?: number;
+  experience_years?: number;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  emergency_relationship?: string;
+  username?: string; // For RECEPTIONIST role
+  ratings?: number;
+  profile_image_url?: string;
+  notes?: string;
+  status?: 'ACTIVE' | 'INACTIVE';
+}
+
+export interface EmployeeUpdateResponse {
+  employee_id: number;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone_number?: string;
+  branch_id?: number;
+  branch_name?: string;
+  salon_id?: number;
+  salon_name?: string;
   message: string;
+  success: boolean;
+  updated_at: string;
+}
+
+export interface EmployeesResponse {
+  salon_id: number;
+  salon_name: string;
+  total_employees: number;
+  active_employees: number;
+  inactive_employees: number;
+  employees: EmployeeData[];
+  message: string;
+  success: boolean;
+}
+
+// Service Management Types
+export interface ServiceCreateRequest {
+  salon_id: number;
+  name: string;
+  description: string;
+  duration_minutes: number;
+  price: number;
+  discount_price?: number;
+  category: string;
+  gender_availability: string;
+  image_url?: string;
+  is_active: boolean;
+  is_popular: boolean;
+}
+
+export interface ServiceUpdateRequest {
+  name: string;
+  description: string;
+  duration_minutes: number;
+  price: number;
+  discount_price?: number;
+  category: string;
+  gender_availability: string;
+  image_url?: string;
+  status: string;
+  is_active: boolean;
+  is_popular: boolean;
+}
+
+export interface ServiceData {
+  id: number;
+  salon_id: number;
+  name: string;
+  description: string;
+  duration_minutes: number;
+  price: number;
+  discount_price?: number;
+  category: string;
+  gender_availability: string;
+  image_url?: string;
+  status: string;
+  is_active: boolean;
+  is_popular: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServiceResponse {
+  id: number;
+  salon_id: number;
+  name: string;
+  description: string;
+  duration_minutes: number;
+  price: number;
+  discount_price?: number;
+  category: string;
+  gender_availability: string;
+  image_url?: string;
+  status: string;
+  is_active: boolean;
+  is_popular: boolean;
+  created_at: string;
+  updated_at: string;
+  message?: string;
+  success?: boolean;
+}
+
+export interface ServicesListResponse {
+  services: ServiceData[];
+  message: string;
+  success: boolean;
 }
 
 // Export singleton instance

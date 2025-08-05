@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Clock, User, ChevronRight, Plus, Minus, DollarSign } from 'lucide-react';
+import { X, Calendar, Clock, User, ChevronRight, Plus, Minus, DollarSign, Users } from 'lucide-react';
 import { mockBarbers, mockServices, mockAppointments } from '../../data/mockData';
+import { apiService } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastProvider';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -19,7 +22,12 @@ interface SelectedService {
 }
 
 const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, editingAppointment, userRole = 'owner' }) => {
+  const { getSalonId } = useAuth();
+  const { showSuccess, showError } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
+  const [selectedGender, setSelectedGender] = useState<'MALE' | 'FEMALE' | null>(null);
+  const [availableServices, setAvailableServices] = useState<any[]>([]);
+  const [loadingServices, setLoadingServices] = useState(false);
   const [formData, setFormData] = useState({
     customerName: editingAppointment?.customerName || '',
     customerPhone: editingAppointment?.customerPhone?.startsWith('+94') 
@@ -48,11 +56,49 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
     sum + service.duration, 0
   );
 
+  // Load services based on gender selection
+  const loadServices = async (gender: 'MALE' | 'FEMALE') => {
+    try {
+      setLoadingServices(true);
+      const salonId = getSalonId();
+      
+      if (!salonId) {
+        showError('Authentication Error', 'Salon ID not found. Please ensure you are logged in.');
+        return;
+      }
+
+      console.log('🔄 [BOOKING] Loading services for gender:', gender, 'salonId:', salonId);
+      
+      const response = await apiService.getBookingServices(salonId, gender);
+      
+      console.log('📡 [BOOKING] Services response:', response);
+      
+      if (response.success !== false && response.services) {
+        console.log('✅ [BOOKING] Services loaded successfully:', response.services.length, 'services');
+        setAvailableServices(response.services);
+        showSuccess('Services loaded', `${response.services.length} services available for ${gender === 'MALE' ? 'Gents' : 'Ladies'}`);
+      } else {
+        const errorMessage = response.message || 'Failed to load services';
+        showError('Loading failed', errorMessage);
+        setAvailableServices([]);
+      }
+    } catch (error) {
+      console.error('❌ [BOOKING] Error loading services:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      showError('Loading failed', `Error loading services: ${errorMessage}`);
+      setAvailableServices([]);
+    } finally {
+      setLoadingServices(false);
+    }
+  };
+
   // Reset form when modal opens/closes
   useEffect(() => {
     if (isOpen) {
       if (!editingAppointment) {
-        setCurrentStep(1);
+        setCurrentStep(0); // Start with gender selection
+        setSelectedGender(null);
+        setAvailableServices([]);
         setFormData({
           customerName: '',
           customerPhone: '+94',
@@ -82,7 +128,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
           }
         }
 
-        setCurrentStep(1);
+        setCurrentStep(0); // Start with gender selection for editing too
         setFormData({
           customerName: editingAppointment.customerName || '',
           customerPhone: editingAppointment.customerPhone?.startsWith('+94') ? editingAppointment.customerPhone : '+94' + (editingAppointment.customerPhone || ''),
@@ -174,13 +220,13 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
   }, [formData.date, formData.barberId, totalDuration, userRole]);
 
   const handleNext = () => {
-    if (currentStep < 4) {
+    if (currentStep < 3) {
       setCurrentStep(currentStep + 1);
     }
   };
 
   const handleBack = () => {
-    if (currentStep > 1) {
+    if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
     }
   };
@@ -252,20 +298,20 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
 
   const canProceed = () => {
     switch (currentStep) {
+      case 0: return selectedGender !== null;
       case 1: return formData.selectedServices.length > 0;
       case 2: return formData.date !== '';
-      case 3: return formData.barberId !== '' || userRole === 'reception'; // Allow proceeding without barber for reception
-      case 4: return formData.timeSlot !== '' && formData.customerName !== '' && formData.customerPhone.length >= 12; // +94 + 9 digits
+      case 3: return formData.timeSlot !== '' && formData.customerName !== '' && formData.customerPhone.length >= 12; // +94 + 9 digits
       default: return false;
     }
   };
 
   const getStepTitle = () => {
     switch (currentStep) {
+      case 0: return 'Select Category';
       case 1: return 'Select Services';
-      case 2: return 'Choose Date';
-      case 3: return 'Select Barber';
-      case 4: return 'Time Slot & Customer Details';
+      case 2: return 'Choose Date & Barber';
+      case 3: return 'Time Slot & Customer Details';
       default: return 'Book Appointment';
     }
   };
@@ -273,10 +319,10 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
   // Function to check if a step can be accessed
   const canAccessStep = (step: number) => {
     switch (step) {
-      case 1: return true; // Always accessible
-      case 2: return formData.selectedServices.length > 0; // Need services selected
-      case 3: return formData.selectedServices.length > 0 && formData.date; // Need services and date
-      case 4: return formData.selectedServices.length > 0 && formData.date && formData.barberId; // Need services, date, and barber
+      case 0: return true; // Always accessible - gender selection
+      case 1: return selectedGender !== null; // Need gender selected
+      case 2: return selectedGender !== null && formData.selectedServices.length > 0; // Need gender and services selected
+      case 3: return selectedGender !== null && formData.selectedServices.length > 0 && formData.date; // Need gender, services and date
       default: return false;
     }
   };
@@ -311,7 +357,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
         {/* Progress Steps */}
         <div className="px-6 py-4 border-b border-gray-100">
           <div className="flex items-center space-x-2">
-            {[1, 2, 3, 4].map((step) => (
+            {[0, 1, 2, 3].map((step) => (
               <React.Fragment key={step}>
                 <button
                   type="button"
@@ -325,9 +371,9 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                         : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  {step}
+                  {step === 0 ? <Users className="w-4 h-4" /> : step}
                 </button>
-                {step < 4 && (
+                {step < 3 && (
                   <ChevronRight className={`w-4 h-4 ${
                     step < currentStep ? 'text-blue-500' : 'text-gray-300'
                   }`} />
@@ -338,18 +384,99 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
         </div>
 
         <form onSubmit={handleSubmit} className="p-6">
+          {/* Step 0: Select Gender */}
+          {currentStep === 0 && (
+            <div className="space-y-6">
+              <div>
+                <label className="block text-lg font-medium text-gray-900 mb-4">Select Service Category</label>
+                <p className="text-sm text-gray-600 mb-6">Choose whether this appointment is for Gents or Ladies services.</p>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedGender('MALE');
+                      loadServices('MALE');
+                    }}
+                    className={`p-6 border-2 rounded-xl transition-all duration-200 ${
+                      selectedGender === 'MALE'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="text-center">
+                      <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
+                        selectedGender === 'MALE' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        <Users className="w-8 h-8" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Gents</h3>
+                      <p className="text-sm text-gray-600">Services for male customers</p>
+                    </div>
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedGender('FEMALE');
+                      loadServices('FEMALE');
+                    }}
+                    className={`p-6 border-2 rounded-xl transition-all duration-200 ${
+                      selectedGender === 'FEMALE'
+                        ? 'border-pink-500 bg-pink-50'
+                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="text-center">
+                      <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
+                        selectedGender === 'FEMALE' ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        <Users className="w-8 h-8" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Ladies</h3>
+                      <p className="text-sm text-gray-600">Services for female customers</p>
+                    </div>
+                  </button>
+                </div>
+                
+                {loadingServices && (
+                  <div className="mt-4 text-center">
+                    <div className="inline-flex items-center px-4 py-2 bg-blue-50 rounded-lg">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
+                      <span className="text-sm text-blue-700">Loading services...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Step 1: Select Services */}
           {currentStep === 1 && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">Choose Services</label>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Choose Services 
+                  {selectedGender && (
+                    <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                      {selectedGender === 'MALE' ? 'Gents' : 'Ladies'}
+                    </span>
+                  )}
+                </label>
                 <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {mockServices.filter((service: any) => service.isActive).map((service: any) => {
-                    const isSelected = formData.selectedServices.some((s: SelectedService) => s.id === service.id);
+                  {availableServices.length > 0 ? availableServices.filter((service: any) => service.is_active !== false).map((service: any) => {
+                    const isSelected = formData.selectedServices.some((s: SelectedService) => s.id === service.id.toString());
                     return (
                       <div
                         key={service.id}
-                        onClick={() => handleServiceToggle(service)}
+                        onClick={() => handleServiceToggle({
+                          id: service.id.toString(),
+                          name: service.name,
+                          duration: service.duration_minutes || 60,
+                          price: service.price || 0,
+                          discountPrice: service.discount_price,
+                          description: service.description
+                        })}
                         className={`p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
                           isSelected
                             ? 'border-blue-500 bg-blue-50'
@@ -372,30 +499,33 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                                 <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
                                   <span className="flex items-center space-x-1">
                                     <Clock className="w-3 h-3" />
-                                    <span>{service.duration} min</span>
+                                    <span>{service.duration_minutes || 60} min</span>
                                   </span>
                                   <span className="flex items-center space-x-1">
-                                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                                    <span className="capitalize">{service.category}</span>
+                                    <DollarSign className="w-3 h-3" />
+                                    <span>
+                                      {service.discount_price ? (
+                                        <>
+                                          <span className="font-medium">Rs. {service.discount_price}</span>
+                                          <span className="line-through ml-1">Rs. {service.price}</span>
+                                        </>
+                                      ) : (
+                                        <span className="font-medium">Rs. {service.price}</span>
+                                      )}
+                                    </span>
                                   </span>
                                 </div>
                               </div>
                             </div>
                           </div>
-                          <div className="text-right ml-4">
-                            {service.discountPrice ? (
-                              <div>
-                                <span className="text-lg font-semibold text-gray-900">Rs. {service.discountPrice}</span>
-                                <span className="text-sm text-gray-500 line-through ml-1">Rs. {service.price}</span>
-                              </div>
-                            ) : (
-                              <span className="text-lg font-semibold text-gray-900">Rs. {service.price}</span>
-                            )}
-                          </div>
                         </div>
                       </div>
                     );
-                  })}
+                  }) : (
+                    <div className="text-center py-8 text-gray-500">
+                      {selectedGender ? 'No services available for the selected category.' : 'Please select a category first.'}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -627,7 +757,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
 
           {/* Navigation Buttons */}
           <div className="flex space-x-3 pt-6 border-t border-gray-100 mt-6">
-            {currentStep > 1 && (
+            {currentStep > 0 && (
               <button
                 type="button"
                 onClick={handleBack}
@@ -637,7 +767,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
               </button>
             )}
             
-            {currentStep < 4 ? (
+            {currentStep < 3 ? (
               <button
                 type="button"
                 onClick={handleNext}
