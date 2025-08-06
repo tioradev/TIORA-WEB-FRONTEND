@@ -14,6 +14,7 @@ import StaffManagement from './StaffManagement';
 import AdvancedAnalytics from './AdvancedAnalytics';
 import PaymentBilling from './PaymentBilling';
 import ProfileModal from '../shared/ProfileModal';
+import BookingModal from '../appointments/BookingModal';
 
 const OwnerDashboard: React.FC = () => {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(mockLeaveRequests);

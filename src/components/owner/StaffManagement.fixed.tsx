@@ -31,6 +31,7 @@ interface Staff {
   salonId: string;
   performanceRating?: number;
   profileImage?: string;
+  servesGender?: 'male' | 'female' | 'both'; // Gender preference for barber services
 }
 
 interface StaffModalProps {
@@ -74,7 +75,8 @@ const StaffModal: React.FC<StaffModalProps> = ({ isOpen, onClose, staff, onSave,
     username: staff?.username || '',
     password: staff?.password || '',
     salonId: staff?.salonId || currentSalonId?.toString() || '1',
-    performanceRating: staff?.performanceRating || 3
+    performanceRating: staff?.performanceRating || 3,
+    servesGender: staff?.servesGender || 'both'
   });
 
   const [showCredentials, setShowCredentials] = useState(!!staff?.username);
@@ -113,7 +115,8 @@ const StaffModal: React.FC<StaffModalProps> = ({ isOpen, onClose, staff, onSave,
         username: staff?.username || '',
         password: staff?.password || '',
         salonId: staff?.salonId || currentSalonId?.toString() || '1',
-        performanceRating: staff?.performanceRating || 3
+        performanceRating: staff?.performanceRating || 3,
+        servesGender: staff?.servesGender || 'both'
       });
       setShowCredentials(!!staff?.username);
     }
@@ -360,13 +363,34 @@ const StaffModal: React.FC<StaffModalProps> = ({ isOpen, onClose, staff, onSave,
             </div>
           </div>
 
-          {/* Specialties - Only for barbers */}
+          {/* Specialties & Gender Service - Only for barbers */}
           {formData.role === 'barber' && (
             <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                 <Star className="w-5 h-5 mr-2 text-green-600" />
                 Specialties & Skills
               </h3>
+              
+              {/* Gender Serves Dropdown */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Serves Gender
+                </label>
+                <select
+                  value={formData.servesGender}
+                  onChange={(e) => setFormData(prev => ({ ...prev, servesGender: e.target.value as 'male' | 'female' | 'both' }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                >
+                  <option value="both">Both Gents & Ladies</option>
+                  <option value="male">Gents Only</option>
+                  <option value="female">Ladies Only</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Select which customer genders this barber serves
+                </p>
+              </div>
+
+              {/* Specialties */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {specialtyOptions.map(specialty => (
                   <label key={specialty} className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-green-300 transition-colors cursor-pointer">

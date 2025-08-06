@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Clock, User, Scissors, Edit, CheckCircle, Star, Calendar, ClipboardCheck, XCircle, ChevronDown } from 'lucide-react';
 import { Appointment } from '../../types';
 import { mockBarbers } from '../../data/mockData';
+import { apiService } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastProvider';
 import RupeeIcon from '../shared/RupeeIcon';
 
 interface AppointmentCardProps {
@@ -11,6 +14,7 @@ interface AppointmentCardProps {
   onCompleteSession?: (appointmentId: string) => void;
   onDelete?: (appointmentId: string) => void;
   onAssignBarber?: (appointmentId: string, barberId: string) => void;
+  onRefresh?: () => void; // Add refresh callback
   showActions?: boolean;
   userRole?: 'reception' | 'owner' | 'super-admin';
 }
@@ -22,14 +26,157 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
   onCompleteSession,
   onDelete,
   onAssignBarber,
+  onRefresh,
   showActions = true,
   userRole = 'reception',
 }) => {
   const [showBarberDropdown, setShowBarberDropdown] = useState(false);
+  const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { showSuccess, showError } = useToast();
+  const { isReceptionUser, isOwnerUser } = useAuth();
   
   // Get available barbers (filter out inactive ones)
   const availableBarbers = mockBarbers.filter(barber => barber.isActive);
+
+  // Convert userRole to API format
+  const getApiUserRole = (): 'RECEPTION' | 'OWNER' | 'ADMIN' => {
+    if (isReceptionUser() || userRole === 'reception') return 'RECEPTION';
+    if (isOwnerUser() || userRole === 'owner') return 'OWNER';
+    return 'ADMIN'; // for super-admin
+  };
+
+  // Handle API-based payment confirmation
+  const handleConfirmPayment = async () => {
+    try {
+      setLoading(true);
+      const appointmentId = parseInt(appointment.id);
+      const apiUserRole = getApiUserRole();
+      
+      console.log('💳 [APPOINTMENT] Confirming payment for appointment:', appointmentId);
+      console.log('👤 [APPOINTMENT] User role:', apiUserRole);
+      
+      const response = await apiService.confirmAppointmentPayment(appointmentId, apiUserRole);
+      
+      console.log('✅ [APPOINTMENT] Payment confirmed:', response);
+      
+      showSuccess('Payment Confirmed', response.message || `Payment confirmed successfully`);
+      
+      // Call the parent's onMarkPaid if provided, or refresh
+      if (onMarkPaid) {
+        onMarkPaid(appointment.id);
+      } else if (onRefresh) {
+        onRefresh();
+      }
+    } catch (error) {
+      console.error('❌ [APPOINTMENT] Error confirming payment:', error);
+      let errorMessage = 'Failed to confirm payment';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('PERMISSION_DENIED')) {
+          errorMessage = 'You do not have permission to confirm payments';
+        } else if (error.message.includes('INVALID_STATUS')) {
+          errorMessage = 'Payment can only be confirmed for pending payments';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      showError('Payment Failed', errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle API-based appointment completion (Reception only)
+  const handleCompleteAppointment = async () => {
+    try {
+      setLoading(true);
+      const appointmentId = parseInt(appointment.id);
+      const apiUserRole = getApiUserRole();
+      
+      console.log('✅ [APPOINTMENT] Completing appointment:', appointmentId);
+      console.log('👤 [APPOINTMENT] User role:', apiUserRole);
+      
+      const response = await apiService.completeSession(appointmentId, apiUserRole);
+      
+      console.log('✅ [APPOINTMENT] Appointment completed:', response);
+      
+      showSuccess('Session Completed', response.message || `Session completed successfully`);
+      
+      // Call the parent's onCompleteSession if provided, or refresh
+      if (onCompleteSession) {
+        onCompleteSession(appointment.id);
+      } else if (onRefresh) {
+        onRefresh();
+      }
+    } catch (error) {
+      console.error('❌ [APPOINTMENT] Error completing appointment:', error);
+      let errorMessage = 'Failed to complete appointment';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('PERMISSION_DENIED')) {
+          errorMessage = 'Only reception staff can complete sessions';
+        } else if (error.message.includes('BUSINESS_RULE_VIOLATION')) {
+          errorMessage = 'Can only complete appointments scheduled for today';
+        } else if (error.message.includes('INVALID_STATUS')) {
+          errorMessage = 'Can only complete scheduled appointments';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      showError('Completion Failed', errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle API-based appointment cancellation
+  const handleCancelAppointment = async () => {
+    try {
+      setLoading(true);
+      const appointmentId = parseInt(appointment.id);
+      const apiUserRole = getApiUserRole();
+      
+      console.log('❌ [APPOINTMENT] Cancelling appointment:', appointmentId);
+      console.log('👤 [APPOINTMENT] User role:', apiUserRole);
+      
+      const response = await apiService.cancelAppointment(appointmentId, {
+        userRole: apiUserRole,
+        reason: 'Cancelled from appointment card',
+        cancelledBy: apiUserRole
+      });
+      
+      console.log('✅ [APPOINTMENT] Appointment cancelled:', response);
+      
+      showSuccess('Appointment Cancelled', response.message || `Appointment cancelled successfully`);
+      
+      // Call the parent's onDelete if provided, or refresh
+      if (onDelete) {
+        onDelete(appointment.id);
+      } else if (onRefresh) {
+        onRefresh();
+      }
+    } catch (error) {
+      console.error('❌ [APPOINTMENT] Error cancelling appointment:', error);
+      let errorMessage = 'Failed to cancel appointment';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('PERMISSION_DENIED')) {
+          errorMessage = 'You do not have permission to cancel this appointment';
+        } else if (error.message.includes('INVALID_STATUS')) {
+          errorMessage = 'Cannot cancel completed or already cancelled appointments';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      showError('Cancellation Failed', errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -324,22 +471,28 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
            appointment.date === new Date().toISOString().split('T')[0] && 
            onCompleteSession && (
             <button
-              onClick={() => onCompleteSession(appointment.id)}
-              className="flex items-center space-x-1 px-3 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700 rounded-lg transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl transform hover:scale-105 flex-1"
+              onClick={handleCompleteAppointment}
+              disabled={loading}
+              className={`flex items-center space-x-1 px-3 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700 rounded-lg transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl transform hover:scale-105 flex-1 ${
+                loading ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
             >
               <ClipboardCheck className="w-4 h-4" />
-              <span>Complete</span>
+              <span>{loading ? 'Completing...' : 'Complete'}</span>
             </button>
           )}
           
           {/* Payment Received Button - For payment pending appointments */}
           {appointment.status === 'payment-pending' && onMarkPaid && (
             <button
-              onClick={() => onMarkPaid(appointment.id)}
-              className="flex items-center space-x-1 px-3 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white hover:from-emerald-600 hover:to-emerald-700 rounded-lg transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl transform hover:scale-105 flex-1"
+              onClick={handleConfirmPayment}
+              disabled={loading}
+              className={`flex items-center space-x-1 px-3 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white hover:from-emerald-600 hover:to-emerald-700 rounded-lg transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl transform hover:scale-105 flex-1 ${
+                loading ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
             >
               <CheckCircle className="w-4 h-4" />
-              <span>Payment</span>
+              <span>{loading ? 'Processing...' : 'Payment'}</span>
             </button>
           )}
           
@@ -356,11 +509,14 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
           {/* Cancel Appointment Button - Last in order, only for booked appointments */}
           {appointment.status === 'booked' && onDelete && (
             <button
-              onClick={() => onDelete(appointment.id)}
-              className="flex items-center space-x-1 px-3 py-2 text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md transform hover:scale-105 border border-red-200 flex-1"
+              onClick={handleCancelAppointment}
+              disabled={loading}
+              className={`flex items-center space-x-1 px-3 py-2 text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md transform hover:scale-105 border border-red-200 flex-1 ${
+                loading ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
             >
               <XCircle className="w-4 h-4" />
-              <span>Cancel</span>
+              <span>{loading ? 'Cancelling...' : 'Cancel'}</span>
             </button>
           )}
         </div>

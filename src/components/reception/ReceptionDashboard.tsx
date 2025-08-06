@@ -1,23 +1,26 @@
-import React, { useState, useRef } from 'react';
-import { Calendar, DollarSign, Clock, Users, Plus, Download, ChevronLeft, ChevronRight, X, CheckCircle, Star, Search } from 'lucide-react';
-import { mockAppointments, mockBarbers } from '../../data/mockData';
+import React, { useState, useRef, useEffect } from 'react';
+import { Calendar, DollarSign, Clock, Users, Plus, Download, ChevronLeft, ChevronRight, X, CheckCircle, Star, Search, Loader } from 'lucide-react';
+import { mockBarbers } from '../../data/mockData';
 import { Appointment } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotificationHelpers } from '../../utils/notificationHelpers';
+import { apiService } from '../../services/api';
 import StatsCard from '../shared/StatsCard';
 import AppointmentCard from '../appointments/AppointmentCard';
 import BookingModal from '../appointments/BookingModal';
 import ProfileModal from '../shared/ProfileModal';
 
 const ReceptionDashboard: React.FC = () => {
-  const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [paymentConfirmModal, setPaymentConfirmModal] = useState<{isOpen: boolean, appointment: Appointment | null}>({isOpen: false, appointment: null});
   const [completeSessionModal, setCompleteSessionModal] = useState<{isOpen: boolean, appointment: Appointment | null}>({isOpen: false, appointment: null});
   const [cancelAppointmentModal, setCancelAppointmentModal] = useState<{isOpen: boolean, appointment: Appointment | null}>({isOpen: false, appointment: null});
   const { triggerReceptionNotification } = useNotificationHelpers();
-  const { isProfileModalOpen, closeProfileModal, user, employee } = useAuth();
+  const { isProfileModalOpen, closeProfileModal, user, employee, getSalonId } = useAuth();
 
   // Create user profile from real employee data instead of mock data
   const userProfile = {
@@ -51,6 +54,59 @@ const ReceptionDashboard: React.FC = () => {
     // Additional fields
     notes: employee?.notes || '',
     profileImageUrl: employee?.profileImageUrl || ''
+  };
+
+  // Load appointments from API
+  const loadAppointments = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const salonId = getSalonId();
+      if (!salonId) {
+        setError('Salon ID not found. Please ensure you are logged in.');
+        return;
+      }
+
+      console.log('📅 [RECEPTION DASHBOARD] Loading appointments for salon:', salonId);
+      
+      // Load all appointments for the salon
+      const allAppointmentsData = await apiService.getAppointmentsForDashboard({
+        salonId: parseInt(salonId.toString()),
+        limit: 100 // Get recent 100 appointments
+      });
+      
+      console.log('✅ [RECEPTION DASHBOARD] Appointments loaded:', allAppointmentsData.length);
+      
+      // Set salon ID for all appointments
+      const appointmentsWithSalonId = allAppointmentsData.map(apt => ({
+        ...apt,
+        salonId: salonId
+      }));
+      
+      setAppointments(appointmentsWithSalonId);
+    } catch (error) {
+      console.error('❌ [RECEPTION DASHBOARD] Error loading appointments:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load appointments';
+      setError(errorMessage);
+      
+      // Fall back to empty array instead of mock data
+      setAppointments([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load appointments on component mount and when user data changes
+  useEffect(() => {
+    if (employee?.salonId || getSalonId()) {
+      loadAppointments();
+    }
+  }, [employee?.salonId]);
+
+  // Refresh appointments function
+  const refreshAppointments = () => {
+    loadAppointments();
   };
 
   const [successMessage, setSuccessMessage] = useState<{show: boolean, message: string}>({show: false, message: ''});
@@ -99,17 +155,16 @@ const ReceptionDashboard: React.FC = () => {
 
   const handleBookAppointment = (bookingData: any) => {
     if (editingAppointment) {
-      setAppointments(appointments.map(app => 
-        app.id === editingAppointment.id ? { ...app, ...bookingData } : app
-      ));
-      setEditingAppointment(null);
       showSuccessMessage(`Appointment for ${bookingData.customerName} has been updated successfully!`);
       triggerReceptionNotification('appointmentConfirmed', bookingData.customerName, bookingData.time);
     } else {
-      setAppointments([...appointments, bookingData]);
       showSuccessMessage(`New appointment for ${bookingData.customerName} has been booked successfully!`);
       triggerReceptionNotification('appointmentConfirmed', bookingData.customerName, bookingData.time);
     }
+    
+    // Refresh appointments to get the latest data from API
+    refreshAppointments();
+    setEditingAppointment(null);
   };
 
   const handleEditAppointment = (appointment: Appointment) => {
@@ -126,10 +181,11 @@ const ReceptionDashboard: React.FC = () => {
 
   const confirmCancelAppointment = () => {
     if (cancelAppointmentModal.appointment) {
-      const appointmentId = cancelAppointmentModal.appointment.id;
-      setAppointments(appointments.filter(app => app.id !== appointmentId));
       showSuccessMessage(`Appointment for ${cancelAppointmentModal.appointment.customerName} has been cancelled successfully!`);
       setCancelAppointmentModal({isOpen: false, appointment: null});
+      
+      // Refresh appointments to get the latest data from API
+      refreshAppointments();
     }
   };
 
@@ -165,31 +221,23 @@ const ReceptionDashboard: React.FC = () => {
 
   const confirmCompleteSession = () => {
     if (completeSessionModal.appointment) {
-      const appointmentId = completeSessionModal.appointment.id;
-      setAppointments(appointments.map(app => 
-        app.id === appointmentId 
-          ? { ...app, status: 'payment-pending', paymentStatus: 'pending' } 
-          : app
-      ));
-      
       showSuccessMessage(`Session for ${completeSessionModal.appointment.customerName} has been completed successfully!`);
       triggerReceptionNotification('sessionCompleted', completeSessionModal.appointment.customerName, completeSessionModal.appointment.timeSlot);
       setCompleteSessionModal({isOpen: false, appointment: null});
+      
+      // Refresh appointments to get the latest data from API
+      refreshAppointments();
     }
   };
 
   const confirmPaymentReceived = () => {
     if (paymentConfirmModal.appointment) {
-      const appointmentId = paymentConfirmModal.appointment.id;
-      setAppointments(appointments.map(app => 
-        app.id === appointmentId 
-          ? { ...app, status: 'paid', paymentStatus: 'completed', paymentMethod: 'cash' } 
-          : app
-      ));
-      
       showSuccessMessage(`Payment of LKR ${paymentConfirmModal.appointment.finalAmount} from ${paymentConfirmModal.appointment.customerName} has been received successfully!`);
       triggerReceptionNotification('paymentReceived', paymentConfirmModal.appointment.finalAmount, paymentConfirmModal.appointment.customerName);
       setPaymentConfirmModal({isOpen: false, appointment: null});
+      
+      // Refresh appointments to get the latest data from API
+      refreshAppointments();
     }
   };
 
@@ -267,31 +315,63 @@ Generated on: ${new Date().toLocaleString()}
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Success Message */}
-        {successMessage.show && (
-          <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50 flex items-center space-x-3 transform transition-all duration-300 ease-in-out max-w-md">
-            <CheckCircle className="w-5 h-5 flex-shrink-0" />
-            <span className="flex-1">{successMessage.message}</span>
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center h-64">
+            <Loader className="w-8 h-8 animate-spin text-purple-600" />
+            <span className="ml-3 text-gray-600 font-medium">Loading appointments...</span>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && !loading && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+            <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Appointments</h3>
+            <p className="text-red-600 mb-4">{error}</p>
             <button
-              onClick={() => setSuccessMessage({show: false, message: ''})}
-              className="text-white hover:text-gray-200 transition-colors duration-200"
+              onClick={loadAppointments}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
             >
-              <X className="w-4 h-4" />
+              Try Again
             </button>
           </div>
         )}
 
-        {/* Welcome Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Welcome back, Reception! 👋
-              </h1>
-              <p className="text-gray-600">Manage appointments and customer services efficiently</p>
+        {/* Main Content - Only show when not loading */}
+        {!loading && (
+          <>
+            {/* Success Message */}
+            {successMessage.show && (
+              <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50 flex items-center space-x-3 transform transition-all duration-300 ease-in-out max-w-md">
+                <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                <span className="flex-1">{successMessage.message}</span>
+                <button
+                  onClick={() => setSuccessMessage({show: false, message: ''})}
+                  className="text-white hover:text-gray-200 transition-colors duration-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Welcome Header */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                    Welcome back, Reception! 👋
+                  </h1>
+                  <p className="text-gray-600">Manage appointments and customer services efficiently</p>
+                </div>
+                <button
+                  onClick={refreshAppointments}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+                >
+                  <Calendar className="w-4 h-4" />
+                  Refresh
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
 
         <div className="space-y-6">
       {/* Stats Grid */}
@@ -749,6 +829,8 @@ Generated on: ${new Date().toLocaleString()}
         onSave={handleProfileSave}
         userRole="reception"
       />
+          </>
+        )}
       </div>
     </div>
   );

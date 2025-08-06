@@ -34,6 +34,22 @@ const ENDPOINTS = {
     DELETE: '/services',
     BOOKING: '/services/booking',
   },
+  AVAILABILITY: {
+    BARBERS: '/availability/barbers',
+    TIME_SLOTS: '/availability/time-slots',
+  },
+  APPOINTMENTS: {
+    CREATE: '/appointments',
+    LIST: '/appointments', // GET /appointments?salonId={salonId}&date={date}&status={status}
+    TODAY: '/appointments/today', // GET /appointments/today?salonId={salonId}
+    PENDING_PAYMENTS: '/appointments/pending-payments', // GET /appointments/pending-payments?salonId={salonId}
+    GET_DETAILS: '/appointments', // GET /appointments/{appointmentId}
+    GET_AVAILABLE_ACTIONS: '/appointments', // GET /appointments/{appointmentId}/available-actions?userRole={role}
+    UPDATE_DETAILS: '/appointments', // PUT /appointments/{appointmentId}/details
+    CANCEL_WITH_ROLE: '/appointments', // PUT /appointments/{appointmentId}/cancel-with-role?userRole={role}
+    CONFIRM_PAYMENT_WITH_ROLE: '/appointments', // PUT /appointments/{appointmentId}/confirm-payment?userRole={role}
+    COMPLETE_SESSION_WITH_ROLE: '/appointments', // PUT /appointments/{appointmentId}/complete-session?userRole={role}
+  },
 };
 
 // API Service Class
@@ -445,6 +461,434 @@ class ApiService {
       }
     );
   }
+
+  // Get available barbers for specific services and date
+  async getAvailableBarbers(serviceIds: string[], date: string, salonId: string | number, customerGender?: string): Promise<AvailableBarber[]> {
+    const serviceIdsParam = serviceIds.join(',');
+    let endpoint = `${ENDPOINTS.AVAILABILITY.BARBERS}?service_ids=${encodeURIComponent(serviceIdsParam)}&date=${encodeURIComponent(date)}&salonId=${salonId}`;
+    
+    // Add customerGender parameter if provided
+    if (customerGender) {
+      endpoint += `&customerGender=${encodeURIComponent(customerGender)}`;
+    }
+    
+    envLog.info('👥 [API] Getting available barbers...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🛠️ [API] Service IDs:', serviceIds);
+    envLog.info('📅 [API] Date:', date);
+    envLog.info('🏪 [API] Salon ID:', salonId);
+    envLog.info('👤 [API] Customer Gender:', customerGender || 'Not specified');
+    
+    try {
+      const response = await this.request<AvailableBarbersResponse>(endpoint);
+      envLog.info('✅ [API] Available barbers loaded successfully');
+      
+      // Return the available_barbers array from the response
+      return response.available_barbers || [];
+    } catch (error) {
+      envLog.error('❌ [API] Error getting available barbers:', error);
+      return [];
+    }
+  }
+
+  // Get available time slots for a specific barber
+  async getAvailableTimeSlots(barberId: string | number, serviceIds: string[], date: string, salonId: string | number): Promise<TimeSlotResponse> {
+    const serviceIdsParam = serviceIds.join(',');
+    const endpoint = `${ENDPOINTS.AVAILABILITY.TIME_SLOTS}?barber_id=${barberId}&service_ids=${encodeURIComponent(serviceIdsParam)}&date=${encodeURIComponent(date)}&salonId=${salonId}`;
+    
+    envLog.info('⏰ [API] Getting available time slots...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('👤 [API] Barber ID:', barberId);
+    envLog.info('🛠️ [API] Service IDs:', serviceIds);
+    envLog.info('📅 [API] Date:', date);
+    envLog.info('🏪 [API] Salon ID:', salonId);
+    
+    try {
+      const response = await this.request<TimeSlotResponse>(endpoint);
+      envLog.info('✅ [API] Available time slots loaded successfully');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [API] Error getting available time slots:', error);
+      return {
+        available_slots: [],
+        barber_id: null,
+        barber_name: null,
+        total_duration_minutes: null,
+        buffer_time_minutes: 15,
+        message: 'Failed to load time slots',
+        success: false
+      };
+    }
+  }
+
+  // Create appointment
+  async createAppointment(appointmentData: CreateAppointmentRequest): Promise<CreateAppointmentResponse> {
+    const endpoint = ENDPOINTS.APPOINTMENTS.CREATE;
+    
+    envLog.info('📅 [API] Creating appointment...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('📋 [API] Appointment data:', appointmentData);
+    
+    try {
+      const response = await this.request<CreateAppointmentResponse>(
+        endpoint,
+        {
+          method: 'POST',
+          body: JSON.stringify(appointmentData),
+        }
+      );
+      envLog.info('✅ [API] Appointment created successfully');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [API] Error creating appointment:', error);
+      return {
+        appointment_id: null,
+        appointment_number: null,
+        customer_id: null,
+        customer_name: null,
+        barber_id: null,
+        barber_name: null,
+        services: null,
+        appointment_date: null,
+        estimated_end_time: null,
+        total_duration_minutes: null,
+        total_amount: null,
+        status: null,
+        message: 'Failed to create appointment',
+        success: false,
+        created_at: null
+      };
+    }
+  }
+
+  // Get appointment details with optional role-based actions
+  async getAppointmentDetails(appointmentId: number, userRole?: 'RECEPTION' | 'OWNER' | 'ADMIN'): Promise<AppointmentDetails> {
+    const endpoint = userRole 
+      ? `${ENDPOINTS.APPOINTMENTS.GET_DETAILS}/${appointmentId}?userRole=${userRole}`
+      : `${ENDPOINTS.APPOINTMENTS.GET_DETAILS}/${appointmentId}`;
+    
+    envLog.info('📅 [API] Getting appointment details...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🆔 [API] Appointment ID:', appointmentId);
+    envLog.info('👤 [API] User Role:', userRole || 'none');
+    
+    try {
+      const response = await this.request<AppointmentDetails>(endpoint, {
+        method: 'GET',
+      });
+      envLog.info('✅ [API] Appointment details retrieved successfully');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [API] Error getting appointment details:', error);
+      throw error;
+    }
+  }
+
+  // Get available actions for appointment based on user role
+  async getAvailableActions(appointmentId: number, userRole: 'RECEPTION' | 'OWNER' | 'ADMIN'): Promise<AvailableActionsResponse> {
+    const endpoint = `${ENDPOINTS.APPOINTMENTS.GET_AVAILABLE_ACTIONS}/${appointmentId}/available-actions?userRole=${userRole}`;
+    
+    envLog.info('🔐 [API] Getting available actions...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🆔 [API] Appointment ID:', appointmentId);
+    envLog.info('👤 [API] User Role:', userRole);
+    
+    try {
+      const response = await this.request<AvailableActionsResponse>(endpoint, {
+        method: 'GET',
+      });
+      envLog.info('✅ [API] Available actions retrieved successfully');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [API] Error getting available actions:', error);
+      throw error;
+    }
+  }
+
+  // Update appointment details
+  async updateAppointmentDetails(appointmentId: number, updateData: UpdateAppointmentRequest): Promise<UpdateAppointmentResponse> {
+    const endpoint = `${ENDPOINTS.APPOINTMENTS.UPDATE_DETAILS}/${appointmentId}/details`;
+    
+    envLog.info('📅 [API] Updating appointment details...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🆔 [API] Appointment ID:', appointmentId);
+    envLog.info('📋 [API] Update data:', updateData);
+    
+    try {
+      const response = await this.request<UpdateAppointmentResponse>(
+        endpoint,
+        {
+          method: 'PUT',
+          body: JSON.stringify(updateData),
+        }
+      );
+      envLog.info('✅ [API] Appointment updated successfully');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [API] Error updating appointment:', error);
+      throw error;
+    }
+  }
+
+  // Cancel appointment with role-based access
+  async cancelAppointment(appointmentId: number, cancelData: CancelAppointmentRequest): Promise<CancelAppointmentResponse> {
+    const endpoint = `${ENDPOINTS.APPOINTMENTS.CANCEL_WITH_ROLE}/${appointmentId}/cancel-with-role?userRole=${cancelData.userRole}`;
+    
+    envLog.info('📅 [API] Cancelling appointment...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🆔 [API] Appointment ID:', appointmentId);
+    envLog.info('� [API] User Role:', cancelData.userRole);
+    envLog.info('�📋 [API] Cancel data:', cancelData);
+    
+    try {
+      const response = await this.request<CancelAppointmentResponse>(
+        endpoint,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            reason: cancelData.reason,
+            cancelledBy: cancelData.cancelledBy || cancelData.userRole
+          }),
+        }
+      );
+      envLog.info('✅ [API] Appointment cancelled successfully');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [API] Error cancelling appointment:', error);
+      throw error;
+    }
+  }
+
+  // Confirm payment with role-based access
+  async confirmAppointmentPayment(appointmentId: number, userRole: 'RECEPTION' | 'OWNER' | 'ADMIN'): Promise<ConfirmPaymentResponse> {
+    const endpoint = `${ENDPOINTS.APPOINTMENTS.CONFIRM_PAYMENT_WITH_ROLE}/${appointmentId}/confirm-payment?userRole=${userRole}`;
+    
+    envLog.info('💳 [API] Confirming appointment payment...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🆔 [API] Appointment ID:', appointmentId);
+    envLog.info('👤 [API] User Role:', userRole);
+    
+    try {
+      const response = await this.request<ConfirmPaymentResponse>(
+        endpoint,
+        {
+          method: 'PUT',
+        }
+      );
+      envLog.info('✅ [API] Payment confirmed successfully');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [API] Error confirming payment:', error);
+      throw error;
+    }
+  }
+
+  // Complete session (Reception only)
+  async completeSession(appointmentId: number, userRole: 'RECEPTION' | 'OWNER' | 'ADMIN'): Promise<CompleteSessionResponse> {
+    const endpoint = `${ENDPOINTS.APPOINTMENTS.COMPLETE_SESSION_WITH_ROLE}/${appointmentId}/complete-session?userRole=${userRole}`;
+    
+    envLog.info('📅 [API] Completing appointment session...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🆔 [API] Appointment ID:', appointmentId);
+    envLog.info('👤 [API] User Role:', userRole);
+    
+    try {
+      const response = await this.request<CompleteSessionResponse>(
+        endpoint,
+        {
+          method: 'PUT',
+        }
+      );
+      envLog.info('✅ [API] Session completed successfully');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [API] Error completing session:', error);
+      throw error;
+    }
+  }
+
+  // Get appointments list
+  async getAppointments(params: GetAppointmentsRequest): Promise<AppointmentListResponse> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('salonId', params.salonId.toString());
+    
+    if (params.date) queryParams.append('date', params.date);
+    if (params.status) queryParams.append('status', params.status);
+    if (params.paymentStatus) queryParams.append('paymentStatus', params.paymentStatus);
+    if (params.page) queryParams.append('page', params.page.toString());
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    
+    const endpoint = `${ENDPOINTS.APPOINTMENTS.LIST}?${queryParams.toString()}`;
+    
+    envLog.info('📅 [API] Fetching appointments list...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('📋 [API] Parameters:', params);
+    
+    try {
+      const response = await this.request<AppointmentListResponse>(endpoint, {
+        method: 'GET',
+      });
+      envLog.info('✅ [API] Appointments fetched successfully');
+      envLog.info('📊 [API] Total appointments:', response.totalCount);
+      return response;
+    } catch (error) {
+      envLog.error('❌ [API] Error fetching appointments:', error);
+      throw error;
+    }
+  }
+
+  // Get today's appointments
+  async getTodayAppointments(salonId: number): Promise<AppointmentListResponse> {
+    const endpoint = `${ENDPOINTS.APPOINTMENTS.TODAY}?salonId=${salonId}`;
+    
+    envLog.info('📅 [API] Fetching today\'s appointments...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🏢 [API] Salon ID:', salonId);
+    
+    try {
+      const response = await this.request<AppointmentListResponse>(endpoint, {
+        method: 'GET',
+      });
+      envLog.info('✅ [API] Today\'s appointments fetched successfully');
+      envLog.info('📊 [API] Total appointments:', response.totalCount);
+      return response;
+    } catch (error) {
+      envLog.error('❌ [API] Error fetching today\'s appointments:', error);
+      throw error;
+    }
+  }
+
+  // Get pending payment appointments
+  async getPendingPaymentAppointments(salonId: number): Promise<AppointmentListResponse> {
+    const endpoint = `${ENDPOINTS.APPOINTMENTS.PENDING_PAYMENTS}?salonId=${salonId}`;
+    
+    envLog.info('💰 [API] Fetching pending payment appointments...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🏢 [API] Salon ID:', salonId);
+    
+    try {
+      const response = await this.request<AppointmentListResponse>(endpoint, {
+        method: 'GET',
+      });
+      envLog.info('✅ [API] Pending payment appointments fetched successfully');
+      envLog.info('📊 [API] Total appointments:', response.totalCount);
+      return response;
+    } catch (error) {
+      envLog.error('❌ [API] Error fetching pending payment appointments:', error);
+      throw error;
+    }
+  }
+
+  // Utility function to convert API appointment data to frontend Appointment format
+  private convertApiAppointmentToFrontend(apiAppointment: AppointmentListItem): any {
+    // Map API status to frontend status
+    const mapStatus = (apiStatus: string): 'booked' | 'in-progress' | 'completed' | 'payment-pending' | 'paid' | 'cancelled' | 'no-show' => {
+      switch (apiStatus) {
+        case 'SCHEDULED':
+          return 'booked';
+        case 'COMPLETED':
+          // Check payment status to determine if it's completed or payment-pending
+          if (apiAppointment.paymentStatus === 'COMPLETED') {
+            return 'paid';
+          } else {
+            return 'payment-pending';
+          }
+        case 'CANCELLED':
+          return 'cancelled';
+        case 'NO_SHOW':
+          return 'no-show';
+        default:
+          return 'booked';
+      }
+    };
+
+    // Map API payment status to frontend payment status
+    const mapPaymentStatus = (apiPaymentStatus: string): 'pending' | 'completed' | 'refunded' => {
+      switch (apiPaymentStatus) {
+        case 'COMPLETED':
+          return 'completed';
+        case 'PENDING':
+        case 'PARTIAL':
+          return 'pending';
+        default:
+          return 'pending';
+      }
+    };
+
+    // Extract time from appointmentDate
+    const appointmentDateTime = new Date(apiAppointment.appointmentDate);
+    const timeSlot = appointmentDateTime.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
+
+    return {
+      id: apiAppointment.id.toString(),
+      salonId: '', // Will be set from context
+      customerId: `customer_${apiAppointment.id}`, // Generate customer ID
+      customerName: apiAppointment.customerName,
+      customerPhone: apiAppointment.customerPhone,
+      customerEmail: '', // Not available in API response
+      customerGender: undefined, // Not available in API response
+      barberId: `employee_${apiAppointment.id}`, // Generate barber ID
+      barberName: apiAppointment.employeeName,
+      serviceId: `service_${apiAppointment.id}`, // Generate service ID
+      serviceName: apiAppointment.serviceName,
+      date: appointmentDateTime.toISOString().split('T')[0], // YYYY-MM-DD format
+      timeSlot: timeSlot,
+      status: mapStatus(apiAppointment.status),
+      paymentStatus: mapPaymentStatus(apiAppointment.paymentStatus),
+      paymentMethod: undefined, // Not available in API response
+      amount: apiAppointment.servicePrice,
+      discountAmount: apiAppointment.discountAmount || 0,
+      finalAmount: apiAppointment.totalAmount,
+      tipAmount: 0, // Not available in API response
+      notes: '', // Not available in API response
+      createdAt: new Date(apiAppointment.createdAt),
+      updatedAt: new Date(apiAppointment.updatedAt),
+    };
+  }
+
+  // Enhanced appointment list methods with conversion
+  async getAppointmentsForDashboard(params: GetAppointmentsRequest): Promise<any[]> {
+    try {
+      const response = await this.getAppointments(params);
+      if (response.success && response.appointments) {
+        return response.appointments.map(apt => this.convertApiAppointmentToFrontend(apt));
+      }
+      return [];
+    } catch (error) {
+      envLog.error('❌ [API] Error getting appointments for dashboard:', error);
+      throw error;
+    }
+  }
+
+  async getTodayAppointmentsForDashboard(salonId: number): Promise<any[]> {
+    try {
+      const response = await this.getTodayAppointments(salonId);
+      if (response.success && response.appointments) {
+        return response.appointments.map(apt => this.convertApiAppointmentToFrontend(apt));
+      }
+      return [];
+    } catch (error) {
+      envLog.error('❌ [API] Error getting today\'s appointments for dashboard:', error);
+      throw error;
+    }
+  }
+
+  async getPendingPaymentAppointmentsForDashboard(salonId: number): Promise<any[]> {
+    try {
+      const response = await this.getPendingPaymentAppointments(salonId);
+      if (response.success && response.appointments) {
+        return response.appointments.map(apt => this.convertApiAppointmentToFrontend(apt));
+      }
+      return [];
+    } catch (error) {
+      envLog.error('❌ [API] Error getting pending payment appointments for dashboard:', error);
+      throw error;
+    }
+  }
 }
 
 // Types for API requests and responses
@@ -743,6 +1187,7 @@ export interface EmployeeRegistrationRequest {
   ratings?: number;
   profile_image_url?: string;
   notes?: string;
+  serves_gender?: 'MALE' | 'FEMALE' | 'BOTH'; // Gender preference for barber services
 }
 
 export interface EmployeeRegistrationResponse {
@@ -821,6 +1266,7 @@ export interface EmployeeUpdateRequest {
   profile_image_url?: string;
   notes?: string;
   status?: 'ACTIVE' | 'INACTIVE';
+  serves_gender?: 'MALE' | 'FEMALE' | 'BOTH'; // Gender preference for barber services
 }
 
 export interface EmployeeUpdateResponse {
@@ -920,6 +1366,247 @@ export interface ServicesListResponse {
   services: ServiceData[];
   message: string;
   success: boolean;
+}
+
+// Availability types
+export interface AvailableBarber {
+  barber_id: number;
+  name: string;
+  image_url?: string;
+  experience_years: number;
+  specialties: string[];
+  ratings: number;
+  can_perform_services: boolean;
+  serves_gender: string; // 'MALE' | 'FEMALE' | 'BOTH'
+}
+
+export interface AvailableBarbersResponse {
+  available_barbers: AvailableBarber[];
+  total_barbers: number;
+  total_service_providers: number;
+  total_employees: number;
+  message: string;
+  success: boolean;
+}
+
+export interface TimeSlot {
+  start_time: string;
+  end_time: string;
+  is_available: boolean;
+  unavailable_reason?: string | null;
+}
+
+export interface TimeSlotResponse {
+  available_slots: TimeSlot[];
+  barber_id: number | null;
+  barber_name: string | null;
+  total_duration_minutes: number | null;
+  buffer_time_minutes: number;
+  message: string;
+  success: boolean;
+}
+
+export interface CreateAppointmentRequest {
+  salonId: number;
+  serviceIds: number[];
+  employeeId: number;
+  appointmentDate: string; // "2024-08-15T14:00:00"
+  estimatedEndTime: string; // "2024-08-15T15:00:00"
+  servicePrice: number;
+  discountAmount?: number;
+  customerFirstName: string;
+  customerLastName: string;
+  customerPhone: string;
+  customerGender: 'MALE' | 'FEMALE' | 'OTHER';
+}
+
+export interface AppointmentService {
+  service_id: number;
+  service_name: string;
+  duration_minutes: number;
+  price: number;
+}
+
+export interface CreateAppointmentResponse {
+  // Fields that might be returned by API
+  appointment_id?: number | null;
+  appointment_number?: string | null;
+  customer_id?: number | null;
+  customer_name?: string | null;
+  barber_id?: number | null;
+  barber_name?: string | null;
+  services?: AppointmentService[] | null;
+  appointment_date?: string | null;
+  estimated_end_time?: string | null;
+  total_duration_minutes?: number | null;
+  total_amount?: number | null;
+  status?: string | null;
+  message?: string;
+  success?: boolean;
+  created_at?: string | null;
+  
+  // Actual API response fields (camelCase format)
+  id?: number;
+  appointmentNumber?: string;
+  customerId?: number;
+  customerName?: string;
+  customerPhone?: string;
+  serviceId?: number;
+  serviceName?: string;
+  employeeId?: number;
+  employeeName?: string;
+  salonId?: number;
+  salonName?: string;
+  appointmentDate?: string;
+  estimatedEndTime?: string;
+  actualStartTime?: string | null;
+  actualEndTime?: string | null;
+  paymentStatus?: string;
+  servicePrice?: number;
+  discountAmount?: number;
+  taxAmount?: number;
+  totalAmount?: number;
+  paidAmount?: number;
+  paymentMethod?: string | null;
+  customerNotes?: string;
+  internalNotes?: string;
+  cancellationReason?: string | null;
+  cancelledBy?: string | null;
+  cancelledAt?: string | null;
+  reminderSent?: boolean;
+  confirmationSent?: boolean;
+  rating?: number | null;
+  review?: string | null;
+  reviewDate?: string | null;
+  createdDate?: string;
+  lastModifiedDate?: string;
+}
+
+// New Appointment Management Interfaces
+export interface AppointmentDetails {
+  id: number;
+  appointmentNumber: string;
+  customerId: number;
+  customerName: string;
+  customerPhone: string;
+  serviceId: number;
+  serviceName: string;
+  employeeId: number;
+  employeeName: string;
+  salonId: number;
+  appointmentDate: string;
+  estimatedEndTime: string;
+  status: string;
+  paymentStatus: string;
+  servicePrice: number;
+  totalAmount: number;
+  paidAmount: number;
+  createdAt: string;
+  updatedAt: string;
+  viewContext?: string; // 'payment-pending' | 'today-appointments' | 'all-appointments'
+  availableActions?: AppointmentActions;
+}
+
+export interface AppointmentActions {
+  canEdit: boolean;
+  canComplete: boolean;
+  canCancel: boolean;
+  canConfirmPayment: boolean;
+  statusDisplay?: string;
+}
+
+export interface UpdateAppointmentRequest {
+  appointmentDate: string;
+  estimatedEndTime: string;
+  serviceIds: number[];
+  employeeId: number;
+  servicePrice: number;
+  discountAmount?: number;
+}
+
+export interface UpdateAppointmentResponse {
+  id: number;
+  appointmentDate: string;
+  estimatedEndTime: string;
+  servicePrice: number;
+  discountAmount: number;
+  totalAmount: number;
+  updatedAt: string;
+}
+
+export interface CancelAppointmentRequest {
+  userRole: 'RECEPTION' | 'OWNER' | 'ADMIN';
+  reason?: string;
+  cancelledBy?: string;
+}
+
+export interface CancelAppointmentResponse {
+  id: number;
+  status: string;
+  cancellationReason?: string;
+  cancelledBy?: string;
+  cancelledAt: string;
+  message: string;
+}
+
+export interface ConfirmPaymentResponse {
+  id: number;
+  paymentStatus: string;
+  paidAmount: number;
+  totalAmount?: number;
+  updatedAt?: string;
+  message: string;
+}
+
+export interface CompleteSessionResponse {
+  id: number;
+  status: string;
+  actualEndTime: string;
+  updatedAt?: string;
+  message: string;
+}
+
+export interface AvailableActionsResponse {
+  status: string;
+  paymentStatus?: string;
+  actions: AppointmentActions;
+}
+
+// Appointment List Interfaces
+export interface AppointmentListItem {
+  id: number;
+  customerName: string;
+  customerPhone: string;
+  serviceName: string;
+  employeeName: string;
+  appointmentDate: string;
+  estimatedEndTime: string;
+  status: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+  paymentStatus: 'PENDING' | 'PARTIAL' | 'COMPLETED';
+  servicePrice: number;
+  totalAmount: number;
+  paidAmount: number;
+  discountAmount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AppointmentListResponse {
+  success: boolean;
+  message: string;
+  appointments: AppointmentListItem[];
+  totalCount: number;
+  page?: number;
+  limit?: number;
+}
+
+export interface GetAppointmentsRequest {
+  salonId: number;
+  date?: string; // YYYY-MM-DD format
+  status?: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+  paymentStatus?: 'PENDING' | 'PARTIAL' | 'COMPLETED';
+  page?: number;
+  limit?: number;
 }
 
 // Export singleton instance

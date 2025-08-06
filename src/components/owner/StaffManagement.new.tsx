@@ -9,7 +9,7 @@ import {
   EmployeeRegistrationRequest
 } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from '../../contexts/ToastProvider';
+import { useNotifications } from '../../contexts/NotificationContext';
 import StaffModal from './StaffManagement.fixed';
 import ConfirmationModal from '../shared/ConfirmationModal';
 
@@ -40,12 +40,11 @@ interface Staff {
   salonId: string;
   performanceRating?: number;
   profileImage?: string;
-  servesGender?: 'male' | 'female' | 'both'; // Gender preference for barber services
 }
 
 const StaffManagement: React.FC = () => {
   const { getSalonId } = useAuth();
-  const { showSuccess, showError } = useToast();
+  const { addNotification } = useNotifications();
   const [staff, setStaff] = useState<Staff[]>([]);
   const [filteredStaff, setFilteredStaff] = useState<Staff[]>([]);
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
@@ -183,8 +182,7 @@ const StaffManagement: React.FC = () => {
           username: '', // Barbers don't have username/password
           password: '',
           salonId: emp.salon_id?.toString() || salonId.toString(),
-          performanceRating: emp.ratings || emp.performance_rating || 3,
-          servesGender: emp.serves_gender ? emp.serves_gender.toLowerCase() as 'male' | 'female' | 'both' : 'both'
+          performanceRating: emp.ratings || emp.performance_rating || 3
         }));
         allStaff.push(...barbers);
       }
@@ -269,25 +267,25 @@ const StaffManagement: React.FC = () => {
           emergency_contact_phone: staffData.emergencyContact.phone,
           emergency_relationship: staffData.emergencyContact.relationship,
           username: staffData.username || undefined,
-          ratings: staffData.performanceRating,
-          serves_gender: staffData.servesGender ? 
-            staffData.servesGender.toUpperCase() as 'MALE' | 'FEMALE' | 'BOTH' : 'BOTH'
+          ratings: staffData.performanceRating
         };
 
         const response = await apiService.updateEmployee(editingStaff.id, updateRequest);
         if (response.employee_id) {
           console.log('Staff updated successfully:', response);
-          showSuccess(
-            'Employee Updated',
-            `${staffData.firstName} ${staffData.lastName} has been updated successfully.`
-          );
+          addNotification({
+            type: 'success',
+            title: 'Employee Updated',
+            message: `${staffData.firstName} ${staffData.lastName} has been updated successfully.`
+          });
           await loadStaffData(); // Reload data
         } else {
           setError('Failed to update staff');
-          showError(
-            'Update Failed',
-            'Failed to update employee. Please try again.'
-          );
+          addNotification({
+            type: 'error',
+            title: 'Update Failed',
+            message: 'Failed to update employee. Please try again.'
+          });
         }
       } else {
         // Create new staff
@@ -317,25 +315,25 @@ const StaffManagement: React.FC = () => {
           password: staffData.password || undefined,
           specializations: staffData.specialties.length > 0 ? staffData.specialties : undefined,
           weekly_schedule: JSON.stringify(staffData.schedule),
-          ratings: staffData.performanceRating || 3,
-          serves_gender: staffData.role === 'barber' && staffData.servesGender ? 
-            staffData.servesGender.toUpperCase() as 'MALE' | 'FEMALE' | 'BOTH' : 'BOTH'
+          ratings: staffData.performanceRating || 3
         };
 
         const response = await apiService.createEmployee(employeeRequest);
         if (response.employee_id) {
           console.log('Staff created successfully:', response);
-          showSuccess(
-            'Employee Added',
-            `${staffData.firstName} ${staffData.lastName} has been successfully added to your team.`
-          );
+          addNotification({
+            type: 'success',
+            title: 'Employee Added',
+            message: `${staffData.firstName} ${staffData.lastName} has been successfully added to your team.`
+          });
           await loadStaffData(); // Reload data
         } else {
           setError('Failed to create staff');
-          showError(
-            'Addition Failed',
-            'Failed to add new employee. Please try again.'
-          );
+          addNotification({
+            type: 'error',
+            title: 'Addition Failed',
+            message: 'Failed to add new employee. Please try again.'
+          });
         }
       }
 
@@ -345,10 +343,11 @@ const StaffManagement: React.FC = () => {
       console.error('Error saving staff:', error);
       const action = editingStaff ? 'update' : 'add';
       setError(`Failed to ${action} staff`);
-      showError(
-        `${editingStaff ? 'Update' : 'Addition'} Failed`,
-        `An error occurred while ${action}ing the employee. Please check your connection and try again.`
-      );
+      addNotification({
+        type: 'error',
+        title: `${editingStaff ? 'Update' : 'Addition'} Failed`,
+        message: `An error occurred while ${action}ing the employee. Please check your connection and try again.`
+      });
     } finally {
       setSaving(false);
     }
@@ -372,25 +371,28 @@ const StaffManagement: React.FC = () => {
       const response = await apiService.deleteEmployee(staffId);
       if (response.success) {
         console.log('Staff deleted successfully');
-        showSuccess(
-          'Employee Deleted',
-          `${staffName} has been permanently removed from your salon.`
-        );
+        addNotification({
+          type: 'success',
+          title: 'Employee Deleted',
+          message: `${staffName} has been permanently removed from your salon.`
+        });
         await loadStaffData(); // Reload data
       } else {
         setError('Failed to delete staff');
-        showError(
-          'Deletion Failed',
-          `Failed to delete ${staffName}. Please try again.`
-        );
+        addNotification({
+          type: 'error',
+          title: 'Deletion Failed',
+          message: `Failed to delete ${staffName}. Please try again.`
+        });
       }
     } catch (error) {
       console.error('Error deleting staff:', error);
       setError('Failed to delete staff');
-      showError(
-        'Deletion Error',
-        `An error occurred while deleting ${deleteConfirmation.staffName}. Please check your connection and try again.`
-      );
+      addNotification({
+        type: 'error',
+        title: 'Deletion Error',
+        message: `An error occurred while deleting ${deleteConfirmation.staffName}. Please check your connection and try again.`
+      });
     } finally {
       setDeleteConfirmation({ isOpen: false, staffId: '', staffName: '' });
     }
@@ -410,25 +412,28 @@ const StaffManagement: React.FC = () => {
       const response = await apiService.updateEmployee(staffMember.id, updateRequest);
       if (response.employee_id) {
         console.log('Staff status updated successfully');
-        showSuccess(
-          `Employee ${action === 'activated' ? 'Activated' : 'Deactivated'}`,
-          `${staffName} has been ${action} successfully.`
-        );
+        addNotification({
+          type: 'success',
+          title: `Employee ${action === 'activated' ? 'Activated' : 'Deactivated'}`,
+          message: `${staffName} has been ${action} successfully.`
+        });
         await loadStaffData(); // Reload data
       } else {
         setError('Failed to update staff status');
-        showError(
-          'Status Update Failed',
-          `Failed to ${action === 'activated' ? 'activate' : 'deactivate'} ${staffName}. Please try again.`
-        );
+        addNotification({
+          type: 'error',
+          title: 'Status Update Failed',
+          message: `Failed to ${action === 'activated' ? 'activate' : 'deactivate'} ${staffName}. Please try again.`
+        });
       }
     } catch (error) {
       console.error('Error updating staff status:', error);
       setError('Failed to update staff status');
-      showError(
-        'Status Update Error',
-        `An error occurred while updating ${staffName}'s status. Please check your connection and try again.`
-      );
+      addNotification({
+        type: 'error',
+        title: 'Status Update Error',
+        message: `An error occurred while updating ${staffName}'s status. Please check your connection and try again.`
+      });
     }
   };
 
@@ -674,17 +679,16 @@ const StaffManagement: React.FC = () => {
         title="Delete Employee"
         message={`Are you sure you want to permanently delete ${deleteConfirmation.staffName}?
 
-⚠️ This action cannot be undone and will remove:
+This action cannot be undone and will remove:
 • All employee records
 • Historical data
 • Login credentials (if applicable)
-• Performance data
-
-This will permanently remove the employee from your salon system.`}
+• Performance data`}
         confirmText="Delete Employee"
         cancelText="Cancel"
         type="danger"
-        requireTyping={false}
+        requireTyping={true}
+        typeToConfirm="DELETE"
       />
     </div>
   );

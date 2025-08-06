@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, Clock, User, ChevronRight, Plus, Minus, DollarSign, Users } from 'lucide-react';
-import { mockBarbers, mockServices, mockAppointments } from '../../data/mockData';
-import { apiService } from '../../services/api';
+import { mockBarbers, mockServices } from '../../data/mockData';
+import { apiService, TimeSlot, CreateAppointmentRequest } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastProvider';
 
@@ -29,10 +29,12 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
   const [availableServices, setAvailableServices] = useState<any[]>([]);
   const [loadingServices, setLoadingServices] = useState(false);
   const [formData, setFormData] = useState({
-    customerName: editingAppointment?.customerName || '',
+    customerFirstName: editingAppointment?.customerName?.split(' ')[0] || '',
+    customerLastName: editingAppointment?.customerName?.split(' ').slice(1).join(' ') || '',
     customerPhone: editingAppointment?.customerPhone?.startsWith('+94') 
       ? editingAppointment.customerPhone 
       : '+94' + (editingAppointment?.customerPhone || ''),
+    customerGender: selectedGender as 'MALE' | 'FEMALE' | 'OTHER' | null,
     selectedServices: editingAppointment?.selectedServices || [] as SelectedService[],
     date: editingAppointment?.date || '',
     barberId: editingAppointment?.barberId || '',
@@ -40,7 +42,10 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
   });
 
   const [availableBarbers, setAvailableBarbers] = useState<any[]>([]);
-  const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([]);
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<TimeSlot[]>([]);
+  const [loadingTimeSlots, setLoadingTimeSlots] = useState(false);
+  const [selectedBarberName, setSelectedBarberName] = useState<string>('');
+  const [saving, setSaving] = useState(false);
 
   const allTimeSlots = [
     '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
@@ -100,8 +105,10 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
         setSelectedGender(null);
         setAvailableServices([]);
         setFormData({
-          customerName: '',
+          customerFirstName: '',
+          customerLastName: '',
           customerPhone: '+94',
+          customerGender: null as 'MALE' | 'FEMALE' | 'OTHER' | null,
           selectedServices: [],
           date: '',
           barberId: '',
@@ -130,8 +137,10 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
 
         setCurrentStep(0); // Start with gender selection for editing too
         setFormData({
-          customerName: editingAppointment.customerName || '',
+          customerFirstName: editingAppointment.customerName?.split(' ')[0] || '',
+          customerLastName: editingAppointment.customerName?.split(' ').slice(1).join(' ') || '',
           customerPhone: editingAppointment.customerPhone?.startsWith('+94') ? editingAppointment.customerPhone : '+94' + (editingAppointment.customerPhone || ''),
+          customerGender: null as 'MALE' | 'FEMALE' | 'OTHER' | null, // Will be set from selectedGender state
           selectedServices: selectedServices,
           date: editingAppointment.date || '',
           barberId: editingAppointment.barberId || '',
@@ -141,86 +150,242 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
     }
   }, [isOpen, editingAppointment]);
 
-  // Update available barbers when services are selected
+  // Update available barbers when services are selected and date is chosen
   useEffect(() => {
-    if (formData.selectedServices.length > 0) {
-      // Get all required skills from selected services
-      const allRequiredSkills = formData.selectedServices.flatMap((selectedService: SelectedService) => {
-        const service = mockServices.find((s: any) => s.id === selectedService.id);
-        return service?.requiredSkills || [];
-      });
-      
-      // Filter barbers who have all required skills
-      const qualifiedBarbers = mockBarbers.filter((barber: any) => 
-        barber.isActive && 
-        allRequiredSkills.every((skill: string) => 
-          barber.specializedArea.toLowerCase().includes(skill.toLowerCase())
-        )
-      );
-      
-      setAvailableBarbers(qualifiedBarbers.length > 0 ? qualifiedBarbers : mockBarbers.filter((b: any) => b.isActive));
-    } else {
-      setAvailableBarbers(mockBarbers.filter(b => b.isActive));
-    }
-  }, [formData.selectedServices]);
+    const loadAvailableBarbers = async () => {
+      if (formData.selectedServices.length > 0 && formData.date) {
+        try {
+          const salonId = getSalonId();
+          if (!salonId) {
+            console.error('No salon ID found');
+            setAvailableBarbers(mockBarbers.filter(b => b.isActive));
+            return;
+          }
+
+          // Extract service IDs from selected services
+          const serviceIds = formData.selectedServices.map((service: SelectedService) => service.id);
+          
+          // Call the new availability API with customer gender
+          const availableBarbers = await apiService.getAvailableBarbers(
+            serviceIds,
+            formData.date,
+            salonId,
+            selectedGender || undefined // Pass the selected gender from step 0, convert null to undefined
+          );
+
+          console.log('👥 [BOOKING] API Response - Available Barbers:', availableBarbers);
+
+          if (availableBarbers && availableBarbers.length > 0) {
+            // Convert API response to the format expected by the UI
+            const convertedBarbers = availableBarbers.map(barber => ({
+              id: barber.barber_id.toString(),
+              name: barber.name,
+              specializedArea: barber.specialties.join(', '),
+              avatar: barber.image_url || '/default-avatar.png',
+              isActive: barber.can_perform_services,
+              experienceYears: barber.experience_years,
+              rating: barber.ratings,
+              specialties: barber.specialties,
+              canPerformServices: barber.can_perform_services,
+              servesGender: barber.serves_gender
+            }));
+            
+            console.log('🔄 [BOOKING] Converted barbers for UI:', convertedBarbers);
+            
+            // Filter to only show barbers who can perform all services
+            const qualifiedBarbers = convertedBarbers.filter(barber => barber.canPerformServices);
+            setAvailableBarbers(qualifiedBarbers.length > 0 ? qualifiedBarbers : convertedBarbers);
+            
+            console.log('✅ [BOOKING] Final qualified barbers:', qualifiedBarbers.length > 0 ? qualifiedBarbers : convertedBarbers);
+          } else {
+            console.log('⚠️ [BOOKING] No available barbers from API, using fallback');
+            // Fallback to mock data if no barbers available or API fails
+            const allRequiredSkills = formData.selectedServices.flatMap((selectedService: SelectedService) => {
+              const service = mockServices.find((s: any) => s.id === selectedService.id);
+              return service?.requiredSkills || [];
+            });
+            
+            // Filter barbers who have all required skills
+            const qualifiedBarbers = mockBarbers.filter((barber: any) => 
+              barber.isActive && 
+              allRequiredSkills.every((skill: string) => 
+                barber.specializedArea.toLowerCase().includes(skill.toLowerCase())
+              )
+            );
+            
+            setAvailableBarbers(qualifiedBarbers.length > 0 ? qualifiedBarbers : mockBarbers.filter((b: any) => b.isActive));
+          }
+        } catch (error) {
+          console.error('Error loading available barbers:', error);
+          // Fallback to mock data on error
+          const allRequiredSkills = formData.selectedServices.flatMap((selectedService: SelectedService) => {
+            const service = mockServices.find((s: any) => s.id === selectedService.id);
+            return service?.requiredSkills || [];
+          });
+          
+          const qualifiedBarbers = mockBarbers.filter((barber: any) => 
+            barber.isActive && 
+            allRequiredSkills.every((skill: string) => 
+              barber.specializedArea.toLowerCase().includes(skill.toLowerCase())
+            )
+          );
+          
+          setAvailableBarbers(qualifiedBarbers.length > 0 ? qualifiedBarbers : mockBarbers.filter((b: any) => b.isActive));
+        }
+      } else if (formData.selectedServices.length > 0 && !formData.date) {
+        // If services are selected but no date yet, show placeholder message or empty state
+        setAvailableBarbers([]);
+      } else {
+        // No services selected, show all active barbers
+        setAvailableBarbers(mockBarbers.filter(b => b.isActive));
+      }
+    };
+
+    loadAvailableBarbers();
+  }, [formData.selectedServices, formData.date, getSalonId]);
 
   // Update available time slots when date and barber are selected
   useEffect(() => {
-    if (formData.date && (formData.barberId || userRole === 'reception') && totalDuration > 0) {
-      // If no barber is selected (reception mode), show all available time slots
-      if (formData.barberId === 'no-barber' || (userRole === 'reception' && !formData.barberId)) {
-        const slotsNeeded = Math.ceil(totalDuration / 30);
-        const available = allTimeSlots.filter((_slot: string, index: number) => {
-          return index + slotsNeeded <= allTimeSlots.length;
-        });
-        setAvailableTimeSlots(available);
-        return;
-      }
+    const loadAvailableTimeSlots = async () => {
+      if (formData.date && formData.barberId && formData.selectedServices.length > 0) {
+        // Skip API call for 'no-barber' option in reception mode
+        if (formData.barberId === 'no-barber') {
+          // Generate mock time slots for reception mode with proper 24-hour format
+          const convertTo24HourFormat = (timeStr: string): string => {
+            const [time, period] = timeStr.split(' ');
+            const [hour, minute] = time.split(':');
+            let hour24 = parseInt(hour);
+            
+            if (period === 'PM' && hour24 !== 12) {
+              hour24 += 12;
+            } else if (period === 'AM' && hour24 === 12) {
+              hour24 = 0;
+            }
+            
+            return `${hour24.toString().padStart(2, '0')}:${minute}`;
+          };
 
-      // Get existing appointments for this barber on this date
-      const existingAppointments = mockAppointments.filter(
-        app => app.barberId === formData.barberId && 
-               app.date === formData.date &&
-               app.status !== 'cancelled'
-      );
-
-      // Calculate unavailable slots based on existing appointments
-      const unavailableSlots = new Set<string>();
-      
-      existingAppointments.forEach(appointment => {
-        const appointmentService = mockServices.find(s => s.id === appointment.serviceId);
-        if (appointmentService) {
-          const startIndex = allTimeSlots.indexOf(appointment.timeSlot);
-          const slotsNeeded = Math.ceil(appointmentService.duration / 30);
+          const mockTimeSlots: TimeSlot[] = allTimeSlots.map(slot => {
+            const time24 = convertTo24HourFormat(slot);
+            return {
+              start_time: time24,
+              end_time: time24,
+              is_available: true,
+              unavailable_reason: null
+            };
+          });
           
-          // Mark slots as unavailable
-          for (let i = 0; i < slotsNeeded; i++) {
-            if (startIndex + i < allTimeSlots.length) {
-              unavailableSlots.add(allTimeSlots[startIndex + i]);
+          console.log('🕐 [BOOKING] Mock time slots generated:', mockTimeSlots);
+          console.log('🕐 [BOOKING] Sample mock time slot:', mockTimeSlots[0]);
+          setAvailableTimeSlots(mockTimeSlots);
+          return;
+        }
+
+        try {
+          setLoadingTimeSlots(true);
+          const salonId = getSalonId();
+          if (!salonId) {
+            console.error('No salon ID found');
+            setAvailableTimeSlots([]);
+            return;
+          }
+
+          // Extract service IDs from selected services
+          const serviceIds = formData.selectedServices.map((service: SelectedService) => service.id);
+          
+          console.log('🔄 [BOOKING] Preparing to load time slots with parameters:');
+          console.log('👤 [BOOKING] Barber ID:', formData.barberId);
+          console.log('🛠️ [BOOKING] Service IDs:', serviceIds);
+          console.log('📅 [BOOKING] Date:', formData.date);
+          console.log('🏪 [BOOKING] Salon ID:', salonId);
+          console.log('🌐 [BOOKING] Expected endpoint: /api/v1/availability/time-slots');
+          
+          // Call the new time slots API
+          const response = await apiService.getAvailableTimeSlots(
+            formData.barberId,
+            serviceIds,
+            formData.date,
+            salonId
+          );
+
+          console.log('🕐 [BOOKING] Time slots API response:', response);
+
+          if (response.success && response.available_slots) {
+            console.log('🕐 [BOOKING] Raw time slots from API:', response.available_slots);
+            console.log('🕐 [BOOKING] Sample time slot format:', response.available_slots[0]);
+            setAvailableTimeSlots(response.available_slots);
+            
+            // Store barber name for display
+            if (response.barber_name) {
+              setSelectedBarberName(response.barber_name);
+            }
+
+            // Show success message with availability info
+            const availableCount = response.available_slots.filter(slot => slot.is_available).length;
+            const totalCount = response.available_slots.length;
+            showSuccess(
+              '⏰ Time Slots Loaded', 
+              `Found ${availableCount} available slots out of ${totalCount} total slots for ${response.barber_name || 'selected barber'}`
+            );
+          } else {
+            // Handle different types of API errors based on the response
+            const errorMessage = response.message || 'Failed to load time slots';
+            console.error('❌ [BOOKING] Failed to load time slots:', errorMessage);
+            
+            if (errorMessage.includes('Invalid parameters') || errorMessage.includes('Service IDs cannot be empty')) {
+              showError('⚠️ Invalid Request', 'Please ensure all services are properly selected and try again.');
+            } else if (errorMessage.includes('Barber not found')) {
+              showError('👤 Barber Not Found', 'The selected barber is not available. Please select a different barber.');
+            } else if (errorMessage.includes('Service not found')) {
+              showError('🛠️ Service Error', 'One or more selected services are not available. Please review your service selection.');
+            } else if (errorMessage.includes('Salon not found')) {
+              showError('🏪 Salon Error', 'Salon information could not be found. Please refresh and try again.');
+            } else if (errorMessage.includes('No working hours') || errorMessage.includes('not available on this date')) {
+              showError('📅 No Availability', 'The selected barber is not available on the chosen date. Please select a different date.');
+            } else {
+              showError('⏰ Time Slots Error', `Unable to load available time slots: ${errorMessage}`);
+            }
+            
+            setAvailableTimeSlots([]);
+          }
+        } catch (error) {
+          console.error('❌ [BOOKING] Error loading time slots:', error);
+          
+          // Handle network and other unexpected errors
+          let errorMessage = 'An unexpected error occurred while loading time slots.';
+          
+          if (error instanceof Error) {
+            if (error.message.includes('fetch')) {
+              errorMessage = 'Network error: Unable to connect to the server. Please check your internet connection.';
+            } else if (error.message.includes('timeout')) {
+              errorMessage = 'Request timeout: The server is taking too long to respond. Please try again.';
+            } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+              errorMessage = 'Authentication error: Please log in again and try.';
+            } else if (error.message.includes('403') || error.message.includes('Forbidden')) {
+              errorMessage = 'Access denied: You do not have permission to access this resource.';
+            } else if (error.message.includes('500')) {
+              errorMessage = 'Server error: Please try again later or contact support if the problem persists.';
+            } else {
+              errorMessage = `Error: ${error.message}`;
             }
           }
+          
+          showError('🚫 Loading Failed', errorMessage);
+          setAvailableTimeSlots([]);
+        } finally {
+          setLoadingTimeSlots(false);
         }
-      });
+      } else {
+        // Clear time slots if requirements not met
+        setAvailableTimeSlots([]);
+      }
+    };
 
-      // Filter available slots based on total duration of selected services
-      const slotsNeeded = Math.ceil(totalDuration / 30);
-      
-      const available = allTimeSlots.filter((_slot: string, index: number) => {
-        // Check if this slot and required consecutive slots are available
-        for (let i = 0; i < slotsNeeded; i++) {
-          if (index + i >= allTimeSlots.length || unavailableSlots.has(allTimeSlots[index + i])) {
-            return false;
-          }
-        }
-        return true;
-      });
-
-      setAvailableTimeSlots(available);
-    }
-  }, [formData.date, formData.barberId, totalDuration, userRole]);
+    loadAvailableTimeSlots();
+  }, [formData.date, formData.barberId, formData.selectedServices, getSalonId]);
 
   const handleNext = () => {
-    if (currentStep < 3) {
+    if (currentStep < 5) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -256,43 +421,358 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (formData.selectedServices.length > 0) {
-      let barberName = 'To be assigned';
-      let barberId = formData.barberId;
+    if (formData.selectedServices.length === 0) {
+      showError('No services selected', 'Please select at least one service');
+      return;
+    }
+
+    if (!formData.customerFirstName || !formData.customerLastName || !formData.customerPhone) {
+      showError('Missing customer details', 'Please provide customer first name, last name, and phone number');
+      return;
+    }
+
+    if (!formData.customerGender) {
+      showError('Missing customer gender', 'Please select customer gender');
+      return;
+    }
+
+    if (!formData.timeSlot || !formData.date) {
+      showError('Missing appointment details', 'Please select a date and time slot');
+      return;
+    }
+
+    if (!formData.barberId) {
+      showError('No barber selected', 'Please select a barber for the appointment');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const salonId = getSalonId();
       
-      // Handle case when a specific barber is selected
-      if (formData.barberId && formData.barberId !== 'no-barber') {
-        const selectedBarber = mockBarbers.find(b => b.id === formData.barberId);
-        if (selectedBarber) {
-          barberName = `${selectedBarber.firstName} ${selectedBarber.lastName}`;
-        }
-      } else if (formData.barberId === 'no-barber' || !formData.barberId) {
-        // Handle case when no barber is selected (reception mode)
-        barberId = 'no-barber';
-        barberName = 'To be assigned';
+      if (!salonId) {
+        showError('Salon not found', 'Unable to determine salon. Please try logging in again.');
+        return;
       }
 
-      const bookingData = {
-        ...formData,
-        id: editingAppointment?.id || Date.now().toString(),
-        customerId: editingAppointment?.customerId || `c${Date.now()}`,
-        barberId: barberId,
-        barberName: barberName,
-        serviceName: formData.selectedServices.map((s: SelectedService) => s.name).join(', '),
-        serviceId: formData.selectedServices[0].id, // Primary service for compatibility
-        amount: totalAmount,
-        finalAmount: totalAmount,
-        duration: totalDuration,
-        status: editingAppointment?.status || 'booked',
-        paymentStatus: editingAppointment?.paymentStatus || 'pending',
-        createdAt: editingAppointment?.createdAt || new Date(),
+      // Use the separate first and last name fields
+      const firstName = formData.customerFirstName.trim();
+      const lastName = formData.customerLastName.trim();
+
+      // Clean phone number (keep +94 prefix as required by new format)
+      const cleanPhone = formData.customerPhone.startsWith('+94') 
+        ? formData.customerPhone 
+        : `+94${formData.customerPhone.replace('+94', '').trim()}`;
+
+      // Convert service IDs to numbers
+      const serviceIds = formData.selectedServices.map((service: SelectedService) => parseInt(service.id));
+
+      // Convert barber ID to number
+      const barberId = parseInt(formData.barberId);
+      
+      // Calculate total service price
+      const totalServicePrice = formData.selectedServices.reduce((total: number, service: SelectedService) => total + service.price, 0);
+
+      // Create full datetime string for backend (LocalDateTime format)
+      // Convert 12-hour format to 24-hour format if needed
+      const convertTo24Hour = (timeString: string): string => {
+        console.log('🔄 [BOOKING] Converting time:', timeString);
+        
+        // If it's already in 24-hour format with seconds (HH:mm:ss), return as is
+        if (/^\d{1,2}:\d{2}:\d{2}$/.test(timeString)) {
+          const parts = timeString.split(':');
+          const result = `${parts[0].padStart(2, '0')}:${parts[1]}:${parts[2]}`;
+          console.log('✅ [BOOKING] Already 24-hour with seconds:', result);
+          return result;
+        }
+        
+        // If it's already in 24-hour format (HH:mm), return with seconds
+        if (/^\d{1,2}:\d{2}$/.test(timeString)) {
+          // Ensure 2-digit hour format and add seconds
+          const [hour, minute] = timeString.split(':');
+          const result = `${hour.padStart(2, '0')}:${minute}:00`;
+          console.log('✅ [BOOKING] Added seconds to 24-hour time:', result);
+          return result;
+        }
+        
+        // If it contains AM/PM, convert to 24-hour
+        if (timeString.includes('AM') || timeString.includes('PM')) {
+          const [time, period] = timeString.trim().split(' ');
+          const [hour, minute] = time.split(':');
+          let hour24 = parseInt(hour);
+          
+          console.log('🔄 [BOOKING] Converting AM/PM time:', { 
+            originalTime: timeString, 
+            timePart: time, 
+            period: period,
+            hourParsed: hour24,
+            minute: minute 
+          });
+          
+          if (period === 'PM' && hour24 !== 12) {
+            hour24 += 12;
+            console.log('🔄 [BOOKING] PM conversion (not 12): added 12 hours, result:', hour24);
+          } else if (period === 'AM' && hour24 === 12) {
+            hour24 = 0;
+            console.log('🔄 [BOOKING] 12 AM conversion: changed to 0 hours');
+          } else if (period === 'PM' && hour24 === 12) {
+            console.log('🔄 [BOOKING] 12 PM conversion: keeping as 12');
+          } else {
+            console.log('🔄 [BOOKING] AM conversion (not 12): keeping hour as is:', hour24);
+          }
+          
+          const result = `${hour24.toString().padStart(2, '0')}:${minute}:00`;
+          console.log('✅ [BOOKING] Final 12-hour to 24-hour conversion:', { 
+            input: timeString, 
+            output: result,
+            hourFinal: hour24,
+            minuteFinal: minute
+          });
+          return result;
+        }
+        
+        console.log('⚠️ [BOOKING] Using time as-is (no AM/PM detected):', timeString);
+        return timeString;
+      };
+
+      const timeIn24Hour = convertTo24Hour(formData.timeSlot);
+      
+      // Ensure proper datetime format: YYYY-MM-DDTHH:mm:ss
+      // This creates the appointment start time in local timezone
+      const appointmentDateTime = `${formData.date}T${timeIn24Hour}`;
+      
+      console.log('🔄 [BOOKING] Creating appointment start time:', {
+        selectedDate: formData.date,
+        selectedTimeSlot: formData.timeSlot,
+        selectedTimeSlotType: typeof formData.timeSlot,
+        convertedTo24Hour: timeIn24Hour,
+        finalAppointmentDateTime: appointmentDateTime,
+        currentRealTime: new Date().toISOString(),
+        currentLocalTime: new Date().toLocaleString(),
+        currentHour: new Date().getHours(),
+        currentMinute: new Date().getMinutes(),
+        currentFormattedTime: `${new Date().getHours().toString().padStart(2, '0')}:${new Date().getMinutes().toString().padStart(2, '0')}:${new Date().getSeconds().toString().padStart(2, '0')}`
+      });
+      
+      // Calculate estimated end time based on total service duration
+      // Example: If appointment starts at "2025-08-05T14:00:00" and total duration is 60 minutes,
+      // the estimated end time will be "2025-08-05T15:00:00"
+      const calculateEstimatedEndTime = (startDateTime: string, durationMinutes: number): string => {
+        console.log('🔄 [BOOKING] Calculating end time:', { startDateTime, durationMinutes });
+        
+        // Validate input format first
+        if (!startDateTime || !startDateTime.includes('T')) {
+          console.error('❌ [BOOKING] Invalid startDateTime format:', startDateTime);
+          throw new Error(`Invalid startDateTime format: ${startDateTime}`);
+        }
+        
+        // Parse the start datetime (which is already in local time format)
+        const [datePart, timePart] = startDateTime.split('T');
+        
+        if (!datePart || !timePart) {
+          console.error('❌ [BOOKING] Failed to split datetime:', { datePart, timePart });
+          throw new Error(`Failed to parse datetime: ${startDateTime}`);
+        }
+        
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hour, minute, second] = timePart.split(':').map(Number);
+        
+        console.log('🔄 [BOOKING] Parsed datetime components:', { 
+          year, month, day, hour, minute, second: second || 0,
+          originalDateTime: startDateTime 
+        });
+        
+        // Validate parsed components
+        if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hour) || isNaN(minute)) {
+          console.error('❌ [BOOKING] Invalid parsed components:', { year, month, day, hour, minute, second });
+          throw new Error(`Invalid datetime components parsed from: ${startDateTime}`);
+        }
+        
+        // Create a date object in local time (not UTC)
+        // Note: month is 0-indexed in Date constructor
+        const startDate = new Date(year, month - 1, day, hour, minute, second || 0);
+        console.log('🔄 [BOOKING] Start date object created:', {
+          startDate: startDate,
+          startDateISO: startDate.toISOString(),
+          startDateLocal: startDate.toLocaleString(),
+          timestamp: startDate.getTime()
+        });
+        
+        // Validate the created date
+        if (isNaN(startDate.getTime())) {
+          console.error('❌ [BOOKING] Invalid date object created from components:', { year, month: month-1, day, hour, minute, second });
+          throw new Error(`Invalid date created from: ${startDateTime}`);
+        }
+        
+        // Add the duration in minutes
+        const endDate = new Date(startDate.getTime() + (durationMinutes * 60 * 1000));
+        console.log('🔄 [BOOKING] End date object after adding duration:', {
+          endDate: endDate,
+          endDateISO: endDate.toISOString(),
+          endDateLocal: endDate.toLocaleString(),
+          durationAdded: durationMinutes,
+          millisecondsAdded: durationMinutes * 60 * 1000,
+          timeDifference: endDate.getTime() - startDate.getTime()
+        });
+        
+        // Format back to ISO-like string but in local time
+        const endYear = endDate.getFullYear();
+        const endMonth = (endDate.getMonth() + 1).toString().padStart(2, '0');
+        const endDay = endDate.getDate().toString().padStart(2, '0');
+        const endHour = endDate.getHours().toString().padStart(2, '0');
+        const endMinute = endDate.getMinutes().toString().padStart(2, '0');
+        const endSecond = endDate.getSeconds().toString().padStart(2, '0');
+        
+        const result = `${endYear}-${endMonth}-${endDay}T${endHour}:${endMinute}:${endSecond}`;
+        console.log('✅ [BOOKING] Calculated end time successfully:', {
+          result: result,
+          inputStart: startDateTime,
+          durationMinutes: durationMinutes,
+          calculationProcess: {
+            startComponents: { year, month, day, hour, minute, second: second || 0 },
+            endComponents: { endYear, endMonth, endDay, endHour, endMinute, endSecond },
+            startTimestamp: startDate.getTime(),
+            endTimestamp: endDate.getTime(),
+            differenceMs: endDate.getTime() - startDate.getTime(),
+            differenceMinutes: (endDate.getTime() - startDate.getTime()) / (1000 * 60)
+          }
+        });
+        return result;
       };
       
-      onBook(bookingData);
-      onClose();
+      const estimatedEndTime = calculateEstimatedEndTime(appointmentDateTime, totalDuration);
+      
+      // Validate the datetime formats
+      const isValidDateTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(appointmentDateTime);
+      const isValidEndTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(estimatedEndTime);
+      
+      // Additional validation: end time should be after start time
+      const startTime = new Date(appointmentDateTime);
+      const endTime = new Date(estimatedEndTime);
+      const isEndTimeAfterStart = endTime > startTime;
+      
+      console.log('✅ [BOOKING] Datetime validation:', {
+        appointmentDateTime,
+        estimatedEndTime,
+        isValidDateTime,
+        isValidEndTime,
+        isEndTimeAfterStart,
+        timeDifferenceMinutes: (endTime.getTime() - startTime.getTime()) / (1000 * 60)
+      });
+      
+      console.log('🕐 [BOOKING] Date components:', {
+        date: formData.date,
+        originalTimeSlot: formData.timeSlot,
+        originalTimeSlotType: typeof formData.timeSlot,
+        convertedTime: timeIn24Hour,
+        combinedDateTime: appointmentDateTime,
+        totalDurationMinutes: totalDuration,
+        estimatedEndTime: estimatedEndTime,
+        isValidFormat: isValidDateTime,
+        isValidEndTime: isValidEndTime,
+        regexTest: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(appointmentDateTime),
+        selectedServices: formData.selectedServices.map((s: SelectedService) => ({ name: s.name, duration: s.duration })),
+        calculationBreakdown: {
+          startTime: appointmentDateTime,
+          durationToAdd: `${totalDuration} minutes`,
+          endTime: estimatedEndTime,
+          timeDifference: `${(new Date(`${estimatedEndTime}`).getTime() - new Date(`${appointmentDateTime}`).getTime()) / (1000 * 60)} minutes`
+        }
+      });
+
+      if (!isValidDateTime) {
+        showError('Invalid Date Format', `Generated datetime "${appointmentDateTime}" is not in the correct ISO format. Please try again.`);
+        return;
+      }
+      
+      if (!isValidEndTime) {
+        showError('Invalid End Time Format', `Generated end time "${estimatedEndTime}" is not in the correct ISO format. Please try again.`);
+        return;
+      }
+      
+      if (!isEndTimeAfterStart) {
+        showError('Invalid Time Calculation', `Estimated end time "${estimatedEndTime}" is not after start time "${appointmentDateTime}". Please check your service selections.`);
+        return;
+      }
+
+      const appointmentData: CreateAppointmentRequest = {
+        salonId: parseInt(salonId.toString()),
+        serviceIds: serviceIds,
+        employeeId: barberId,
+        appointmentDate: appointmentDateTime,
+        estimatedEndTime: estimatedEndTime,
+        servicePrice: totalServicePrice,
+        discountAmount: 0.00, // Can be enhanced later
+        customerFirstName: firstName,
+        customerLastName: lastName,
+        customerPhone: cleanPhone,
+        customerGender: formData.customerGender as 'MALE' | 'FEMALE' | 'OTHER'
+      };
+
+      console.log('🔄 [BOOKING] Creating appointment with data:', appointmentData);
+      console.log('📅 [BOOKING] Appointment timing details:', {
+        appointmentDate: appointmentData.appointmentDate,
+        estimatedEndTime: appointmentData.estimatedEndTime,
+        durationMinutes: totalDuration,
+        serviceNames: formData.selectedServices.map((s: SelectedService) => s.name).join(', ')
+      });
+
+      const response = await apiService.createAppointment(appointmentData);
+
+      console.log('📋 [BOOKING] API Response:', response);
+
+      // Check for successful response - handle the actual API response format
+      // Success indicators: response has 'id' field, or success=true, or status='SUCCESS'/'SCHEDULED'
+      if (response.id || response.success === true || response.appointment_id || response.status === 'SUCCESS' || response.status === 'SCHEDULED') {
+        const customerName = `${firstName} ${lastName}`;
+        showSuccess(
+          '✅ Appointment Booked Successfully!',
+          `Appointment has been created for ${customerName}. Appointment Number: ${response.appointmentNumber || response.appointment_number || 'N/A'}`
+        );
+
+        // Create the booking data for local state update using actual response fields
+        const bookingData = {
+          id: response.id?.toString() || response.appointment_id?.toString() || `a${Date.now()}`,
+          customerId: response.customerId?.toString() || response.customer_id?.toString() || `c${Date.now()}`,
+          customerName: response.customerName || response.customer_name || customerName,
+          customerPhone: response.customerPhone || formData.customerPhone,
+          barberId: response.employeeId?.toString() || response.barber_id?.toString() || formData.barberId,
+          barberName: response.employeeName || response.barber_name || selectedBarberName || 'Assigned Barber',
+          selectedServices: formData.selectedServices,
+          serviceName: response.serviceName || formData.selectedServices.map((s: SelectedService) => s.name).join(', '),
+          serviceId: response.serviceId?.toString() || formData.selectedServices[0].id,
+          date: formData.date,
+          timeSlot: formData.timeSlot,
+          amount: response.totalAmount || response.total_amount || totalAmount,
+          finalAmount: response.totalAmount || response.total_amount || totalAmount,
+          duration: response.total_duration_minutes || totalDuration,
+          status: (response.status === 'SCHEDULED' ? 'scheduled' : response.status?.toLowerCase()) || 'booked',
+          paymentStatus: response.paymentStatus?.toLowerCase() || 'pending',
+          createdAt: new Date(response.createdDate || response.created_at || Date.now()),
+          appointmentNumber: response.appointmentNumber || response.appointment_number || `APT${Date.now()}`
+        };
+
+        onBook(bookingData);
+        onClose();
+      } else {
+        const errorMessage = response.message || 'Failed to create appointment. Please try again.';
+        console.error('❌ [BOOKING] Booking failed:', errorMessage);
+        showError('❌ Booking Failed', errorMessage);
+      }
+    } catch (error) {
+      console.error('❌ [BOOKING] Error creating appointment:', error);
+      let errorMessage = 'An unexpected error occurred while booking the appointment.';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      showError('Booking Error', errorMessage);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -301,7 +781,9 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
       case 0: return selectedGender !== null;
       case 1: return formData.selectedServices.length > 0;
       case 2: return formData.date !== '';
-      case 3: return formData.timeSlot !== '' && formData.customerName !== '' && formData.customerPhone.length >= 12; // +94 + 9 digits
+      case 3: return formData.barberId !== '';
+      case 4: return formData.timeSlot !== '';
+      case 5: return formData.customerFirstName !== '' && formData.customerLastName !== '' && formData.customerPhone.length >= 12 && formData.customerGender !== null; // +94 + 9 digits
       default: return false;
     }
   };
@@ -310,8 +792,10 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
     switch (currentStep) {
       case 0: return 'Select Category';
       case 1: return 'Select Services';
-      case 2: return 'Choose Date & Barber';
-      case 3: return 'Time Slot & Customer Details';
+      case 2: return 'Choose Date';
+      case 3: return 'Select Barber';
+      case 4: return 'Choose Time Slot';
+      case 5: return 'Customer Details';
       default: return 'Book Appointment';
     }
   };
@@ -323,6 +807,8 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
       case 1: return selectedGender !== null; // Need gender selected
       case 2: return selectedGender !== null && formData.selectedServices.length > 0; // Need gender and services selected
       case 3: return selectedGender !== null && formData.selectedServices.length > 0 && formData.date; // Need gender, services and date
+      case 4: return selectedGender !== null && formData.selectedServices.length > 0 && formData.date && formData.barberId; // Need barber selected
+      case 5: return selectedGender !== null && formData.selectedServices.length > 0 && formData.date && formData.barberId && formData.timeSlot; // Need time slot selected
       default: return false;
     }
   };
@@ -357,7 +843,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
         {/* Progress Steps */}
         <div className="px-6 py-4 border-b border-gray-100">
           <div className="flex items-center space-x-2">
-            {[0, 1, 2, 3].map((step) => (
+            {[0, 1, 2, 3, 4, 5].map((step) => (
               <React.Fragment key={step}>
                 <button
                   type="button"
@@ -373,7 +859,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                 >
                   {step === 0 ? <Users className="w-4 h-4" /> : step}
                 </button>
-                {step < 3 && (
+                {step < 5 && (
                   <ChevronRight className={`w-4 h-4 ${
                     step < currentStep ? 'text-blue-500' : 'text-gray-300'
                   }`} />
@@ -567,6 +1053,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Select Date</label>
+                <p className="text-sm text-gray-600 mb-3">Choose a date from today up to 3 months in advance.</p>
                 <div className="relative">
                   <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
@@ -574,17 +1061,25 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                     value={formData.date}
                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                     min={new Date().toISOString().split('T')[0]}
+                    max={new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required
                   />
                 </div>
-                <div className="mt-2">
+                <div className="mt-2 flex gap-2">
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, date: new Date().toISOString().split('T')[0] })}
-                    className="px-4 py-2 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg transition-colors duration-200 text-sm font-medium"
+                    className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
                   >
-                    Select Today
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0] })}
+                    className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-md hover:bg-green-200 transition-colors"
+                  >
+                    Tomorrow
                   </button>
                 </div>
               </div>
@@ -612,60 +1107,158 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">Choose Barber</label>
-                <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {availableBarbers.map(barber => (
-                    <div
-                      key={barber.id}
-                      onClick={() => setFormData({ ...formData, barberId: barber.id })}
-                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
-                        formData.barberId === barber.id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                
+                {!formData.date ? (
+                  <div className="text-center py-8">
+                    <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-600">Please select a date first to see available barbers</p>
+                    <button
+                      onClick={() => setCurrentStep(2)}
+                      className="mt-2 text-blue-600 hover:text-blue-700 font-medium"
                     >
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
-                          <User className="w-5 h-5 text-gray-600" />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-medium text-gray-900">{barber.firstName} {barber.lastName}</h4>
-                          <p className="text-sm text-gray-600">{barber.specializedArea}</p>
-                          <p className="text-xs text-gray-500">{barber.experience} years experience</p>
+                      Go back to select date
+                    </button>
+                  </div>
+                ) : availableBarbers.length === 0 ? (
+                  <div className="text-center py-8">
+                    <User className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-600">No barbers available for the selected services and date</p>
+                    <p className="text-sm text-gray-500 mt-1">Try selecting a different date or services</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {availableBarbers.map(barber => (
+                      <div
+                        key={barber.id}
+                        onClick={() => setFormData({ ...formData, barberId: barber.id })}
+                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                          formData.barberId === barber.id
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+                            <User className="w-5 h-5 text-gray-600" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-medium text-gray-900">{barber.firstName || barber.name}</h4>
+                            <p className="text-sm text-gray-600">{barber.specializedArea}</p>
+                            <p className="text-xs text-gray-500">
+                              {barber.experienceYears || barber.experience} years experience
+                              {barber.rating && (
+                                <span className="ml-2">
+                                  ⭐ {barber.rating}/5
+                                </span>
+                              )}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                  
-                  {/* Continue Without Barber option for reception */}
-                  {userRole === 'reception' && (
-                    <div
-                      onClick={() => setFormData({ ...formData, barberId: 'no-barber' })}
-                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
-                        formData.barberId === 'no-barber'
-                          ? 'border-orange-500 bg-orange-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                          <User className="w-5 h-5 text-orange-600" />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-medium text-gray-900">Continue Without Barber</h4>
-                          <p className="text-sm text-orange-600">Assign barber later</p>
-                          <p className="text-xs text-gray-500">Barber will be assigned when customer arrives</p>
+                    ))}
+                    
+                    {/* Continue Without Barber option for reception */}
+                    {userRole === 'reception' && (
+                      <div
+                        onClick={() => setFormData({ ...formData, barberId: 'no-barber' })}
+                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                          formData.barberId === 'no-barber'
+                            ? 'border-orange-500 bg-orange-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                            <User className="w-5 h-5 text-orange-600" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-medium text-gray-900">Continue Without Barber</h4>
+                            <p className="text-sm text-orange-600">Assign barber later</p>
+                            <p className="text-xs text-gray-500">Barber will be assigned when customer arrives</p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* Step 4: Time Slot & Customer Details */}
+          {/* Step 4: Select Time Slot */}
           {currentStep === 4 && (
-            <div className="space-y-4">
+            <div className="space-y-6">
+              {/* Barber Selection Dropdown */}
+              <div className="bg-gradient-to-r from-green-50 to-teal-50 p-4 rounded-lg border border-green-200">
+                <label className="block text-lg font-semibold text-green-900 mb-3">
+                  Select Barber
+                </label>
+                <select
+                  value={formData.barberId}
+                  onChange={(e) => {
+                    const newBarberId = e.target.value;
+                    console.log('🔄 [BOOKING] Barber changed:', {
+                      previousBarber: formData.barberId,
+                      newBarber: newBarberId,
+                      availableBarbers: availableBarbers
+                    });
+                    
+                    // Update the selected barber name for display
+                    const selectedBarber = availableBarbers.find(b => b.id === newBarberId);
+                    if (selectedBarber) {
+                      setSelectedBarberName(selectedBarber.firstName || selectedBarber.name);
+                    } else if (newBarberId === 'no-barber') {
+                      setSelectedBarberName('No specific barber');
+                    }
+                    
+                    // Update form data and reset time slot selection
+                    setFormData({ 
+                      ...formData, 
+                      barberId: newBarberId,
+                      timeSlot: '' // Reset time slot when barber changes
+                    });
+                    
+                    // Clear current time slots to force reload
+                    setAvailableTimeSlots([]);
+                  }}
+                  className="w-full p-3 border border-green-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                >
+                  <option value="">Choose a barber...</option>
+                  {availableBarbers.map(barber => (
+                    <option key={barber.id} value={barber.id}>
+                      {barber.firstName || barber.name} - {barber.specializedArea} 
+                      ({barber.experienceYears || barber.experience} years exp)
+                      {barber.rating && ` ⭐ ${barber.rating}/5`}
+                    </option>
+                  ))}
+                  {userRole === 'reception' && (
+                    <option value="no-barber">Continue Without Barber (Assign Later)</option>
+                  )}
+                </select>
+                
+                {formData.barberId && formData.barberId !== 'no-barber' && (
+                  <div className="mt-3 p-3 bg-green-100 rounded-lg">
+                    <p className="text-green-800 font-medium">
+                      Selected: {selectedBarberName}
+                    </p>
+                    <p className="text-green-600 text-sm">
+                      Time slots will be loaded based on this barber's availability
+                    </p>
+                  </div>
+                )}
+                
+                {formData.barberId === 'no-barber' && (
+                  <div className="mt-3 p-3 bg-orange-100 rounded-lg">
+                    <p className="text-orange-800 font-medium">
+                      No specific barber selected
+                    </p>
+                    <p className="text-orange-600 text-sm">
+                      Barber will be assigned when customer arrives
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* Service & Cost Summary */}
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
                 <div className="flex items-center justify-between mb-3">
@@ -692,41 +1285,298 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">Available Time Slots</label>
-                <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto">
-                  {availableTimeSlots.map(slot => (
-                    <button
-                      key={slot}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, timeSlot: slot })}
-                      className={`p-2 text-sm border rounded-lg transition-all duration-200 ${
-                        formData.timeSlot === slot
-                          ? 'border-blue-500 bg-blue-50 text-blue-700'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      {slot}
-                    </button>
-                  ))}
+              {/* Selected Date Info */}
+              {formData.date && (
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <h4 className="font-semibold text-purple-900 mb-2">Appointment Date</h4>
+                  <p className="text-purple-700">{formData.date}</p>
                 </div>
-                {availableTimeSlots.length === 0 && (
-                  <p className="text-sm text-red-600 mt-2">No available time slots for this date and barber.</p>
+              )}
+
+              {/* Time Slots Selection */}
+              <div>
+                <label className="block text-lg font-semibold text-gray-900 mb-2">
+                  Available Time Slots
+                </label>
+                <p className="text-sm text-gray-600 mb-4">
+                  {formData.date && `Select your preferred time slot for ${new Date(formData.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`}
+                </p>
+                
+                {!formData.barberId ? (
+                  <div className="text-center py-8 bg-gray-50 rounded-xl">
+                    <User className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-600">Please select a barber first to see available time slots</p>
+                  </div>
+                ) : loadingTimeSlots ? (
+                  <div className="flex items-center justify-center py-12 bg-gray-50 rounded-xl">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <span className="ml-3 text-gray-600 font-medium">Loading available time slots...</span>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Available Time Slots */}
+                    {availableTimeSlots.filter(slot => {
+                      if (!slot.is_available) return false;
+                      
+                      // If selected date is today, filter out past time slots
+                      const today = new Date().toISOString().split('T')[0];
+                      if (formData.date === today) {
+                        const currentTime = new Date();
+                        const currentHour = currentTime.getHours();
+                        const currentMinute = currentTime.getMinutes();
+                        
+                        // Parse slot time (assuming format like "14:30" or "14:30:00")
+                        const [slotHour, slotMinute] = slot.start_time.split(':').map(Number);
+                        
+                        // Add 30 minute buffer for current time
+                        const slotTimeInMinutes = slotHour * 60 + slotMinute;
+                        const currentTimeInMinutes = currentHour * 60 + currentMinute + 30; // 30 min buffer
+                        
+                        return slotTimeInMinutes >= currentTimeInMinutes;
+                      }
+                      
+                      return true;
+                    }).length > 0 ? (
+                      <div>
+                        <h4 className="text-sm font-semibold text-green-700 mb-3 flex items-center">
+                          <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                          Available Times
+                        </h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                          {availableTimeSlots.filter(slot => {
+                            if (!slot.is_available) return false;
+                            
+                            // If selected date is today, filter out past time slots
+                            const today = new Date().toISOString().split('T')[0];
+                            if (formData.date === today) {
+                              const currentTime = new Date();
+                              const currentHour = currentTime.getHours();
+                              const currentMinute = currentTime.getMinutes();
+                              
+                              const [slotHour, slotMinute] = slot.start_time.split(':').map(Number);
+                              const slotTimeInMinutes = slotHour * 60 + slotMinute;
+                              const currentTimeInMinutes = currentHour * 60 + currentMinute + 30;
+                              
+                              return slotTimeInMinutes >= currentTimeInMinutes;
+                            }
+                            
+                            return true;
+                          }).map(slot => {
+                            const formatTime = (timeStr: string) => {
+                              const [hour, minute] = timeStr.split(':').map(Number);
+                              const period = hour >= 12 ? 'PM' : 'AM';
+                              const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+                              return `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
+                            };
+                            
+                            return (
+                              <button
+                                key={slot.start_time}
+                                type="button"
+                                onClick={() => {
+                                  console.log('🔄 [BOOKING] Time slot selected:', {
+                                    selectedSlotStartTime: slot.start_time,
+                                    selectedSlotFormatted: formatTime(slot.start_time),
+                                    currentDateTime: new Date().toISOString(),
+                                    currentLocalTime: new Date().toLocaleString(),
+                                    slotData: slot
+                                  });
+                                  setFormData({ ...formData, timeSlot: slot.start_time });
+                                }}
+                                className={`group relative p-4 text-center border-2 rounded-xl transition-all duration-300 transform hover:scale-105 ${
+                                  formData.timeSlot === slot.start_time
+                                    ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-blue-100 text-blue-700 shadow-lg'
+                                    : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-700'
+                                }`}
+                              >
+                                <div className="font-semibold text-lg">
+                                  {formatTime(slot.start_time)}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {totalDuration} minutes
+                                </div>
+                                {formData.timeSlot === slot.start_time && (
+                                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                                    ✓
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                    
+                    {/* Unavailable Time Slots */}
+                    {availableTimeSlots.filter(slot => !slot.is_available).length > 0 && (
+                      <div className="mt-6">
+                        <h4 className="text-sm font-semibold text-red-600 mb-3 flex items-center">
+                          <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                          Unavailable Times
+                        </h4>
+                        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+                          {availableTimeSlots.filter(slot => !slot.is_available).map(slot => {
+                            const formatTime = (timeStr: string) => {
+                              const [hour, minute] = timeStr.split(':').map(Number);
+                              const period = hour >= 12 ? 'PM' : 'AM';
+                              const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+                              return `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
+                            };
+                            
+                            return (
+                              <div
+                                key={`unavailable-${slot.start_time}`}
+                                className="p-2 text-center border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
+                                title={slot.unavailable_reason || 'Not available'}
+                              >
+                                <div className="text-sm line-through">
+                                  {formatTime(slot.start_time)}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
+                
+                {!loadingTimeSlots && availableTimeSlots.filter(slot => {
+                  if (!slot.is_available) return false;
+                  
+                  const today = new Date().toISOString().split('T')[0];
+                  if (formData.date === today) {
+                    const currentTime = new Date();
+                    const currentHour = currentTime.getHours();
+                    const currentMinute = currentTime.getMinutes();
+                    
+                    const [slotHour, slotMinute] = slot.start_time.split(':').map(Number);
+                    const slotTimeInMinutes = slotHour * 60 + slotMinute;
+                    const currentTimeInMinutes = currentHour * 60 + currentMinute + 30;
+                    
+                    return slotTimeInMinutes >= currentTimeInMinutes;
+                  }
+                  
+                  return true;
+                }).length === 0 && (
+                  <div className="text-center py-8 bg-yellow-50 rounded-xl border border-yellow-200">
+                    <div className="text-yellow-600 mb-2">
+                      ⚠️ No available time slots
+                    </div>
+                    <p className="text-sm text-yellow-700">
+                      {formData.date === new Date().toISOString().split('T')[0] 
+                        ? 'All remaining time slots for today are unavailable. Please select a different date.'
+                        : 'No available time slots for this date and barber. Please select a different date or barber.'
+                      }
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: Customer Details */}
+          {currentStep === 5 && (
+            <div className="space-y-4">
+              {/* Booking Summary */}
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                <h4 className="font-semibold text-green-900 mb-3">Final Booking Details</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-green-700">Date:</span>
+                    <span className="font-medium text-green-900">{formData.date}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-green-700">Time:</span>
+                    <span className="font-medium text-green-900">{formData.timeSlot}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-green-700">Barber:</span>
+                    <span className="font-medium text-green-900">
+                      {formData.barberId === 'no-barber' ? 'Will be assigned' : selectedBarberName || 'Selected'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-green-700">Total Amount:</span>
+                    <span className="font-bold text-green-900 text-lg">Rs. {totalAmount.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={formData.customerFirstName}
+                      onChange={(e) => setFormData({ ...formData, customerFirstName: e.target.value })}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Enter first name"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={formData.customerLastName}
+                      onChange={(e) => setFormData({ ...formData, customerLastName: e.target.value })}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Enter last name"
+                      required
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    value={formData.customerName}
-                    onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Enter customer name"
-                    required
-                  />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData({ ...formData, customerGender: 'MALE' });
+                    }}
+                    className={`p-3 rounded-lg border transition-all duration-200 ${
+                      formData.customerGender === 'MALE'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    Male
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData({ ...formData, customerGender: 'FEMALE' });
+                    }}
+                    className={`p-3 rounded-lg border transition-all duration-200 ${
+                      formData.customerGender === 'FEMALE'
+                        ? 'border-pink-500 bg-pink-50 text-pink-700'
+                        : 'border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    Female
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData({ ...formData, customerGender: 'OTHER' });
+                    }}
+                    className={`p-3 rounded-lg border transition-all duration-200 ${
+                      formData.customerGender === 'OTHER'
+                        ? 'border-purple-500 bg-purple-50 text-purple-700'
+                        : 'border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    Other
+                  </button>
                 </div>
               </div>
 
@@ -767,7 +1617,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
               </button>
             )}
             
-            {currentStep < 3 ? (
+            {currentStep < 5 ? (
               <button
                 type="button"
                 onClick={handleNext}
@@ -778,19 +1628,19 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                     : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                Next
+                {currentStep === 4 ? 'Continue to Customer Details' : 'Next'}
               </button>
             ) : (
               <button
                 type="submit"
-                disabled={!canProceed()}
+                disabled={!canProceed() || saving}
                 className={`flex-1 px-4 py-3 rounded-lg transition-all duration-200 ${
-                  canProceed()
+                  canProceed() && !saving
                     ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700'
                     : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                {editingAppointment ? 'Update' : 'Book'} Appointment (Rs. {totalAmount.toFixed(2)})
+                {saving ? 'Booking...' : `${editingAppointment ? 'Update' : 'Book'} Appointment (Rs. ${totalAmount.toFixed(2)})`}
               </button>
             )}
           </div>
