@@ -41,8 +41,9 @@ const ENDPOINTS = {
   APPOINTMENTS: {
     CREATE: '/appointments',
     LIST: '/appointments', // GET /appointments?salonId={salonId}&date={date}&status={status}
-    TODAY: '/appointments/today', // GET /appointments/today?salonId={salonId}
-    PENDING_PAYMENTS: '/appointments/pending-payments', // GET /appointments/pending-payments?salonId={salonId}
+    BY_SALON: '/appointments/salon', // GET /appointments/salon/{salon_id}/branch/{branchId}
+    TODAY_BY_SALON: '/appointments/salon', // GET /appointments/salon/{salonId}/branch/{branchId}/today
+    PENDING_PAYMENTS_BY_SALON: '/appointments/salon', // GET /appointments/salon/{salon_id}/branch/{branchId}/pending-payments
     GET_DETAILS: '/appointments', // GET /appointments/{appointmentId}
     GET_AVAILABLE_ACTIONS: '/appointments', // GET /appointments/{appointmentId}/available-actions?userRole={role}
     UPDATE_DETAILS: '/appointments', // PUT /appointments/{appointmentId}/details
@@ -737,20 +738,28 @@ class ApiService {
     }
   }
 
-  // Get today's appointments
-  async getTodayAppointments(salonId: number): Promise<AppointmentListResponse> {
-    const endpoint = `${ENDPOINTS.APPOINTMENTS.TODAY}?salonId=${salonId}`;
+  // Get today's appointments for a salon using new endpoint with branch
+  async getTodayAppointments(salonId: number, branchId?: number): Promise<AppointmentListResponse> {
+    const endpoint = branchId 
+      ? `${ENDPOINTS.APPOINTMENTS.TODAY_BY_SALON}/${salonId}/branch/${branchId}/today`
+      : `${ENDPOINTS.APPOINTMENTS.TODAY_BY_SALON}/${salonId}/today`;
     
     envLog.info('📅 [API] Fetching today\'s appointments...');
     envLog.info('🌐 [API] Endpoint:', endpoint);
     envLog.info('🏢 [API] Salon ID:', salonId);
+    envLog.info('🌿 [API] Branch ID:', branchId || 'not specified');
     
     try {
       const response = await this.request<AppointmentListResponse>(endpoint, {
         method: 'GET',
       });
       envLog.info('✅ [API] Today\'s appointments fetched successfully');
-      envLog.info('📊 [API] Total appointments:', response.totalCount);
+      envLog.info('📊 [API] Response structure:', {
+        success: response.success,
+        totalCount: response.totalCount,
+        appointmentsLength: response.appointments ? response.appointments.length : 'no appointments property'
+      });
+      envLog.info('📡 [API] Full response:', response);
       return response;
     } catch (error) {
       envLog.error('❌ [API] Error fetching today\'s appointments:', error);
@@ -758,13 +767,16 @@ class ApiService {
     }
   }
 
-  // Get pending payment appointments
-  async getPendingPaymentAppointments(salonId: number): Promise<AppointmentListResponse> {
-    const endpoint = `${ENDPOINTS.APPOINTMENTS.PENDING_PAYMENTS}?salonId=${salonId}`;
+  // Get pending payment appointments for a salon using new endpoint with branch
+  async getPendingPaymentAppointments(salonId: number, branchId?: number): Promise<AppointmentListResponse> {
+    const endpoint = branchId 
+      ? `${ENDPOINTS.APPOINTMENTS.PENDING_PAYMENTS_BY_SALON}/${salonId}/branch/${branchId}/pending-payments`
+      : `${ENDPOINTS.APPOINTMENTS.PENDING_PAYMENTS_BY_SALON}/${salonId}/pending-payments`;
     
     envLog.info('💰 [API] Fetching pending payment appointments...');
     envLog.info('🌐 [API] Endpoint:', endpoint);
     envLog.info('🏢 [API] Salon ID:', salonId);
+    envLog.info('🌿 [API] Branch ID:', branchId || 'not specified');
     
     try {
       const response = await this.request<AppointmentListResponse>(endpoint, {
@@ -777,6 +789,29 @@ class ApiService {
       envLog.error('❌ [API] Error fetching pending payment appointments:', error);
       throw error;
     }
+  }
+
+  // ReceptionDashboard: Get all appointments for a salon using new endpoint with branch
+  async getAllAppointmentsForSalon(salonId: number, branchId?: number): Promise<AppointmentListItem[]> {
+    const endpoint = branchId 
+      ? `${ENDPOINTS.APPOINTMENTS.BY_SALON}/${salonId}/branch/${branchId}`
+      : `${ENDPOINTS.APPOINTMENTS.BY_SALON}/${salonId}`;
+    
+    envLog.info('📅 [API] Getting all appointments for salon:', salonId);
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🌿 [API] Branch ID:', branchId || 'not specified');
+    
+    const response = await this.request<any>(endpoint, { method: 'GET' });
+    // If response is an array, return it directly
+    if (Array.isArray(response)) {
+      return response;
+    }
+    // If response is an object with appointments property, return that
+    if (response && Array.isArray(response.appointments)) {
+      return response.appointments;
+    }
+    // Otherwise, return empty array
+    return [];
   }
 
   // Utility function to convert API appointment data to frontend Appointment format
@@ -864,9 +899,9 @@ class ApiService {
     }
   }
 
-  async getTodayAppointmentsForDashboard(salonId: number): Promise<any[]> {
+  async getTodayAppointmentsForDashboard(salonId: number, branchId?: number): Promise<any[]> {
     try {
-      const response = await this.getTodayAppointments(salonId);
+      const response = await this.getTodayAppointments(salonId, branchId);
       if (response.success && response.appointments) {
         return response.appointments.map(apt => this.convertApiAppointmentToFrontend(apt));
       }
@@ -877,9 +912,9 @@ class ApiService {
     }
   }
 
-  async getPendingPaymentAppointmentsForDashboard(salonId: number): Promise<any[]> {
+  async getPendingPaymentAppointmentsForDashboard(salonId: number, branchId?: number): Promise<any[]> {
     try {
-      const response = await this.getPendingPaymentAppointments(salonId);
+      const response = await this.getPendingPaymentAppointments(salonId, branchId);
       if (response.success && response.appointments) {
         return response.appointments.map(apt => this.convertApiAppointmentToFrontend(apt));
       }
@@ -1408,6 +1443,7 @@ export interface TimeSlotResponse {
 
 export interface CreateAppointmentRequest {
   salonId: number;
+  branchId?: number; // Optional branch ID for multi-branch salons
   serviceIds: number[];
   employeeId: number;
   appointmentDate: string; // "2024-08-15T14:00:00"

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, Clock, User, ChevronRight, Plus, Minus, DollarSign, Users } from 'lucide-react';
-import { mockBarbers, mockServices } from '../../data/mockData';
 import { apiService, TimeSlot, CreateAppointmentRequest } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastProvider';
@@ -22,7 +21,7 @@ interface SelectedService {
 }
 
 const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, editingAppointment, userRole = 'owner' }) => {
-  const { getSalonId } = useAuth();
+  const { getSalonId, getBranchId } = useAuth();
   const { showSuccess, showError } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedGender, setSelectedGender] = useState<'MALE' | 'FEMALE' | null>(null);
@@ -43,6 +42,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
 
   const [availableBarbers, setAvailableBarbers] = useState<any[]>([]);
   const [availableTimeSlots, setAvailableTimeSlots] = useState<TimeSlot[]>([]);
+  const [loadingBarbers, setLoadingBarbers] = useState(false);
   const [loadingTimeSlots, setLoadingTimeSlots] = useState(false);
   const [selectedBarberName, setSelectedBarberName] = useState<string>('');
   const [saving, setSaving] = useState(false);
@@ -123,16 +123,14 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
           selectedServices = editingAppointment.selectedServices;
         } else if (editingAppointment.serviceId && editingAppointment.serviceName) {
           // Convert single service to array format (legacy format)
-          const service = mockServices.find(s => s.id === editingAppointment.serviceId);
-          if (service) {
-            selectedServices = [{
-              id: editingAppointment.serviceId,
-              name: editingAppointment.serviceName,
-              duration: service.duration,
-              price: service.price,
-              discountPrice: service.discountPrice
-            }];
-          }
+          // Use available data from the appointment since we don't have access to service details
+          selectedServices = [{
+            id: editingAppointment.serviceId,
+            name: editingAppointment.serviceName,
+            duration: 60, // Default duration if not available
+            price: editingAppointment.amount || 0,
+            discountPrice: editingAppointment.discountAmount || undefined
+          }];
         }
 
         setCurrentStep(0); // Start with gender selection for editing too
@@ -155,17 +153,21 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
     const loadAvailableBarbers = async () => {
       if (formData.selectedServices.length > 0 && formData.date) {
         try {
+          setLoadingBarbers(true);
           const salonId = getSalonId();
           if (!salonId) {
             console.error('No salon ID found');
-            setAvailableBarbers(mockBarbers.filter(b => b.isActive));
+            showError('Authentication Error', 'Salon ID not found. Please ensure you are logged in.');
+            setAvailableBarbers([]);
             return;
           }
 
           // Extract service IDs from selected services
           const serviceIds = formData.selectedServices.map((service: SelectedService) => service.id);
           
-          // Call the new availability API with customer gender
+          console.log('👥 [BOOKING] Loading available barbers for services:', serviceIds, 'date:', formData.date, 'gender:', selectedGender);
+          
+          // Call the availability API with customer gender
           const availableBarbers = await apiService.getAvailableBarbers(
             serviceIds,
             formData.date,
@@ -194,55 +196,38 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
             
             // Filter to only show barbers who can perform all services
             const qualifiedBarbers = convertedBarbers.filter(barber => barber.canPerformServices);
-            setAvailableBarbers(qualifiedBarbers.length > 0 ? qualifiedBarbers : convertedBarbers);
+            const finalBarbers = qualifiedBarbers.length > 0 ? qualifiedBarbers : convertedBarbers;
+            setAvailableBarbers(finalBarbers);
             
-            console.log('✅ [BOOKING] Final qualified barbers:', qualifiedBarbers.length > 0 ? qualifiedBarbers : convertedBarbers);
+            console.log('✅ [BOOKING] Final qualified barbers:', finalBarbers);
+            
+            if (finalBarbers.length > 0) {
+              showSuccess('Barbers loaded', `${finalBarbers.length} barber(s) available for selected services`);
+            }
           } else {
-            console.log('⚠️ [BOOKING] No available barbers from API, using fallback');
-            // Fallback to mock data if no barbers available or API fails
-            const allRequiredSkills = formData.selectedServices.flatMap((selectedService: SelectedService) => {
-              const service = mockServices.find((s: any) => s.id === selectedService.id);
-              return service?.requiredSkills || [];
-            });
-            
-            // Filter barbers who have all required skills
-            const qualifiedBarbers = mockBarbers.filter((barber: any) => 
-              barber.isActive && 
-              allRequiredSkills.every((skill: string) => 
-                barber.specializedArea.toLowerCase().includes(skill.toLowerCase())
-              )
-            );
-            
-            setAvailableBarbers(qualifiedBarbers.length > 0 ? qualifiedBarbers : mockBarbers.filter((b: any) => b.isActive));
+            console.log('⚠️ [BOOKING] No available barbers from API');
+            setAvailableBarbers([]);
+            // Don't show error here as the UI will display "no barbers available" message
           }
         } catch (error) {
-          console.error('Error loading available barbers:', error);
-          // Fallback to mock data on error
-          const allRequiredSkills = formData.selectedServices.flatMap((selectedService: SelectedService) => {
-            const service = mockServices.find((s: any) => s.id === selectedService.id);
-            return service?.requiredSkills || [];
-          });
-          
-          const qualifiedBarbers = mockBarbers.filter((barber: any) => 
-            barber.isActive && 
-            allRequiredSkills.every((skill: string) => 
-              barber.specializedArea.toLowerCase().includes(skill.toLowerCase())
-            )
-          );
-          
-          setAvailableBarbers(qualifiedBarbers.length > 0 ? qualifiedBarbers : mockBarbers.filter((b: any) => b.isActive));
+          console.error('❌ [BOOKING] Error loading available barbers:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          showError('Loading failed', `Error loading barbers: ${errorMessage}`);
+          setAvailableBarbers([]);
+        } finally {
+          setLoadingBarbers(false);
         }
       } else if (formData.selectedServices.length > 0 && !formData.date) {
-        // If services are selected but no date yet, show placeholder message or empty state
+        // If services are selected but no date yet, clear barbers
         setAvailableBarbers([]);
       } else {
-        // No services selected, show all active barbers
-        setAvailableBarbers(mockBarbers.filter(b => b.isActive));
+        // No services selected, clear barbers
+        setAvailableBarbers([]);
       }
     };
 
     loadAvailableBarbers();
-  }, [formData.selectedServices, formData.date, getSalonId]);
+  }, [formData.selectedServices, formData.date, selectedGender, getSalonId, showSuccess, showError]);
 
   // Update available time slots when date and barber are selected
   useEffect(() => {
@@ -700,6 +685,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
 
       const appointmentData: CreateAppointmentRequest = {
         salonId: parseInt(salonId.toString()),
+        branchId: getBranchId() || undefined, // Include branch ID from auth context
         serviceIds: serviceIds,
         employeeId: barberId,
         appointmentDate: appointmentDateTime,
@@ -713,6 +699,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
       };
 
       console.log('🔄 [BOOKING] Creating appointment with data:', appointmentData);
+      console.log('🏢 [BOOKING] Branch ID from context:', getBranchId());
       console.log('📅 [BOOKING] Appointment timing details:', {
         appointmentDate: appointmentData.appointmentDate,
         estimatedEndTime: appointmentData.estimatedEndTime,
@@ -1119,11 +1106,40 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                       Go back to select date
                     </button>
                   </div>
+                ) : loadingBarbers ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-3"></div>
+                    <p className="text-gray-600">Loading available barbers...</p>
+                    <p className="text-sm text-gray-500 mt-1">Please wait while we find barbers for your selected services</p>
+                  </div>
                 ) : availableBarbers.length === 0 ? (
                   <div className="text-center py-8">
                     <User className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-600">No barbers available for the selected services and date</p>
-                    <p className="text-sm text-gray-500 mt-1">Try selecting a different date or services</p>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Available Barbers</h3>
+                    <p className="text-gray-600 mb-2">No service providers (barbers/stylists) found for the selected services and date.</p>
+                    <div className="text-sm text-gray-500 space-y-1">
+                      <p>This could be because:</p>
+                      <ul className="list-disc list-inside space-y-1 max-w-md mx-auto">
+                        <li>No barbers are assigned to this salon yet</li>
+                        <li>All barbers are busy on the selected date</li>
+                        <li>No barbers specialize in the selected services</li>
+                        <li>Selected date is outside business hours</li>
+                      </ul>
+                    </div>
+                    <div className="mt-6 space-x-3">
+                      <button
+                        onClick={() => setCurrentStep(2)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        Try Different Date
+                      </button>
+                      <button
+                        onClick={() => setCurrentStep(1)}
+                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Change Services
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-64 overflow-y-auto">

@@ -12,6 +12,8 @@ import ProfileModal from '../shared/ProfileModal';
 
 const ReceptionDashboard: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([]);
+  const [pendingPayments, setPendingPayments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -20,7 +22,7 @@ const ReceptionDashboard: React.FC = () => {
   const [completeSessionModal, setCompleteSessionModal] = useState<{isOpen: boolean, appointment: Appointment | null}>({isOpen: false, appointment: null});
   const [cancelAppointmentModal, setCancelAppointmentModal] = useState<{isOpen: boolean, appointment: Appointment | null}>({isOpen: false, appointment: null});
   const { triggerReceptionNotification } = useNotificationHelpers();
-  const { isProfileModalOpen, closeProfileModal, user, employee, getSalonId } = useAuth();
+  const { isProfileModalOpen, closeProfileModal, user, employee, getSalonId, getBranchId } = useAuth();
 
   // Create user profile from real employee data instead of mock data
   const userProfile = {
@@ -63,26 +65,89 @@ const ReceptionDashboard: React.FC = () => {
       setError(null);
       
       const salonId = getSalonId();
+      const branchId = getBranchId();
       if (!salonId) {
         setError('Salon ID not found. Please ensure you are logged in.');
         return;
       }
 
-      console.log('📅 [RECEPTION DASHBOARD] Loading appointments for salon:', salonId);
+      console.log('📅 [RECEPTION DASHBOARD] Loading appointments for salon:', salonId, 'branch:', branchId);
       
-      // Load all appointments for the salon
-      const allAppointmentsData = await apiService.getAppointmentsForDashboard({
-        salonId: parseInt(salonId.toString()),
-        limit: 100 // Get recent 100 appointments
-      });
+      // Load all appointments for the salon using the new endpoint
+      const allAppointmentsData = await apiService.getAllAppointmentsForSalon(parseInt(salonId.toString()), branchId || undefined);
       
       console.log('✅ [RECEPTION DASHBOARD] Appointments loaded:', allAppointmentsData.length);
       
-      // Set salon ID for all appointments
-      const appointmentsWithSalonId = allAppointmentsData.map(apt => ({
-        ...apt,
-        salonId: salonId
-      }));
+      // Convert API data to frontend format
+      const appointmentsWithSalonId = allAppointmentsData.map(apiAppointment => {
+        // Map API status to frontend status
+        const mapStatus = (apiStatus: string): 'booked' | 'in-progress' | 'completed' | 'payment-pending' | 'paid' | 'cancelled' | 'no-show' => {
+          switch (apiStatus) {
+            case 'SCHEDULED':
+              return 'booked';
+            case 'COMPLETED':
+              // Check payment status to determine if it's completed or payment-pending
+              if (apiAppointment.paymentStatus === 'COMPLETED') {
+                return 'paid';
+              } else {
+                return 'payment-pending';
+              }
+            case 'CANCELLED':
+              return 'cancelled';
+            case 'NO_SHOW':
+              return 'no-show';
+            default:
+              return 'booked';
+          }
+        };
+
+        // Map API payment status to frontend payment status
+        const mapPaymentStatus = (apiPaymentStatus: string): 'pending' | 'completed' | 'refunded' => {
+          switch (apiPaymentStatus) {
+            case 'COMPLETED':
+              return 'completed';
+            case 'PENDING':
+            case 'PARTIAL':
+              return 'pending';
+            default:
+              return 'pending';
+          }
+        };
+
+        // Extract time from appointmentDate
+        const appointmentDateTime = new Date(apiAppointment.appointmentDate);
+        const timeSlot = appointmentDateTime.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: true 
+        });
+
+        return {
+          id: apiAppointment.id.toString(),
+          salonId: salonId.toString(),
+          customerId: `customer_${apiAppointment.id}`,
+          customerName: apiAppointment.customerName,
+          customerPhone: apiAppointment.customerPhone,
+          customerEmail: '',
+          customerGender: undefined,
+          barberId: `employee_${apiAppointment.id}`,
+          barberName: apiAppointment.employeeName,
+          serviceId: `service_${apiAppointment.id}`,
+          serviceName: apiAppointment.serviceName,
+          date: appointmentDateTime.toISOString().split('T')[0],
+          timeSlot: timeSlot,
+          status: mapStatus(apiAppointment.status),
+          paymentStatus: mapPaymentStatus(apiAppointment.paymentStatus),
+          paymentMethod: undefined,
+          amount: apiAppointment.servicePrice,
+          discountAmount: apiAppointment.discountAmount || 0,
+          finalAmount: apiAppointment.totalAmount,
+          tipAmount: 0,
+          notes: '',
+          createdAt: new Date(apiAppointment.createdAt),
+          updatedAt: new Date(apiAppointment.updatedAt),
+        };
+      });
       
       setAppointments(appointmentsWithSalonId);
     } catch (error) {
@@ -101,12 +166,16 @@ const ReceptionDashboard: React.FC = () => {
   useEffect(() => {
     if (employee?.salonId || getSalonId()) {
       loadAppointments();
+      loadTodayAppointments();
+      loadPendingPayments();
     }
   }, [employee?.salonId]);
 
   // Refresh appointments function
   const refreshAppointments = () => {
     loadAppointments();
+    loadTodayAppointments();
+    loadPendingPayments();
   };
 
   const [successMessage, setSuccessMessage] = useState<{show: boolean, message: string}>({show: false, message: ''});
@@ -117,8 +186,162 @@ const ReceptionDashboard: React.FC = () => {
   const allAppointmentsScrollRef = useRef<HTMLDivElement>(null);
   const todayAppointmentsScrollRef = useRef<HTMLDivElement>(null);
 
-  const pendingPayments = appointments.filter(app => app.status === 'payment-pending');
-  const todayAppointments = appointments.filter(app => app.date === new Date().toISOString().split('T')[0]);
+  // Load today's appointments from API
+  const loadTodayAppointments = async () => {
+    try {
+      const salonId = getSalonId();
+      const branchId = getBranchId();
+      if (!salonId) return;
+
+      console.log('📅 [RECEPTION DASHBOARD] Loading today\'s appointments for salon:', salonId, 'branch:', branchId);
+      
+      const response = await apiService.getTodayAppointments(parseInt(salonId.toString()), branchId || undefined);
+      console.log('📡 [RECEPTION DASHBOARD] Today\'s appointments response:', response);
+      
+      let appointmentsData: any[] = [];
+      
+      // Handle different response structures
+      if (response && response.appointments) {
+        appointmentsData = response.appointments;
+      } else if (Array.isArray(response)) {
+        appointmentsData = response as any[];
+      } else if (response && (response as any).data && Array.isArray((response as any).data)) {
+        appointmentsData = (response as any).data;
+      } else {
+        console.warn('📅 [RECEPTION DASHBOARD] No appointments found in response structure');
+        setTodayAppointments([]);
+        return;
+      }
+
+      console.log('📅 [RECEPTION DASHBOARD] Processing today\'s appointments:', appointmentsData.length);
+      
+      if (appointmentsData.length > 0) {
+        const convertedAppointments = appointmentsData.map((apiAppointment: any) => {
+          const appointmentDateTime = new Date(apiAppointment.appointmentDate);
+          const timeSlot = appointmentDateTime.toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: true 
+          });
+
+          return {
+            id: apiAppointment.id.toString(),
+            salonId: salonId.toString(),
+            customerId: `customer_${apiAppointment.id}`,
+            customerName: apiAppointment.customerName,
+            customerPhone: apiAppointment.customerPhone,
+            customerEmail: '',
+            customerGender: undefined,
+            barberId: `employee_${apiAppointment.id}`,
+            barberName: apiAppointment.employeeName,
+            serviceId: `service_${apiAppointment.id}`,
+            serviceName: apiAppointment.serviceName,
+            date: appointmentDateTime.toISOString().split('T')[0],
+            timeSlot: timeSlot,
+            status: apiAppointment.status === 'SCHEDULED' ? 'booked' as const : 
+                   apiAppointment.status === 'COMPLETED' ? 
+                     (apiAppointment.paymentStatus === 'COMPLETED' ? 'paid' as const : 'payment-pending' as const) :
+                   apiAppointment.status === 'CANCELLED' ? 'cancelled' as const : 'booked' as const,
+            paymentStatus: apiAppointment.paymentStatus === 'COMPLETED' ? 'completed' as const : 'pending' as const,
+            paymentMethod: undefined,
+            amount: apiAppointment.servicePrice,
+            discountAmount: apiAppointment.discountAmount || 0,
+            finalAmount: apiAppointment.totalAmount,
+            tipAmount: 0,
+            notes: '',
+            createdAt: new Date(apiAppointment.createdAt),
+            updatedAt: new Date(apiAppointment.updatedAt),
+          };
+        });
+        
+        console.log('✅ [RECEPTION DASHBOARD] Converted today\'s appointments:', convertedAppointments);
+        setTodayAppointments(convertedAppointments);
+      } else {
+        console.log('📅 [RECEPTION DASHBOARD] No today\'s appointments found');
+        setTodayAppointments([]);
+      }
+    } catch (error) {
+      console.error('❌ [RECEPTION DASHBOARD] Error loading today\'s appointments:', error);
+      setTodayAppointments([]);
+    }
+  };
+
+  // Load pending payments from API
+  const loadPendingPayments = async () => {
+    try {
+      const salonId = getSalonId();
+      const branchId = getBranchId();
+      if (!salonId) return;
+
+      console.log('💰 [RECEPTION DASHBOARD] Loading pending payments for salon:', salonId, 'branch:', branchId);
+      
+      const response = await apiService.getPendingPaymentAppointments(parseInt(salonId.toString()), branchId || undefined);
+      console.log('📡 [RECEPTION DASHBOARD] Pending payments response:', response);
+      
+      let appointmentsData: any[] = [];
+      
+      // Handle different response structures
+      if (response && response.appointments) {
+        appointmentsData = response.appointments;
+      } else if (Array.isArray(response)) {
+        appointmentsData = response as any[];
+      } else if (response && (response as any).data && Array.isArray((response as any).data)) {
+        appointmentsData = (response as any).data;
+      } else {
+        console.warn('💰 [RECEPTION DASHBOARD] No pending payments found in response structure');
+        setPendingPayments([]);
+        return;
+      }
+
+      console.log('💰 [RECEPTION DASHBOARD] Processing pending payments:', appointmentsData.length);
+      
+      if (appointmentsData.length > 0) {
+        const convertedAppointments = appointmentsData.map((apiAppointment: any) => {
+          const appointmentDateTime = new Date(apiAppointment.appointmentDate);
+          const timeSlot = appointmentDateTime.toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: true 
+          });
+
+          return {
+            id: apiAppointment.id.toString(),
+            salonId: salonId.toString(),
+            customerId: `customer_${apiAppointment.id}`,
+            customerName: apiAppointment.customerName,
+            customerPhone: apiAppointment.customerPhone,
+            customerEmail: '',
+            customerGender: undefined,
+            barberId: `employee_${apiAppointment.id}`,
+            barberName: apiAppointment.employeeName,
+            serviceId: `service_${apiAppointment.id}`,
+            serviceName: apiAppointment.serviceName,
+            date: appointmentDateTime.toISOString().split('T')[0],
+            timeSlot: timeSlot,
+            status: 'payment-pending' as const,
+            paymentStatus: 'pending' as const,
+            paymentMethod: undefined,
+            amount: apiAppointment.servicePrice,
+            discountAmount: apiAppointment.discountAmount || 0,
+            finalAmount: apiAppointment.totalAmount,
+            tipAmount: 0,
+            notes: '',
+            createdAt: new Date(apiAppointment.createdAt),
+            updatedAt: new Date(apiAppointment.updatedAt),
+          };
+        });
+        
+        console.log('✅ [RECEPTION DASHBOARD] Converted pending payments:', convertedAppointments);
+        setPendingPayments(convertedAppointments);
+      } else {
+        console.log('💰 [RECEPTION DASHBOARD] No pending payments found');
+        setPendingPayments([]);
+      }
+    } catch (error) {
+      console.error('❌ [RECEPTION DASHBOARD] Error loading pending payments:', error);
+      setPendingPayments([]);
+    }
+  };
   
   // Search function for appointments
   const searchAppointments = (appointments: Appointment[], searchTerm: string) => {
@@ -141,7 +364,8 @@ const ReceptionDashboard: React.FC = () => {
   }
   
   // Calculate daily income from appointments with completed payments only
-  const dailyIncomeFromPayments = appointments
+  const dailyIncomeFromPayments = [...appointments, ...todayAppointments]
+    .filter((app, index, self) => self.findIndex(a => a.id === app.id) === index) // Remove duplicates
     .filter(app => app.paymentStatus === 'completed' && app.date === new Date().toISOString().split('T')[0])
     .reduce((sum, app) => sum + app.finalAmount, 0);
 
@@ -173,7 +397,8 @@ const ReceptionDashboard: React.FC = () => {
   };
 
   const handleDeleteAppointment = (appointmentId: string) => {
-    const appointment = appointments.find(app => app.id === appointmentId);
+    const appointment = [...appointments, ...todayAppointments, ...pendingPayments]
+      .find(app => app.id === appointmentId);
     if (appointment) {
       setCancelAppointmentModal({isOpen: true, appointment});
     }
@@ -192,12 +417,26 @@ const ReceptionDashboard: React.FC = () => {
   const handleAssignBarber = (appointmentId: string, barberId: string) => {
     const barber = mockBarbers.find(b => b.id === barberId);
     if (barber) {
+      const allAppointmentsList = [...appointments, ...todayAppointments, ...pendingPayments];
+      const appointment = allAppointmentsList.find(app => app.id === appointmentId);
+      
+      // Update the appointment in the appropriate state array
       setAppointments(appointments.map(app => 
         app.id === appointmentId 
           ? { ...app, barberName: `${barber.firstName} ${barber.lastName}`, barberId: barber.id } 
           : app
       ));
-      const appointment = appointments.find(app => app.id === appointmentId);
+      setTodayAppointments(todayAppointments.map(app => 
+        app.id === appointmentId 
+          ? { ...app, barberName: `${barber.firstName} ${barber.lastName}`, barberId: barber.id } 
+          : app
+      ));
+      setPendingPayments(pendingPayments.map(app => 
+        app.id === appointmentId 
+          ? { ...app, barberName: `${barber.firstName} ${barber.lastName}`, barberId: barber.id } 
+          : app
+      ));
+      
       if (appointment) {
         showSuccessMessage(`${barber.firstName} ${barber.lastName} has been assigned to ${appointment.customerName}'s appointment!`);
         triggerReceptionNotification('appointmentConfirmed', `Barber assigned to ${appointment.customerName}`, '');
@@ -206,14 +445,16 @@ const ReceptionDashboard: React.FC = () => {
   };
 
   const handleMarkPaid = (appointmentId: string) => {
-    const appointment = appointments.find(app => app.id === appointmentId);
+    const appointment = [...appointments, ...todayAppointments, ...pendingPayments]
+      .find(app => app.id === appointmentId);
     if (appointment) {
       setPaymentConfirmModal({isOpen: true, appointment});
     }
   };
 
   const handleCompleteSession = (appointmentId: string) => {
-    const appointment = appointments.find(app => app.id === appointmentId);
+    const appointment = [...appointments, ...todayAppointments, ...pendingPayments]
+      .find(app => app.id === appointmentId);
     if (appointment) {
       setCompleteSessionModal({isOpen: true, appointment});
     }
@@ -250,7 +491,7 @@ Date: ${new Date().toLocaleDateString()}
 TODAY'S APPOINTMENTS: ${todayAppointments.length}
 
 PAYMENT STATUS:
-- Completed Payments: ${appointments.filter(app => app.paymentStatus === 'completed' && app.date === new Date().toISOString().split('T')[0]).length}
+- Completed Payments: ${[...appointments, ...todayAppointments].filter((app, index, self) => self.findIndex(a => a.id === app.id) === index).filter(app => app.paymentStatus === 'completed' && app.date === new Date().toISOString().split('T')[0]).length}
 - Pending Payments: ${pendingPayments.length}
 - Total Income from Completed Payments: Rs. ${dailyIncomeFromPayments.toFixed(2)}
 
@@ -329,7 +570,7 @@ Generated on: ${new Date().toLocaleString()}
             <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Appointments</h3>
             <p className="text-red-600 mb-4">{error}</p>
             <button
-              onClick={loadAppointments}
+              onClick={refreshAppointments}
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
             >
               Try Again
@@ -378,13 +619,13 @@ Generated on: ${new Date().toLocaleString()}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatsCard
           title="Today's Appointments"
-          value={filteredTodayAppointments.length}
+          value={searchAppointments(todayAppointments, todayAppointmentsSearch).length}
           icon={Calendar}
           color="blue"
         />
         <StatsCard
           title="Pending Payments"
-          value={filteredPendingPayments.length}
+          value={searchAppointments(pendingPayments, pendingPaymentsSearch).length}
           icon={Clock}
           color="amber"
         />
@@ -397,7 +638,9 @@ Generated on: ${new Date().toLocaleString()}
         />
         <StatsCard
           title="Total Customers"
-          value={filteredAllAppointments.length}
+          value={searchAppointments(appointments, allAppointmentsSearch).filter(app => 
+            allAppointmentsDateFilter ? app.date === allAppointmentsDateFilter : true
+          ).length}
           icon={Users}
           color="purple"
         />
@@ -837,3 +1080,4 @@ Generated on: ${new Date().toLocaleString()}
 };
 
 export default ReceptionDashboard;
+
