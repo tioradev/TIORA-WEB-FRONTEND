@@ -81,16 +81,18 @@ const ReceptionDashboard: React.FC = () => {
       // Convert API data to frontend format
       const appointmentsWithSalonId = allAppointmentsData.map(apiAppointment => {
         // Map API status to frontend status
-        const mapStatus = (apiStatus: string): 'booked' | 'in-progress' | 'completed' | 'payment-pending' | 'paid' | 'cancelled' | 'no-show' => {
+        const mapStatus = (apiStatus: string, apiPaymentStatus: string): 'booked' | 'in-progress' | 'completed' | 'payment-pending' | 'paid' | 'cancelled' | 'no-show' => {
           switch (apiStatus) {
             case 'SCHEDULED':
               return 'booked';
             case 'COMPLETED':
-              // Check payment status to determine if it's completed or payment-pending
-              if (apiAppointment.paymentStatus === 'COMPLETED') {
+              // Show as 'paid' if paymentStatus is PAID or COMPLETED
+              if (apiPaymentStatus === 'PAID' || apiPaymentStatus === 'COMPLETED') {
                 return 'paid';
-              } else {
+              } else if (apiPaymentStatus === 'PENDING' || apiPaymentStatus === 'PARTIAL') {
                 return 'payment-pending';
+              } else {
+                return 'completed';
               }
             case 'CANCELLED':
               return 'cancelled';
@@ -136,7 +138,7 @@ const ReceptionDashboard: React.FC = () => {
           serviceName: apiAppointment.serviceName,
           date: appointmentDateTime.toISOString().split('T')[0],
           timeSlot: timeSlot,
-          status: mapStatus(apiAppointment.status),
+          status: mapStatus(apiAppointment.status, apiAppointment.paymentStatus),
           paymentStatus: mapPaymentStatus(apiAppointment.paymentStatus),
           paymentMethod: undefined,
           amount: apiAppointment.servicePrice,
@@ -224,6 +226,36 @@ const ReceptionDashboard: React.FC = () => {
             hour12: true 
           });
 
+          // Map status for today's appointments
+          let status: 'booked' | 'in-progress' | 'completed' | 'payment-pending' | 'paid' | 'cancelled' | 'no-show';
+          if (apiAppointment.status === 'SCHEDULED') {
+            status = 'booked';
+          } else if (apiAppointment.status === 'COMPLETED') {
+            if (apiAppointment.paymentStatus === 'PAID' || apiAppointment.paymentStatus === 'COMPLETED') {
+              status = 'paid';
+            } else if (apiAppointment.paymentStatus === 'PENDING' || apiAppointment.paymentStatus === 'PARTIAL') {
+              status = 'payment-pending';
+            } else {
+              status = 'completed';
+            }
+          } else if (apiAppointment.status === 'CANCELLED') {
+            status = 'cancelled';
+          } else if (apiAppointment.status === 'NO_SHOW') {
+            status = 'no-show';
+          } else {
+            status = 'booked';
+          }
+
+          // Map payment status
+          let paymentStatus: 'pending' | 'completed' | 'refunded';
+          if (apiAppointment.paymentStatus === 'COMPLETED' || apiAppointment.paymentStatus === 'PAID') {
+            paymentStatus = 'completed';
+          } else if (apiAppointment.paymentStatus === 'PENDING' || apiAppointment.paymentStatus === 'PARTIAL') {
+            paymentStatus = 'pending';
+          } else {
+            paymentStatus = 'pending';
+          }
+
           return {
             id: apiAppointment.id.toString(),
             salonId: salonId.toString(),
@@ -238,11 +270,8 @@ const ReceptionDashboard: React.FC = () => {
             serviceName: apiAppointment.serviceName,
             date: appointmentDateTime.toISOString().split('T')[0],
             timeSlot: timeSlot,
-            status: apiAppointment.status === 'SCHEDULED' ? 'booked' as const : 
-                   apiAppointment.status === 'COMPLETED' ? 
-                     (apiAppointment.paymentStatus === 'COMPLETED' ? 'paid' as const : 'payment-pending' as const) :
-                   apiAppointment.status === 'CANCELLED' ? 'cancelled' as const : 'booked' as const,
-            paymentStatus: apiAppointment.paymentStatus === 'COMPLETED' ? 'completed' as const : 'pending' as const,
+            status,
+            paymentStatus,
             paymentMethod: undefined,
             amount: apiAppointment.servicePrice,
             discountAmount: apiAppointment.discountAmount || 0,
@@ -296,7 +325,14 @@ const ReceptionDashboard: React.FC = () => {
       console.log('💰 [RECEPTION DASHBOARD] Processing pending payments:', appointmentsData.length);
       
       if (appointmentsData.length > 0) {
-        const convertedAppointments = appointmentsData.map((apiAppointment: any) => {
+        // Only include appointments with status COMPLETED and paymentStatus PENDING
+        const filteredAppointments = appointmentsData.filter(
+          (apiAppointment: any) =>
+            apiAppointment.status === 'COMPLETED' &&
+            apiAppointment.paymentStatus === 'PENDING'
+        );
+
+        const convertedAppointments = filteredAppointments.map((apiAppointment: any) => {
           const appointmentDateTime = new Date(apiAppointment.appointmentDate);
           const timeSlot = appointmentDateTime.toLocaleTimeString('en-US', { 
             hour: '2-digit', 
