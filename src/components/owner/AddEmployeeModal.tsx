@@ -1,4 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+
+// Config for API base URL (Vite uses import.meta.env)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8090/api/v1';
 import { X, User, Mail, Phone, MapPin, DollarSign, Clock, Users, Shield } from 'lucide-react';
 import { apiService, EmployeeRegistrationRequest, EmployeeWeeklySchedule, BranchResponse } from '../../services/api';
 import { useToast } from '../../contexts/ToastProvider';
@@ -75,7 +78,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
     }
   };
 
-  // Predefined specializations based on role
+  // Predefined specializations for receptionist only
   const receptionistSpecializations = [
     'Customer Service',
     'Appointment Management',
@@ -86,21 +89,54 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
     'Administrative Tasks'
   ];
 
-  const barberSpecializations = [
-    'Hair Cutting',
-    'Beard Styling',
-    'Hair Washing',
-    'Hair Coloring',
-    'Hair Styling',
-    'Shaving',
-    'Hair Treatment',
-    'Facial Hair Design',
-    'Mustache Styling',
-    'Hair Consultation'
-  ];
+  // State for dynamic barber services (specializations) and gender options
+  const [barberServices, setBarberServices] = useState<{ id: number; name: string }[]>([]);
+  const [loadingServices, setLoadingServices] = useState(false);
+  const [genderOptions, setGenderOptions] = useState<Array<{ value: string; label: string }>>([]);
+
+  // Fetch barber services from API based on gender and extract available gender options
+  const fetchBarberServices = useCallback(async (gender: string) => {
+    setLoadingServices(true);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/services/booking?salonId=${salonId}&gender=${gender}`
+      );
+      const data = await response.json();
+      setBarberServices(Array.isArray(data) ? data.map((service: any) => ({ id: service.id, name: service.name })) : []);
+      // Extract unique gender_availability from API response for gender dropdown
+      if (Array.isArray(data)) {
+        const uniqueGenders = Array.from(new Set(data.map((s: any) => s.gender_availability?.toUpperCase()))).filter(Boolean);
+        const genderDropdownOptions = uniqueGenders.map(g => ({
+          value: g,
+          label: g.charAt(0) + g.slice(1).toLowerCase()
+        }));
+        setGenderOptions(genderDropdownOptions);
+      }
+    } catch (error) {
+      setBarberServices([]);
+    } finally {
+      setLoadingServices(false);
+    }
+  }, [salonId]);
+
+  // Fetch services when role or gender changes
+  // Only clear specializations when gender changes, not on every render
+  useEffect(() => {
+    if (formData.role === 'BARBER') {
+      fetchBarberServices(formData.gender);
+      setFormData(prev => ({ ...prev, specializations: [] }));
+    }
+    // eslint-disable-next-line
+  }, [formData.gender, formData.role, fetchBarberServices]);
 
   const getCurrentSpecializations = () => {
-    return formData.role === 'RECEPTIONIST' ? receptionistSpecializations : barberSpecializations;
+    if (formData.role === 'RECEPTIONIST') return receptionistSpecializations;
+    // For BARBER, only show API-fetched services, never fallback to any hardcoded values
+    if (formData.role === 'BARBER') {
+      if (loadingServices) return [];
+      return barberServices.map(s => s.name);
+    }
+    return [];
   };
 
   const handleInputChange = (field: string, value: any) => {
@@ -189,24 +225,24 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
 
       // Prepare API request data
       const employeeData: EmployeeRegistrationRequest = {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
+        first_name: formData.firstName,
+        last_name: formData.lastName,
         gender: formData.gender,
         email: formData.email,
-        phoneNumber: formData.phoneNumber,
-        dateOfBirth: formData.dateOfBirth,
+        phone_number: formData.phoneNumber,
+        date_of_birth: formData.dateOfBirth,
         role: formData.role,
-        branchId: selectedBranchId,
+        branch_id: selectedBranchId,
         address: formData.address,
         specializations: formData.specializations,
-        baseSalary: formData.baseSalary,
+        base_salary: formData.baseSalary,
         ratings: formData.ratings,
-        experienceYears: formData.experienceYears,
-        emergencyContact: formData.emergencyContact,
-        emergencyPhone: formData.emergencyPhone,
-        emergencyRelationship: formData.emergencyRelationship,
-        employeeWeeklySchedule: weeklySchedule,
-        salonId: salonId,
+        experience_years: formData.experienceYears,
+        emergency_contact_name: formData.emergencyContact,
+        emergency_contact_phone: formData.emergencyPhone,
+        emergency_relationship: formData.emergencyRelationship,
+        weekly_schedule: JSON.stringify(weeklySchedule),
+        salon_id: salonId,
         ...(formData.role === 'RECEPTIONIST' && {
           username: formData.username,
           password: formData.password,
@@ -242,7 +278,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
 
       // Call the onAdd callback to update local state
       onAdd({
-        id: response.employeeId?.toString() || Math.random().toString(36).substr(2, 9),
+        id: response.employee_id?.toString() || Math.random().toString(36).substr(2, 9),
         ...formData,
         salonId: salonId.toString(),
         branchId: selectedBranchId.toString(),
@@ -361,10 +397,15 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
                   onChange={(e) => handleInputChange('gender', e.target.value as 'MALE' | 'FEMALE' | 'OTHER')}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
+                  disabled={genderOptions.length === 0}
                 >
-                  <option value="MALE">Male</option>
-                  <option value="FEMALE">Female</option>
-                  <option value="OTHER">Other</option>
+                  {genderOptions.length === 0 ? (
+                    <option value="">No gender options available</option>
+                  ) : (
+                    genderOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -595,23 +636,27 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
                 {/* Quick Add Buttons */}
                 <div className="mb-4">
                   <p className="text-xs text-gray-600 mb-2">Quick add {formData.role.toLowerCase()} specializations:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {getCurrentSpecializations().map((spec) => (
-                      <button
-                        key={spec}
-                        type="button"
-                        onClick={() => addPredefinedSpecialization(spec)}
-                        disabled={formData.specializations.includes(spec)}
-                        className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-                          formData.specializations.includes(spec)
-                            ? 'bg-green-100 text-green-700 border-green-300 cursor-not-allowed'
-                            : 'bg-white text-gray-700 border-gray-300 hover:bg-orange-50 hover:border-orange-300'
-                        }`}
-                      >
-                        {spec} {formData.specializations.includes(spec) && '✓'}
-                      </button>
-                    ))}
-                  </div>
+                  {formData.role === 'BARBER' && loadingServices ? (
+                    <div className="text-sm text-gray-500">Loading services...</div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {getCurrentSpecializations().map((spec) => (
+                        <button
+                          key={spec}
+                          type="button"
+                          onClick={() => addPredefinedSpecialization(spec)}
+                          disabled={formData.specializations.includes(spec)}
+                          className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                            formData.specializations.includes(spec)
+                              ? 'bg-green-100 text-green-700 border-green-300 cursor-not-allowed'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-orange-50 hover:border-orange-300'
+                          }`}
+                        >
+                          {spec} {formData.specializations.includes(spec) && '✓'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Custom Add */}

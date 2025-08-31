@@ -260,6 +260,9 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = () => {
     );
   }
 
+  // Debug: log modal and salonId state
+  console.log('showAddModal:', showAddModal, 'salonId:', salonId);
+
   return (
     <div className="bg-white rounded-xl shadow-lg">
       {/* Header */}

@@ -387,7 +387,7 @@ class ApiService {
   }
 
   // Get services for booking screen with gender filter
-  async getBookingServices(salonId: string | number, gender: 'MALE' | 'FEMALE'): Promise<ServicesListResponse> {
+  async getBookingServices(salonId: string | number, gender: 'MALE' | 'FEMALE' | 'BOTH'): Promise<ServicesListResponse> {
     const endpoint = `${ENDPOINTS.SERVICES.BOOKING}?salonId=${salonId}&gender=${gender}`;
     envLog.info('📅 [API] Getting booking services...');
     envLog.info('🌐 [API] Endpoint:', endpoint);

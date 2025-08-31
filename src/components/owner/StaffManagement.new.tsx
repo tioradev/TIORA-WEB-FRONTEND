@@ -658,16 +658,13 @@ const StaffManagement: React.FC = () => {
       {/* Modal */}
       {isModalOpen && (
         <StaffModal
-          isOpen={isModalOpen}
-          onClose={() => {
-            setIsModalOpen(false);
-            setEditingStaff(undefined);
+          open={isModalOpen}
+          onOpenChange={(open) => {
+            setIsModalOpen(open);
+            if (!open) setEditingStaff(undefined);
           }}
           staff={editingStaff}
-          onSave={handleSaveStaff}
-          branches={branches}
-          isSaving={saving}
-          currentSalonId={getSalonId() || undefined}
+          onSubmit={handleSaveStaff}
         />
       )}
 
