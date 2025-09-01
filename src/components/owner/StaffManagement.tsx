@@ -22,13 +22,14 @@ interface Staff {
   phone: string;
   role: 'barber' | 'reception';
   branchId: string;
-  specialties: string[];
+  specialties: Array<{id: number, name: string}>; // Change to array of objects
   schedule: {
     [key: string]: { start: string; end: string; available: boolean };
   };
   monthlySalary: number;
   status: 'active' | 'inactive' | 'on-leave';
   joinDate: string;
+  dateOfBirth?: string; // Add date of birth field
   address: string;
   emergencyContact: {
     name: string;
@@ -40,6 +41,7 @@ interface Staff {
   salonId: string;
   performanceRating?: number;
   profileImage?: string;
+  notes?: string; // Add notes field
   servesGender?: 'male' | 'female' | 'both'; // Gender preference for barber services
 }
 
@@ -143,11 +145,12 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
           phone: emp.phone_number || emp.phone || '',
           role: 'reception' as const,
           branchId: emp.branch_id?.toString() || 'default',
-          specialties: [],
+          specialties: [], // Receptionists don't have specialties
           schedule: emp.schedule || getDefaultSchedule(),
           monthlySalary: emp.base_salary || emp.salary || 3000,
           status: emp.status?.toLowerCase() || 'active',
           joinDate: emp.hire_date || emp.joined_date || new Date().toISOString().split('T')[0],
+          dateOfBirth: emp.date_of_birth || emp.dateOfBirth || '',
           address: emp.address || '',
           emergencyContact: {
             name: emp.emergency_contact_name || emp.emergencyContact || '',
@@ -157,7 +160,8 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
           username: emp.username || '',
           password: emp.password || '',
           salonId: emp.salon_id?.toString() || salonId.toString(),
-          performanceRating: emp.ratings || emp.performance_rating || 3
+          performanceRating: emp.ratings || emp.performance_rating || 3,
+          notes: emp.notes || ''
         }));
         allStaff.push(...receptionists);
       }
@@ -173,11 +177,24 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
           phone: emp.phone_number || emp.phone || '',
           role: 'barber' as const,
           branchId: emp.branch_id?.toString() || 'default',
-          specialties: emp.specializations || emp.specialties || [],
+          specialties: Array.isArray(emp.specializations) 
+            ? emp.specializations.map((spec: any) => 
+                typeof spec === 'string' 
+                  ? { id: 0, name: spec } // Convert string to object
+                  : { id: spec.id || 0, name: spec.name || spec } // Handle object format
+              )
+            : Array.isArray(emp.specialties)
+            ? emp.specialties.map((spec: any) => 
+                typeof spec === 'string' 
+                  ? { id: 0, name: spec } 
+                  : { id: spec.id || 0, name: spec.name || spec }
+              )
+            : [],
           schedule: emp.schedule || getDefaultSchedule(),
           monthlySalary: emp.base_salary || emp.salary || 3000,
           status: emp.status?.toLowerCase() || 'active',
           joinDate: emp.hire_date || emp.joined_date || new Date().toISOString().split('T')[0],
+          dateOfBirth: emp.date_of_birth || emp.dateOfBirth || '',
           address: emp.address || '',
           emergencyContact: {
             name: emp.emergency_contact_name || emp.emergencyContact || '',
@@ -188,6 +205,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
           password: '',
           salonId: emp.salon_id?.toString() || salonId.toString(),
           performanceRating: emp.ratings || emp.performance_rating || 3,
+          notes: emp.notes || '',
           servesGender: emp.serves_gender ? emp.serves_gender.toLowerCase() as 'male' | 'female' | 'both' : 'both'
         }));
         allStaff.push(...barbers);
@@ -307,7 +325,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
           email: staffData.email,
           phone_number: staffData.phone,
           gender: staffData.gender.toUpperCase() as 'MALE' | 'FEMALE',
-          date_of_birth: '1990-01-01', // Default value
+          date_of_birth: staffData.dateOfBirth || '1990-01-01', // Use actual date or default
           address: staffData.address || '',
           salon_id: salonId,
           branch_id: staffData.branchId ? parseInt(staffData.branchId) : undefined,
@@ -320,7 +338,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
           username: staffData.username || undefined,
           password: staffData.password || undefined,
           specializations: staffData.specialties.length > 0 ? 
-            staffData.specialties.map(name => ({ id: 0, name })) : undefined,
+            staffData.specialties : undefined,
           weekly_schedule: JSON.stringify(staffData.schedule),
           ratings: staffData.performanceRating || 3,
           serves_gender: staffData.role === 'barber' && staffData.servesGender ? 
@@ -631,7 +649,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
                 {staffMember.specialties.length > 0 && (
                   <div className="flex items-center space-x-2">
                     <Star className="w-4 h-4" />
-                    <span>{staffMember.specialties.slice(0, 2).join(', ')}</span>
+                    <span>{staffMember.specialties.slice(0, 2).map(spec => spec.name).join(', ')}</span>
                     {staffMember.specialties.length > 2 && (
                       <span className="text-xs bg-gray-100 px-2 py-1 rounded">
                         +{staffMember.specialties.length - 2} more

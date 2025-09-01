@@ -146,19 +146,17 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
         gender: editingEmployee.gender === 'male' ? 'MALE' : editingEmployee.gender === 'female' ? 'FEMALE' : 'MALE',
         email: editingEmployee.email || '',
         phoneNumber: editingEmployee.phone || '',
-        dateOfBirth: '', // This might not be available in Staff interface
+        dateOfBirth: editingEmployee.dateOfBirth || '', // Now properly mapped
         role: editingEmployee.role === 'barber' ? 'BARBER' : 'RECEPTIONIST',
         address: editingEmployee.address || '',
-        specializations: editingEmployee.specialties?.map((spec: any) => 
-          typeof spec === 'string' ? { id: 0, name: spec } : spec
-        ) || [],
+        specializations: editingEmployee.specialties || [], // Now properly mapped as array of objects
         baseSalary: editingEmployee.monthlySalary || 25000,
         ratings: editingEmployee.performanceRating || 3,
         experienceYears: 1, // Default value as this might not be in Staff interface
         emergencyContact: editingEmployee.emergencyContact?.name || '',
         emergencyPhone: editingEmployee.emergencyContact?.phone || '',
         emergencyRelationship: editingEmployee.emergencyContact?.relationship || '',
-        notes: '', // Default empty as Staff interface might not have notes
+        notes: editingEmployee.notes || '', // Now properly mapped
         username: editingEmployee.username || '',
         password: editingEmployee.password || '',
       });
