@@ -1,109 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Plus, Search, Download, Trash2, 
+  Plus, Search, Filter, Download, Trash2, 
   Eye, Building, Mail, Phone, MapPin,
-  DollarSign, Users, Activity,
-  CheckCircle, X, Loader,
-  ChevronLeft, ChevronRight
+  Calendar, DollarSign, Users, Activity,
+  CheckCircle, Navigation, X, Loader
 } from 'lucide-react';
 import { apiService, SalonResponse } from '../../services/api';
-import type { PaginatedResponse } from '../../types';
 import { useToast } from '../../contexts/ToastProvider';
 import AddSalonModal from './AddSalonModal';
 
 const SalonManagement: React.FC = () => {
   const [salons, setSalons] = useState<SalonResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingStats, setLoadingStats] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedSalon, setSelectedSalon] = useState<SalonResponse | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(0);
-  const [pageSize, setPageSize] = useState(20);
-  const [totalElements, setTotalElements] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  
-  // Statistics state (non-paginated totals)
-  const [stats, setStats] = useState({
-    totalSalons: 0,
-    activeSalons: 0,
-    inactiveSalons: 0,
-    totalRevenue: 0,
-    totalEmployees: 0,
-    totalCustomers: 0
-  });
-  
   const { showSuccess, showError } = useToast();
 
-  // Load salons from API with pagination
+  // Load salons from API
   useEffect(() => {
     loadSalons();
-  }, [currentPage, pageSize]);
-
-  // Load statistics once on component mount
-  useEffect(() => {
-    loadStatistics();
   }, []);
-
-  // Reload when search or filter changes (with debounce for search)
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setCurrentPage(0); // Reset to first page when search/filter changes
-      loadSalons();
-    }, searchTerm ? 500 : 0); // Debounce search, immediate for filter
-    
-    return () => clearTimeout(timeoutId);
-  }, [searchTerm, filterStatus]);
-
-  const loadStatistics = async () => {
-    try {
-      setLoadingStats(true);
-      const statisticsData = await apiService.getSalonStatistics();
-      setStats(statisticsData);
-      console.log('Loaded salon statistics:', statisticsData);
-    } catch (error) {
-      console.error('Failed to load salon statistics:', error);
-      // Fallback: if statistics endpoint doesn't exist, we'll calculate from a large page
-      try {
-        const allSalonsResponse = await apiService.getAllSalons(0, 1000);
-        const allSalons = allSalonsResponse.content;
-        const calculatedStats = {
-          totalSalons: allSalonsResponse.totalElements,
-          activeSalons: allSalons.filter(salon => salon.active).length,
-          inactiveSalons: allSalons.filter(salon => !salon.active).length,
-          totalRevenue: allSalons.reduce((sum, salon) => sum + salon.totalIncome, 0),
-          totalEmployees: allSalons.reduce((sum, salon) => sum + salon.totalEmployees, 0),
-          totalCustomers: allSalons.reduce((sum, salon) => sum + salon.totalCustomers, 0)
-        };
-        setStats(calculatedStats);
-        console.log('Calculated salon statistics:', calculatedStats);
-      } catch (fallbackError) {
-        console.error('Failed to calculate statistics:', fallbackError);
-        showError('Warning', 'Unable to load salon statistics.');
-      }
-    } finally {
-      setLoadingStats(false);
-    }
-  };
 
   const loadSalons = async () => {
     try {
       setLoading(true);
-      // Try server-side filtering first, fallback to client-side if backend doesn't support it
-      const response: PaginatedResponse<SalonResponse> = await apiService.getAllSalons(
-        currentPage, 
-        pageSize,
-        searchTerm || undefined,
-        filterStatus !== 'all' ? filterStatus : undefined
-      );
-      setSalons(response.content);
-      setTotalElements(response.totalElements);
-      setTotalPages(response.totalPages);
-      console.log('Loaded salons:', response);
+      const salonData = await apiService.getAllSalons();
+      setSalons(salonData);
+      console.log('Loaded salons:', salonData);
     } catch (error) {
       console.error('Failed to load salons:', error);
       showError('Error', 'Failed to load salon data. Please try again.');
@@ -112,28 +38,22 @@ const SalonManagement: React.FC = () => {
     }
   };
 
-  // If server-side filtering is supported, we can use salons directly
-  // Otherwise, fallback to client-side filtering
-  const filteredSalons = salons; // Server-side filtering in getAllSalons API call
-  
-  // Fallback client-side filtering (if server doesn't support search/filter parameters)
-  // const filteredSalons = salons.filter(salon => {
-  //   const matchesSearch = !searchTerm || (
-  //     salon.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  //     salon.fullOwnerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  //     salon.ownerEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  //     salon.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  //     salon.mainBranchName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  //     salon.district.toLowerCase().includes(searchTerm.toLowerCase())
-  //   );
-  //   
-  //   const matchesStatus = 
-  //     filterStatus === 'all' || 
-  //     (filterStatus === 'active' && salon.status === 'ACTIVE' && salon.active) ||
-  //     (filterStatus === 'inactive' && (salon.status === 'INACTIVE' || !salon.active));
-  //
-  //   return matchesSearch && matchesStatus;
-  // });
+  const filteredSalons = salons.filter(salon => {
+    const matchesSearch = 
+      salon.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      salon.fullOwnerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      salon.ownerEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      salon.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      salon.mainBranchName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      salon.district.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = 
+      filterStatus === 'all' || 
+      (filterStatus === 'active' && salon.status === 'ACTIVE' && salon.active) ||
+      (filterStatus === 'inactive' && (salon.status === 'INACTIVE' || !salon.active));
+
+    return matchesSearch && matchesStatus;
+  });
 
   const handleToggleStatus = async (salonId: number) => {
     try {
@@ -150,8 +70,6 @@ const SalonManagement: React.FC = () => {
           : salon
       ));
       showSuccess('Success', 'Salon status updated successfully!');
-      // Refresh statistics to reflect the change
-      loadStatistics();
     } catch (error) {
       showError('Error', 'Failed to update salon status. Please try again.');
     }
@@ -164,39 +82,26 @@ const SalonManagement: React.FC = () => {
         // For now, just remove locally
         setSalons(salons.filter(salon => salon.salonId !== salonId));
         showSuccess('Success', 'Salon deleted successfully!');
-        // Refresh statistics to reflect the change
-        loadStatistics();
       } catch (error) {
         showError('Error', 'Failed to delete salon. Please try again.');
       }
     }
   };
 
-  const downloadSalonReport = async () => {
-    try {
-      // Fetch all salons for the report (large page size)
-      const allSalonsResponse = await apiService.getAllSalons(0, 1000);
-      const allSalons = allSalonsResponse.content;
-      
-      const reportData = allSalons.map(salon => {
-        return `${salon.name},${salon.fullOwnerName},${salon.ownerEmail},${salon.email},${salon.mainBranchName},${salon.district},${salon.status},${salon.totalEmployees},${salon.totalCustomers},${salon.totalIncome}`;
-      }).join('\n');
-      
-      const blob = new Blob([
-        `Salon Name,Owner Name,Owner Email,Salon Email,Branch Name,District,Status,Employees,Customers,Total Income\n${reportData}`
-      ], { type: 'text/csv' });
-      
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `salon-report-${new Date().toISOString().split('T')[0]}.csv`;
-      a.click();
-      
-      showSuccess('Success', 'Salon report downloaded successfully!');
-    } catch (error) {
-      console.error('Failed to download report:', error);
-      showError('Error', 'Failed to download salon report. Please try again.');
-    }
+  const downloadSalonReport = () => {
+    const reportData = filteredSalons.map(salon => {
+      return `${salon.name},${salon.fullOwnerName},${salon.ownerEmail},${salon.email},${salon.mainBranchName},${salon.district},${salon.status},${salon.totalEmployees},${salon.totalCustomers},${salon.totalIncome}`;
+    }).join('\n');
+    
+    const blob = new Blob([
+      `Salon Name,Owner Name,Owner Email,Salon Email,Branch Name,District,Status,Employees,Customers,Total Income\n${reportData}`
+    ], { type: 'text/csv' });
+    
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `salon-report-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
   };
 
   const viewSalonDetails = (salon: SalonResponse) => {
@@ -219,23 +124,7 @@ const SalonManagement: React.FC = () => {
   const handleSalonAdded = () => {
     setShowAddModal(false);
     loadSalons(); // Reload salons after adding
-    loadStatistics(); // Refresh statistics as well
   };
-
-  // Pagination handlers
-  const handlePageChange = (newPage: number) => {
-    setCurrentPage(newPage);
-  };
-
-  const handlePageSizeChange = (newSize: number) => {
-    setPageSize(newSize);
-    setCurrentPage(0); // Reset to first page when changing page size
-  };
-
-  const goToFirstPage = () => setCurrentPage(0);
-  const goToLastPage = () => setCurrentPage(totalPages - 1);
-  const goToPreviousPage = () => setCurrentPage(Math.max(0, currentPage - 1));
-  const goToNextPage = () => setCurrentPage(Math.min(totalPages - 1, currentPage + 1));
 
   if (loading) {
     return (
@@ -271,14 +160,7 @@ const SalonManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Total Salons</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {loadingStats ? (
-                  <Loader className="w-6 h-6 animate-spin text-gray-400" />
-                ) : (
-                  stats.totalSalons
-                )}
-              </p>
-              <p className="text-xs text-gray-500">All registered</p>
+              <p className="text-2xl font-bold text-gray-900">{salons.length}</p>
             </div>
             <Building className="w-8 h-8 text-blue-600" />
           </div>
@@ -289,13 +171,8 @@ const SalonManagement: React.FC = () => {
             <div>
               <p className="text-sm text-gray-600">Active Salons</p>
               <p className="text-2xl font-bold text-green-600">
-                {loadingStats ? (
-                  <Loader className="w-6 h-6 animate-spin text-gray-400" />
-                ) : (
-                  stats.activeSalons
-                )}
+                {salons.filter(s => s.status === 'ACTIVE' && s.active).length}
               </p>
-              <p className="text-xs text-gray-500">Currently active</p>
             </div>
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
@@ -306,13 +183,8 @@ const SalonManagement: React.FC = () => {
             <div>
               <p className="text-sm text-gray-600">Total Employees</p>
               <p className="text-2xl font-bold text-purple-600">
-                {loadingStats ? (
-                  <Loader className="w-6 h-6 animate-spin text-gray-400" />
-                ) : (
-                  stats.totalEmployees
-                )}
+                {salons.reduce((sum, s) => sum + s.totalEmployees, 0)}
               </p>
-              <p className="text-xs text-gray-500">Across all salons</p>
             </div>
             <Users className="w-8 h-8 text-purple-600" />
           </div>
@@ -322,16 +194,11 @@ const SalonManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-bold text-orange-600">
-                {loadingStats ? (
-                  <Loader className="w-6 h-6 animate-spin text-gray-400" />
-                ) : (
-                  `LKR ${stats.totalRevenue.toLocaleString()}`
-                )}
+              <p className="text-2xl font-bold text-emerald-600">
+                LKR {salons.reduce((sum, s) => sum + s.totalIncome, 0).toLocaleString()}
               </p>
-              <p className="text-xs text-gray-500">All-time earnings</p>
             </div>
-            <DollarSign className="w-8 h-8 text-orange-600" />
+            <DollarSign className="w-8 h-8 text-emerald-600" />
           </div>
         </div>
       </div>
@@ -501,94 +368,6 @@ const SalonManagement: React.FC = () => {
           </div>
         ))}
       </div>
-
-      {/* Pagination Controls */}
-      {!loading && totalElements > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-6">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-            {/* Pagination Info */}
-            <div className="flex items-center space-x-4">
-              <div className="text-sm text-gray-600">
-                Showing {currentPage * pageSize + 1} to {Math.min((currentPage + 1) * pageSize, totalElements)} of {totalElements} salons
-              </div>
-              
-              {/* Page Size Selector */}
-              <div className="flex items-center space-x-2">
-                <label className="text-sm text-gray-600">Per page:</label>
-                <select
-                  value={pageSize}
-                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                  className="border border-gray-300 rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Pagination Buttons */}
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={goToFirstPage}
-                disabled={currentPage === 0}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                First
-              </button>
-              
-              <button
-                onClick={goToPreviousPage}
-                disabled={currentPage === 0}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Previous</span>
-              </button>
-
-              {/* Page Numbers */}
-              <div className="flex items-center space-x-1">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const pageNum = Math.max(0, Math.min(totalPages - 5, currentPage - 2)) + i;
-                  if (pageNum >= totalPages) return null;
-                  
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => handlePageChange(pageNum)}
-                      className={`px-3 py-2 text-sm rounded-lg transition-colors ${
-                        pageNum === currentPage
-                          ? 'bg-blue-600 text-white'
-                          : 'border border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      {pageNum + 1}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button
-                onClick={goToNextPage}
-                disabled={currentPage >= totalPages - 1}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
-              >
-                <span>Next</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-              
-              <button
-                onClick={goToLastPage}
-                disabled={currentPage >= totalPages - 1}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Last
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Empty State */}
       {filteredSalons.length === 0 && !loading && (

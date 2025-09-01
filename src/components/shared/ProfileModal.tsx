@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, User, Briefcase, Save, Edit, Camera, Shield
+  X, User, Briefcase, Save, Edit, Shield, Building
 } from 'lucide-react';
 import { apiService, SalonOwnerProfileUpdateRequest } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import ImageUploader from './ImageUploader';
 
 interface ProfileData {
   id: string;
@@ -57,7 +58,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   // Sync form data with profile prop changes
-  const { updateSalonInfo } = useAuth();
+  const { updateSalonInfo, getBranchId } = useAuth();
 
   useEffect(() => {
     setFormData(profile);
@@ -107,7 +108,11 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
         console.log('📋 [PROFILE] Update data:', salonUpdateData);
         console.log('🔐 [PROFILE] API service has token:', !!apiService['authToken']);
         
-        const response = await apiService.updateSalonOwnerProfile(formData.salonId, salonUpdateData);
+        // Get branch ID for the API call
+        const branchId = getBranchId();
+        console.log('🌿 [PROFILE] Branch ID:', branchId);
+        
+        const response = await apiService.updateSalonOwnerProfile(formData.salonId, salonUpdateData, branchId || undefined);
         console.log('✅ [PROFILE] Salon owner profile update response:', response);
         
         // Update the salon data in AuthContext
@@ -144,54 +149,60 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
     setIsEditing(false);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      console.log('📷 [PROFILE] Image upload started:', file.name, file.size, file.type);
-      
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        console.error('❌ [PROFILE] Invalid file type:', file.type);
-        alert('Please select a valid image file.');
-        return;
-      }
-      
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        console.error('❌ [PROFILE] File too large:', file.size);
-        alert('Please select an image smaller than 5MB.');
-        return;
-      }
-      
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        console.log('✅ [PROFILE] Image converted to base64, length:', result.length);
-        
-        // For salon owners, update both profilePicture and ownerImgUrl
-        if (userRole === 'owner') {
-          console.log('🏢 [PROFILE] Updating owner profile image');
-          setFormData(prev => ({ 
-            ...prev, 
-            profilePicture: result,
-            ownerImgUrl: result
-          }));
-        } else {
-          console.log('👤 [PROFILE] Updating employee profile image');
-          setFormData(prev => ({ 
-            ...prev, 
-            profilePicture: result
-          }));
-        }
-      };
-      
-      reader.onerror = (error) => {
-        console.error('❌ [PROFILE] Error reading file:', error);
-        alert('Error reading the selected file. Please try again.');
-      };
-      
-      reader.readAsDataURL(file);
-    }
+  // Firebase image upload handlers
+  const handleOwnerProfileImageUpload = (downloadURL: string) => {
+    console.log('✅ [PROFILE] Owner profile image uploaded:', downloadURL);
+    setFormData(prev => ({
+      ...prev,
+      profilePicture: downloadURL,
+      ownerImgUrl: downloadURL
+    }));
+  };
+
+  const handleSalonImageUpload = (downloadURL: string) => {
+    console.log('✅ [PROFILE] Salon image uploaded:', downloadURL);
+    setFormData(prev => ({
+      ...prev,
+      salonImageUrl: downloadURL
+    }));
+  };
+
+  const handleEmployeeProfileImageUpload = (downloadURL: string) => {
+    console.log('✅ [PROFILE] Employee profile image uploaded:', downloadURL);
+    setFormData(prev => ({
+      ...prev,
+      profilePicture: downloadURL
+    }));
+  };
+
+  const handleImageUploadError = (error: string) => {
+    console.error('❌ [PROFILE] Image upload error:', error);
+    alert(`Image upload failed: ${error}`);
+  };
+
+  const handleOwnerProfileImageDelete = () => {
+    console.log('🗑️ [PROFILE] Owner profile image deleted');
+    setFormData(prev => ({
+      ...prev,
+      profilePicture: '',
+      ownerImgUrl: ''
+    }));
+  };
+
+  const handleSalonImageDelete = () => {
+    console.log('🗑️ [PROFILE] Salon image deleted');
+    setFormData(prev => ({
+      ...prev,
+      salonImageUrl: ''
+    }));
+  };
+
+  const handleEmployeeProfileImageDelete = () => {
+    console.log('🗑️ [PROFILE] Employee profile image deleted');
+    setFormData(prev => ({
+      ...prev,
+      profilePicture: ''
+    }));
   };
 
   if (!isOpen) {
@@ -266,54 +277,127 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
 
         {/* Content */}
         <div className="p-6 space-y-6">
-          {/* Profile Picture Section */}
+          {/* Profile Picture Section - Enhanced with Firebase Storage */}
           <div className="flex flex-col items-center space-y-4">
-            <div className="relative">
-              <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden border-4 border-gray-300">
-                {/* For salon owners, prioritize ownerImgUrl, for others use profilePicture */}
-                {(() => {
-                  const imageUrl = userRole === 'owner' 
-                    ? (formData.ownerImgUrl || formData.profilePicture) 
-                    : formData.profilePicture;
-                  
-                  return imageUrl ? (
-                    <img 
-                      src={imageUrl}
-                      alt="Profile" 
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        console.error('Failed to load profile image:', imageUrl);
-                        e.currentTarget.style.display = 'none';
-                      }}
-                      onLoad={() => {
-                        console.log('Profile image loaded successfully:', imageUrl);
-                      }}
-                    />
-                  ) : (
-                    <User className="w-16 h-16 text-gray-400" />
-                  );
-                })()}
-              </div>
-              {isEditing && (
-                <label className="absolute bottom-0 right-0 bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-full cursor-pointer transition-colors duration-200 shadow-lg">
-                  <Camera className="w-4 h-4" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                  />
-                </label>
-              )}
-            </div>
-            
             <div className="text-center">
-              <h3 className="text-xl font-bold text-gray-900">{formData.name}</h3>
-              <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gradient-to-r ${getRoleColor(userRole)} text-white`}>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{formData.name}</h3>
+              <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gradient-to-r ${getRoleColor(userRole)} text-white mb-4`}>
                 <Shield className="w-4 h-4 mr-1" />
                 {getRoleLabel(userRole)}
               </div>
             </div>
+
+            {isEditing && userRole === 'owner' && (
+              <div className="w-full space-y-6">
+                {/* Owner Profile Picture Upload */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <h4 className="text-lg font-semibold text-gray-900">Owner Profile Picture</h4>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-4">Upload your professional profile picture. This will be displayed in your salon profile.</p>
+                  <ImageUploader
+                    category="owner-profiles"
+                    salonId={parseInt(formData.salonId || '1')}
+                    onUploadComplete={handleOwnerProfileImageUpload}
+                    onUploadError={handleImageUploadError}
+                    currentImage={formData.ownerImgUrl || formData.profilePicture || ''}
+                    onImageDelete={handleOwnerProfileImageDelete}
+                    placeholder="Upload Owner Photo"
+                    className="max-w-md mx-auto"
+                    maxWidth={300}
+                    maxHeight={200}
+                    employeeId={formData.id} // Use owner ID for consistent naming
+                  />
+                </div>
+
+                {/* Salon Image Upload */}
+                <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl p-6 border border-emerald-100">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-8 h-8 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">
+                      <Building className="w-4 h-4" />
+                    </div>
+                    <h4 className="text-lg font-semibold text-gray-900">Salon Image</h4>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-4">Upload an image that represents your salon. This will be displayed to customers when they browse salons.</p>
+                  <ImageUploader
+                    category="salon-logos"
+                    salonId={parseInt(formData.salonId || '1')}
+                    onUploadComplete={handleSalonImageUpload}
+                    onUploadError={handleImageUploadError}
+                    currentImage={formData.salonImageUrl || ''}
+                    onImageDelete={handleSalonImageDelete}
+                    placeholder="Upload Salon Image"
+                    className="max-w-md mx-auto"
+                    maxWidth={400}
+                    maxHeight={300}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Read-only profile display for non-editing or non-owner */}
+            {(!isEditing || userRole !== 'owner') && (
+              <div className="flex flex-col items-center space-y-4">
+                <div className="relative">
+                  <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden border-4 border-gray-300">
+                    {/* For salon owners, prioritize ownerImgUrl, for others use profilePicture */}
+                    {(() => {
+                      const imageUrl = userRole === 'owner' 
+                        ? (formData.ownerImgUrl || formData.profilePicture) 
+                        : formData.profilePicture;
+                      
+                      return imageUrl ? (
+                        <img 
+                          src={imageUrl}
+                          alt="Profile" 
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            console.error('Failed to load profile image:', imageUrl);
+                            e.currentTarget.style.display = 'none';
+                          }}
+                          onLoad={() => {
+                            console.log('Profile image loaded successfully:', imageUrl);
+                          }}
+                        />
+                      ) : (
+                        <User className="w-16 h-16 text-gray-400" />
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Enhanced profile image upload for non-owner employees */}
+            {isEditing && userRole !== 'owner' && (
+              <div className="w-full">
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-100">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <h4 className="text-lg font-semibold text-gray-900">Profile Picture</h4>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-4">Upload your professional profile picture. This will be displayed in your profile.</p>
+                  <ImageUploader
+                    category="employee-profiles"
+                    salonId={parseInt(formData.salonId || '1')}
+                    onUploadComplete={handleEmployeeProfileImageUpload}
+                    onUploadError={handleImageUploadError}
+                    currentImage={formData.profilePicture || ''}
+                    onImageDelete={handleEmployeeProfileImageDelete}
+                    placeholder="Upload Profile Photo"
+                    className="max-w-md mx-auto"
+                    maxWidth={300}
+                    maxHeight={200}
+                    employeeId={formData.id} // Use employee ID for consistent naming
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Basic Information - Only show for non-owner roles */}

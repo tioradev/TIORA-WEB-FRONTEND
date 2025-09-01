@@ -1,4 +1,5 @@
 import { getCurrentConfig, envLog } from '../config/environment';
+import type { PaginationParams, PaginatedResponse } from '../types';
 
 // API Endpoints
 const ENDPOINTS = {
@@ -8,6 +9,7 @@ const ENDPOINTS = {
   SALONS: {
     REGISTER: '/salons/comprehensive',
     UPDATE_OWNER_PROFILE: '/salons',
+    GET_ALL: '/salons',
   },
   BRANCHES: {
     ACTIVE: '/branches/active',
@@ -174,11 +176,17 @@ class ApiService {
   }
 
   // Update Salon Owner Profile API
-  async updateSalonOwnerProfile(salonId: string | number, profileData: SalonOwnerProfileUpdateRequest): Promise<SalonOwnerProfileUpdateResponse> {
-    const endpoint = `${ENDPOINTS.SALONS.UPDATE_OWNER_PROFILE}/${salonId}/owner-profile`;
+  async updateSalonOwnerProfile(salonId: string | number, profileData: SalonOwnerProfileUpdateRequest, branchId?: number): Promise<SalonOwnerProfileUpdateResponse> {
+    // Construct endpoint with optional branchId parameter
+    let endpoint = `${ENDPOINTS.SALONS.UPDATE_OWNER_PROFILE}/${salonId}/owner-profile`;
+    if (branchId) {
+      endpoint += `?branchId=${branchId}`;
+    }
+    
     envLog.info('🔄 [API] Updating salon owner profile...');
     envLog.info('🌐 [API] Endpoint:', endpoint);
     envLog.info('🏢 [API] Salon ID:', salonId);
+    envLog.info('🌿 [API] Branch ID:', branchId);
     envLog.info('📋 [API] Profile data:', profileData);
     
     return this.request<SalonOwnerProfileUpdateResponse>(
@@ -188,6 +196,57 @@ class ApiService {
         body: JSON.stringify(profileData),
       }
     );
+  }
+
+  // Get All Salons API with pagination and optional filters
+  async getAllSalons(
+    page: number = 0, 
+    size: number = 20, 
+    searchTerm?: string, 
+    status?: string
+  ): Promise<PaginatedResponse<SalonResponse>> {
+    let endpoint = `${ENDPOINTS.SALONS.GET_ALL}?page=${page}&size=${size}`;
+    
+    // Add search parameter if provided
+    if (searchTerm && searchTerm.trim()) {
+      endpoint += `&search=${encodeURIComponent(searchTerm.trim())}`;
+    }
+    
+    // Add status filter if provided
+    if (status && status !== 'all') {
+      endpoint += `&status=${status.toUpperCase()}`;
+    }
+    
+    envLog.info('🏢 [API] Getting all salons with pagination...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('📄 [API] Page:', page, 'Size:', size);
+    if (searchTerm) envLog.info('🔍 [API] Search:', searchTerm);
+    if (status) envLog.info('📊 [API] Status Filter:', status);
+    
+    return this.request<PaginatedResponse<SalonResponse>>(endpoint);
+  }
+
+  // Get Salon Statistics (non-paginated totals)
+  async getSalonStatistics(): Promise<{
+    totalSalons: number;
+    activeSalons: number;
+    inactiveSalons: number;
+    totalRevenue: number;
+    totalEmployees: number;
+    totalCustomers: number;
+  }> {
+    const endpoint = `${ENDPOINTS.SALONS.GET_ALL}/statistics`;
+    envLog.info('📊 [API] Getting salon statistics...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    
+    return this.request<{
+      totalSalons: number;
+      activeSalons: number;
+      inactiveSalons: number;
+      totalRevenue: number;
+      totalEmployees: number;
+      totalCustomers: number;
+    }>(endpoint);
   }
 
   // Branch Management API
@@ -313,12 +372,22 @@ class ApiService {
 
   // Get employee details
   async getEmployeeDetails(employeeId: string | number): Promise<EmployeeRegistrationResponse> {
-    const endpoint = `${ENDPOINTS.EMPLOYEES.DETAILS}/${employeeId}/details`;
+    const endpoint = `${ENDPOINTS.EMPLOYEES.DETAILS}/${employeeId}`;
     envLog.info('👤 [API] Getting employee details...');
     envLog.info('🌐 [API] Endpoint:', endpoint);
     envLog.info('👤 [API] Employee ID:', employeeId);
     
     return this.request<EmployeeRegistrationResponse>(endpoint);
+  }
+
+  // Get all employees by salon ID
+  async getAllEmployeesBySalon(salonId: string | number): Promise<EmployeeRegistrationResponse[]> {
+    const endpoint = `${ENDPOINTS.EMPLOYEES.BY_SALON}/${salonId}`;
+    envLog.info('👥 [API] Getting all employees by salon...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🏢 [API] Salon ID:', salonId);
+    
+    return this.request<EmployeeRegistrationResponse[]>(endpoint);
   }
 
   // Delete employee by ID
@@ -1153,6 +1222,7 @@ export interface SalonRegistrationRequest {
   defaultBranchName: string;
   branchEmail: string;
   branchPhoneNumber: string;
+  branchDescription: string; // New field for branch description
 }
 
 export interface SalonRegistrationResponse {
@@ -1161,6 +1231,37 @@ export interface SalonRegistrationResponse {
   success?: boolean;
   data?: any;
   // Add other response fields as needed
+}
+
+export interface SalonResponse {
+  salonId: number;
+  name: string;
+  address: string;
+  district: string;
+  postalCode: string;
+  phoneNumber: string;
+  email: string;
+  ownerFirstName: string;
+  ownerLastName: string;
+  ownerPhone: string;
+  ownerEmail: string;
+  brNumber: string;
+  taxId: string;
+  imageUrl?: string;
+  ownerImgUrl?: string;
+  status: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  active: boolean;
+  fullOwnerName: string;
+  mainBranchName: string;
+  latitude?: number;
+  longitude?: number;
+  totalEmployees: number;
+  totalCustomers: number;
+  totalIncome: number;
+  totalSalonCount: number;
 }
 
 // Salon Owner Profile Update types

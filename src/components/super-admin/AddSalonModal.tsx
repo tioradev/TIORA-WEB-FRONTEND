@@ -7,10 +7,10 @@ import { getCurrentConfig } from '../../config/environment';
 
 interface AddSalonModalProps {
   onClose: () => void;
-  onAdd: (salon: Omit<Salon, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>) => void;
+  onSalonAdded: () => void; // Changed from onAdd to onSalonAdded
 }
 
-const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
+const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onSalonAdded }) => {
   const { showSuccess, showError } = useToast();
   
   // Initialize logging
@@ -31,6 +31,7 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
     branchName: '',
     branchEmail: '',
     branchPhoneNumber: '',
+    branchDescription: '', // New field for branch description
     ownerFirstName: '',
     ownerLastName: '',
     ownerEmail: '',
@@ -45,14 +46,6 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
     imageUrl: '', // For base64 image data
     latitude: null as number | null,
     longitude: null as number | null,
-    isActive: true,
-    systemStatus: 'online' as 'online' | 'offline' | 'maintenance' | 'error',
-    lastActiveDate: new Date(),
-    totalEmployees: 0,
-    totalCustomers: 0,
-    monthlyRevenue: 0,
-    features: ['appointment-booking', 'payment-processing'],
-    branchCount: 1,
   });
 
   const [isGettingLocation, setIsGettingLocation] = useState(false);
@@ -260,7 +253,8 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
         password: formData.defaultPassword,
         defaultBranchName: formData.branchName,
         branchEmail: formData.branchEmail,
-        branchPhoneNumber: formData.branchPhoneNumber // Remove +94 prefix to match your example
+        branchPhoneNumber: formData.branchPhoneNumber, // Remove +94 prefix to match your example
+        branchDescription: formData.branchDescription // Add branch description
       };
       
       console.log('🌐 [API CALL] Sending request to backend:', {
@@ -304,7 +298,7 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
       });
       
       // Call the onAdd callback to update local state
-      onAdd(salonData);
+      onSalonAdded();
       
       console.log('� [EMAIL] Backend will handle credential email sending');
       
@@ -413,7 +407,9 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Salon Name *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Salon Name <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
                     value={formData.name}
@@ -425,7 +421,9 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Salon Email *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Salon Email <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="email"
                     value={formData.salonEmail}
@@ -475,13 +473,29 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Branch Name <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
                     value={formData.branchName}
                     onChange={(e) => handleFormChange('branchName', e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                     placeholder="Main Branch, Downtown Branch, etc."
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Branch Description <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={formData.branchDescription}
+                    onChange={(e) => handleFormChange('branchDescription', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    placeholder="Brief description of this branch..."
+                    rows={3}
                     required
                   />
                 </div>
@@ -523,7 +537,7 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Owner First Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Owner First Name <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     value={formData.ownerFirstName}
@@ -534,7 +548,7 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Owner Last Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Owner Last Name <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     value={formData.ownerLastName}
@@ -547,7 +561,7 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Owner Email</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Owner Email <span className="text-red-500">*</span></label>
                   <input
                     type="email"
                     value={formData.ownerEmail}
@@ -558,7 +572,7 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Owner Phone</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Owner Phone <span className="text-red-500">*</span></label>
                   <div className="flex">
                     <span className="inline-flex items-center px-3 py-3 border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm rounded-l-lg">
                       +94
@@ -590,7 +604,7 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Username <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={formData.username}
@@ -603,7 +617,7 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Default Password</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Default Password <span className="text-red-500">*</span></label>
                 <input
                   type="password"
                   value={formData.defaultPassword}
@@ -638,7 +652,7 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Address <span className="text-red-500">*</span></label>
               <textarea
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
@@ -650,7 +664,7 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">District</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">District <span className="text-red-500">*</span></label>
                 <select
                   value={formData.district}
                   onChange={(e) => setFormData({ ...formData, district: e.target.value })}
@@ -665,7 +679,7 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Postal Code</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Postal Code <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={formData.postalCode}
@@ -747,7 +761,7 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Business Registration Number</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Business Registration Number <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={formData.brNumber}
@@ -759,7 +773,7 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onAdd }) => {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tax Identification Number</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tax Identification Number <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={formData.taxId}

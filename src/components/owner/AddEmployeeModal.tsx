@@ -2,9 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 // Config for API base URL (Vite uses import.meta.env)
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8090/api/v1';
-import { X, User, Mail, Phone, MapPin, DollarSign, Clock, Users, Shield } from 'lucide-react';
-import { apiService, EmployeeRegistrationRequest, EmployeeUpdateRequest, EmployeeWeeklySchedule, BranchResponse } from '../../services/api';
+import { X, User, Mail, Phone, MapPin, DollarSign, Clock, Users, Shield, Camera } from 'lucide-react';
+import { apiService, EmployeeRegistrationRequest, EmployeeWeeklySchedule, BranchResponse } from '../../services/api';
 import { useToast } from '../../contexts/ToastProvider';
+import ImageUploader from '../shared/ImageUploader';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface AddEmployeeModalProps {
   onClose: () => void;
@@ -16,6 +18,7 @@ interface AddEmployeeModalProps {
 
 const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, salonId, branchId, editingEmployee }) => {
   const { showSuccess, showError } = useToast();
+  const { salon } = useAuth();
   
   // Branch state
   const [branches, setBranches] = useState<BranchResponse[]>([]);
@@ -41,6 +44,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
     notes: '',
     username: '', // Only for reception
     password: '', // Only for reception
+    profilePicture: '', // Profile picture URL
   });
 
   const [weeklySchedule, setWeeklySchedule] = useState<EmployeeWeeklySchedule>({
@@ -54,6 +58,27 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
   });
 
   const [isLoading, setIsLoading] = useState(false);
+
+  // Image upload handlers
+  const handleProfilePictureUpload = (downloadURL: string) => {
+    setFormData(prev => ({
+      ...prev,
+      profilePicture: downloadURL
+    }));
+    showSuccess('Success', 'Profile picture uploaded successfully!');
+  };
+
+  const handleImageUploadError = (error: string) => {
+    showError('Upload Error', error);
+  };
+
+  const handleProfilePictureDelete = () => {
+    setFormData(prev => ({
+      ...prev,
+      profilePicture: ''
+    }));
+    showSuccess('Success', 'Profile picture removed successfully!');
+  };
 
   // Load branches when component mounts
   useEffect(() => {
@@ -139,6 +164,8 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
   // Populate form when editing employee
   useEffect(() => {
     if (editingEmployee) {
+      console.log('Loading editing employee data:', editingEmployee);
+      
       // Populate form data from editing employee
       setFormData({
         firstName: editingEmployee.firstName || '',
@@ -146,19 +173,20 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
         gender: editingEmployee.gender === 'male' ? 'MALE' : editingEmployee.gender === 'female' ? 'FEMALE' : 'MALE',
         email: editingEmployee.email || '',
         phoneNumber: editingEmployee.phone || '',
-        dateOfBirth: editingEmployee.dateOfBirth || '', // Now properly mapped
+        dateOfBirth: editingEmployee.dateOfBirth || '', 
         role: editingEmployee.role === 'barber' ? 'BARBER' : 'RECEPTIONIST',
         address: editingEmployee.address || '',
-        specializations: editingEmployee.specialties || [], // Now properly mapped as array of objects
+        specializations: editingEmployee.specialties || [], 
         baseSalary: editingEmployee.monthlySalary || 25000,
         ratings: editingEmployee.performanceRating || 3,
-        experienceYears: 1, // Default value as this might not be in Staff interface
+        experienceYears: 1, 
         emergencyContact: editingEmployee.emergencyContact?.name || '',
         emergencyPhone: editingEmployee.emergencyContact?.phone || '',
         emergencyRelationship: editingEmployee.emergencyContact?.relationship || '',
-        notes: editingEmployee.notes || '', // Now properly mapped
+        notes: editingEmployee.notes || '', 
         username: editingEmployee.username || '',
-        password: editingEmployee.password || '',
+        password: '', // Don't pre-fill password for security
+        profilePicture: editingEmployee.profileImage || '',
       });
 
       // Populate schedule if available
@@ -175,10 +203,20 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
       if (editingEmployee.servesGender) {
         const genderValue = editingEmployee.servesGender.toUpperCase() as 'MALE' | 'FEMALE' | 'BOTH';
         setServesGender(genderValue);
-        // Fetch services for barbers in edit mode
+        
+        // Fetch services for barbers in edit mode and pre-select specializations
         if (editingEmployee.role === 'barber') {
-          fetchBarberServices(genderValue);
+          fetchBarberServices(genderValue).then(() => {
+            // Pre-select the employee's specializations after services are loaded
+            console.log('Pre-selecting specializations:', editingEmployee.specialties);
+          });
         }
+      } else if (editingEmployee.role === 'barber') {
+        // Default to BOTH if not specified for barbers
+        setServesGender('BOTH');
+        fetchBarberServices('BOTH').then(() => {
+          console.log('Pre-selecting specializations with default gender:', editingEmployee.specialties);
+        });
       }
     }
   }, [editingEmployee, fetchBarberServices]);
@@ -307,6 +345,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
         emergency_contact_phone: formData.emergencyPhone,
         emergency_relationship: formData.emergencyRelationship,
         notes: formData.notes, // Include notes in API request
+        profile_image_url: formData.profilePicture, // Include profile picture URL with correct parameter name
         weekly_schedule: JSON.stringify(weeklySchedule),
         salon_id: salonId,
         ...(formData.role === 'BARBER' && {
@@ -354,6 +393,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
           emergency_contact_phone: employeeData.emergency_contact_phone,
           emergency_relationship: employeeData.emergency_relationship,
           notes: employeeData.notes,
+          profile_image_url: formData.profilePicture, // Include profile picture URL with correct parameter name
           status: 'ACTIVE' as const, // Default status for employee updates
           ...(formData.role === 'BARBER' && {
             serves_gender: servesGender,
@@ -550,10 +590,37 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
             </div>
           </div>
 
+          {/* Profile Picture Section */}
+          <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-100">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">
+                <Camera className="w-4 h-4" />
+              </div>
+              <h4 className="text-lg font-semibold text-gray-900">Profile Picture</h4>
+            </div>
+            
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">Upload a professional profile picture for this employee. This will be visible to customers when booking appointments.</p>
+              <ImageUploader
+                category="employee-profiles"
+                salonId={salon?.salonId || salonId}
+                onUploadComplete={handleProfilePictureUpload}
+                onUploadError={handleImageUploadError}
+                currentImage={formData.profilePicture}
+                onImageDelete={handleProfilePictureDelete}
+                placeholder="Upload Employee Photo"
+                className="max-w-md mx-auto"
+                maxWidth={300}
+                maxHeight={200}
+                employeeId={editingEmployee?.id} // Pass employee ID for consistent naming and old image deletion
+              />
+            </div>
+          </div>
+
           {/* Section 2: Contact Information */}
           <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-100">
             <div className="flex items-center space-x-3 mb-6">
-              <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">2</div>
+              <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">3</div>
               <h4 className="text-lg font-semibold text-gray-900">Contact Information</h4>
             </div>
             
@@ -641,7 +708,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
           {formData.role === 'RECEPTIONIST' && (
             <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-100">
               <div className="flex items-center space-x-3 mb-6">
-                <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">3</div>
+                <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">4</div>
                 <h4 className="text-lg font-semibold text-gray-900">Login Credentials</h4>
               </div>
               
@@ -685,7 +752,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
           <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-xl p-6 border border-orange-100">
             <div className="flex items-center space-x-3 mb-6">
               <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">
-                {formData.role === 'RECEPTIONIST' ? '4' : '3'}
+                {formData.role === 'RECEPTIONIST' ? '5' : '4'}
               </div>
               <h4 className="text-lg font-semibold text-gray-900">Professional Details</h4>
             </div>
@@ -811,7 +878,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
           <div className="bg-gradient-to-r from-red-50 to-pink-50 rounded-xl p-6 border border-red-100">
             <div className="flex items-center space-x-3 mb-6">
               <div className="w-8 h-8 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">
-                {formData.role === 'RECEPTIONIST' ? '5' : '4'}
+                {formData.role === 'RECEPTIONIST' ? '6' : '5'}
               </div>
               <h4 className="text-lg font-semibold text-gray-900">Emergency Contact</h4>
             </div>
@@ -866,7 +933,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
           <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl p-6 border border-indigo-100">
             <div className="flex items-center space-x-3 mb-6">
               <div className="w-8 h-8 bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">
-                {formData.role === 'RECEPTIONIST' ? '6' : '5'}
+                {formData.role === 'RECEPTIONIST' ? '7' : '6'}
               </div>
               <h4 className="text-lg font-semibold text-gray-900">
                 <Clock className="w-5 h-5 inline mr-2" />

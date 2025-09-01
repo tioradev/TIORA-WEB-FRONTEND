@@ -161,6 +161,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
           password: emp.password || '',
           salonId: emp.salon_id?.toString() || salonId.toString(),
           performanceRating: emp.ratings || emp.performance_rating || 3,
+          profileImage: emp.profile_image_url || emp.profileImageUrl || emp.profileImage || emp.imageUrl || '', // Map profile image from API
           notes: emp.notes || ''
         }));
         allStaff.push(...receptionists);
@@ -205,6 +206,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
           password: '',
           salonId: emp.salon_id?.toString() || salonId.toString(),
           performanceRating: emp.ratings || emp.performance_rating || 3,
+          profileImage: emp.profile_image_url || emp.profileImageUrl || emp.profileImage || emp.imageUrl || '', // Map profile image from API
           notes: emp.notes || '',
           servesGender: emp.serves_gender ? emp.serves_gender.toLowerCase() as 'male' | 'female' | 'both' : 'both'
         }));
@@ -265,9 +267,50 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
     setIsModalOpen(true);
   };
 
-  const handleEditStaff = (staffMember: Staff) => {
-    setEditingStaff(staffMember);
-    setIsModalOpen(true);
+  const handleEditStaff = async (staffMember: Staff) => {
+    try {
+      // Fetch complete employee details from API
+      const fullEmployeeData = await apiService.getEmployeeDetails(staffMember.id);
+      console.log('Full employee data:', fullEmployeeData);
+      
+      // Map API response to the expected format
+      const mappedEmployee: Staff = {
+        ...staffMember,
+        profileImage: fullEmployeeData.profile_image_url || staffMember.profileImage || '',
+        specialties: fullEmployeeData.specializations 
+          ? fullEmployeeData.specializations.map((spec, index) => ({
+              id: index + 1,
+              name: spec
+            })) 
+          : staffMember.specialties || [],
+        servesGender: (fullEmployeeData.notes && fullEmployeeData.notes.includes('serves_gender:'))
+          ? fullEmployeeData.notes.split('serves_gender:')[1]?.split(',')[0]?.trim() as 'male' | 'female' | 'both' || 'both'
+          : staffMember.servesGender || 'both',
+        emergencyContact: {
+          name: fullEmployeeData.emergency_contact_name || staffMember.emergencyContact?.name || '',
+          phone: fullEmployeeData.emergency_contact_phone || staffMember.emergencyContact?.phone || '',
+          relationship: fullEmployeeData.emergency_relationship || staffMember.emergencyContact?.relationship || '',
+        },
+        notes: fullEmployeeData.notes || staffMember.notes || '',
+        dateOfBirth: fullEmployeeData.date_of_birth || staffMember.dateOfBirth || '',
+        address: fullEmployeeData.address || staffMember.address || '',
+        monthlySalary: fullEmployeeData.base_salary || staffMember.monthlySalary || 25000,
+        performanceRating: fullEmployeeData.ratings || staffMember.performanceRating || 3,
+      };
+      
+      setEditingStaff(mappedEmployee);
+      setIsModalOpen(true);
+    } catch (error) {
+      console.error('Failed to fetch employee details:', error);
+      // Fallback to basic staff data if API call fails
+      setEditingStaff(staffMember);
+      setIsModalOpen(true);
+      
+      // Show error message
+      if (setError) {
+        setError('Failed to load employee details. Some information may not be available.');
+      }
+    }
   };
 
   const handleSaveStaff = async (staffData: Omit<Staff, 'id'>) => {
@@ -615,8 +658,24 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
             <div className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold">
-                    {staffMember.firstName.charAt(0)}{staffMember.lastName.charAt(0)}
+                  <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-semibold">
+                    {staffMember.profileImage ? (
+                      <img 
+                        src={staffMember.profileImage} 
+                        alt={`${staffMember.firstName} ${staffMember.lastName}`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // Fallback to initials if image fails to load
+                          e.currentTarget.style.display = 'none';
+                          if (e.currentTarget.nextSibling) {
+                            (e.currentTarget.nextSibling as HTMLElement).style.display = 'flex';
+                          }
+                        }}
+                      />
+                    ) : null}
+                    <div className={`w-full h-full flex items-center justify-center ${staffMember.profileImage ? 'hidden' : 'flex'}`}>
+                      {staffMember.firstName.charAt(0)}{staffMember.lastName.charAt(0)}
+                    </div>
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900">
