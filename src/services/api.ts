@@ -1190,13 +1190,13 @@ export interface SalonOwnerProfileUpdateResponse {
 
 // Employee registration types
 export interface EmployeeWeeklySchedule {
-  monday: { openTime: string; closeTime: string; isOpen: boolean };
-  tuesday: { openTime: string; closeTime: string; isOpen: boolean };
-  wednesday: { openTime: string; closeTime: string; isOpen: boolean };
-  thursday: { openTime: string; closeTime: string; isOpen: boolean };
-  friday: { openTime: string; closeTime: string; isOpen: boolean };
-  saturday: { openTime: string; closeTime: string; isOpen: boolean };
-  sunday: { openTime: string; closeTime: string; isOpen: boolean };
+  monday: { start: string; end: string; available: boolean };
+  tuesday: { start: string; end: string; available: boolean };
+  wednesday: { start: string; end: string; available: boolean };
+  thursday: { start: string; end: string; available: boolean };
+  friday: { start: string; end: string; available: boolean };
+  saturday: { start: string; end: string; available: boolean };
+  sunday: { start: string; end: string; available: boolean };
 }
 
 export interface EmployeeRegistrationRequest {
@@ -1217,7 +1217,7 @@ export interface EmployeeRegistrationRequest {
   emergency_relationship: string;
   username?: string; // Required for RECEPTIONIST role
   password?: string; // Required for RECEPTIONIST role
-  specializations?: string[]; // For BARBER role
+  specializations?: Array<{id: number, name: string}>; // Service objects for BARBER role
   weekly_schedule: string; // JSON string format
   ratings?: number;
   profile_image_url?: string;
@@ -1302,6 +1302,7 @@ export interface EmployeeUpdateRequest {
   notes?: string;
   status?: 'ACTIVE' | 'INACTIVE';
   serves_gender?: 'MALE' | 'FEMALE' | 'BOTH'; // Gender preference for barber services
+  specializations?: Array<{id: number, name: string}>; // Array of service objects for barber role
 }
 
 export interface EmployeeUpdateResponse {

@@ -10,7 +10,7 @@ import {
 } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastProvider';
-import StaffModal from './StaffManagement.fixed';
+import AddEmployeeModal from './AddEmployeeModal';
 import ConfirmationModal from '../shared/ConfirmationModal';
 
 interface Staff {
@@ -43,7 +43,11 @@ interface Staff {
   servesGender?: 'male' | 'female' | 'both'; // Gender preference for barber services
 }
 
-const StaffManagement: React.FC = () => {
+interface StaffManagementProps {
+  onAddStaffClick?: () => void;
+}
+
+const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) => {
   const { getSalonId } = useAuth();
   const { showSuccess, showError } = useToast();
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -315,7 +319,8 @@ const StaffManagement: React.FC = () => {
           emergency_relationship: staffData.emergencyContact.relationship || '',
           username: staffData.username || undefined,
           password: staffData.password || undefined,
-          specializations: staffData.specialties.length > 0 ? staffData.specialties : undefined,
+          specializations: staffData.specialties.length > 0 ? 
+            staffData.specialties.map(name => ({ id: 0, name })) : undefined,
           weekly_schedule: JSON.stringify(staffData.schedule),
           ratings: staffData.performanceRating || 3,
           serves_gender: staffData.role === 'barber' && staffData.servesGender ? 
@@ -473,12 +478,49 @@ const StaffManagement: React.FC = () => {
           <p className="text-gray-600">Manage your salon staff and their information</p>
         </div>
         <button
-          onClick={handleAddStaff}
+          onClick={() => {
+            if (typeof onAddStaffClick === 'function') {
+              onAddStaffClick();
+            } else {
+              handleAddStaff();
+            }
+          }}
           className="flex items-center space-x-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white px-4 py-2 rounded-lg hover:from-purple-600 hover:to-indigo-700 transition-all duration-200"
         >
           <Plus className="w-4 h-4" />
           <span>Add Staff</span>
         </button>
+      {/* Floating Add Staff Button */}
+      <button
+        onClick={() => {
+          if (typeof onAddStaffClick === 'function') {
+            onAddStaffClick();
+          } else {
+            handleAddStaff();
+          }
+        }}
+        style={{
+          position: 'fixed',
+          bottom: 32,
+          right: 32,
+          zIndex: 100,
+          background: 'linear-gradient(90deg, #a78bfa, #6366f1)',
+          color: 'white',
+          border: 'none',
+          borderRadius: '50%',
+          width: 56,
+          height: 56,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 4px 16px rgba(99,102,241,0.15)',
+          cursor: 'pointer',
+          fontSize: 24
+        }}
+        title="Add Staff"
+      >
+        <Plus className="w-7 h-7" />
+      </button>
       </div>
 
       {error && (
@@ -652,17 +694,15 @@ const StaffManagement: React.FC = () => {
 
       {/* Modal */}
       {isModalOpen && (
-        <StaffModal
-          isOpen={isModalOpen}
+        <AddEmployeeModal
           onClose={() => {
             setIsModalOpen(false);
             setEditingStaff(undefined);
           }}
-          staff={editingStaff}
-          onSave={handleSaveStaff}
-          branches={branches}
-          isSaving={saving}
-          currentSalonId={getSalonId() || undefined}
+          onAdd={handleSaveStaff}
+          salonId={getSalonId() || 1}
+          branchId={1} // You may want to make this dynamic based on selected branch
+          editingEmployee={editingStaff}
         />
       )}
 
@@ -686,6 +726,38 @@ This will permanently remove the employee from your salon system.`}
         type="danger"
         requireTyping={false}
       />
+
+      {/* Floating Add Staff Button */}
+      <button
+        onClick={() => {
+          if (typeof onAddStaffClick === 'function') {
+            onAddStaffClick();
+          } else {
+            handleAddStaff();
+          }
+        }}
+        style={{
+          position: 'fixed',
+          bottom: 32,
+          right: 32,
+          zIndex: 100,
+          background: 'linear-gradient(90deg, #a78bfa, #6366f1)',
+          color: 'white',
+          border: 'none',
+          borderRadius: '50%',
+          width: 56,
+          height: 56,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 4px 16px rgba(99,102,241,0.15)',
+          cursor: 'pointer',
+          fontSize: 24
+        }}
+        title="Add Staff"
+      >
+        <Plus className="w-7 h-7" />
+      </button>
     </div>
   );
 };

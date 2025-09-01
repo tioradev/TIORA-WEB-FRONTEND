@@ -11,6 +11,7 @@ import ServiceManagement from './ServiceManagement';
 import ExpenseManagement from '../super-admin/ExpenseManagement';
 import BranchManagement from '../super-admin/BranchManagement';
 import StaffManagement from './StaffManagement';
+import AddEmployeeModal from './AddEmployeeModal';
 import AdvancedAnalytics from './AdvancedAnalytics';
 import PaymentBilling from './PaymentBilling';
 import ProfileModal from '../shared/ProfileModal';
@@ -20,6 +21,7 @@ const OwnerDashboard: React.FC = () => {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(mockLeaveRequests);
   const [activeTab, setActiveTab] = useState<'overview' | 'staff' | 'analytics' | 'payments' | 'services' | 'leaves' | 'expenses' | 'branches'>('overview');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [addStaffModalOpen, setAddStaffModalOpen] = useState(false);
   const [leaveRequestsSearch, setLeaveRequestsSearch] = useState<string>('');
   const { isProfileModalOpen, closeProfileModal, user, salon } = useAuth();
 
@@ -486,7 +488,19 @@ const OwnerDashboard: React.FC = () => {
         )}
 
         {/* Enhanced Feature Tabs */}
-        {activeTab === 'staff' && <StaffManagement />}
+        {activeTab === 'staff' && (
+          <StaffManagement
+            onAddStaffClick={() => setAddStaffModalOpen(true)}
+          />
+        )}
+        {addStaffModalOpen && (
+          <AddEmployeeModal
+            onClose={() => setAddStaffModalOpen(false)}
+            onAdd={() => setAddStaffModalOpen(false)}
+            salonId={salon?.salonId || 1}
+            branchId={salon?.branchId || 1}
+          />
+        )}
         {activeTab === 'analytics' && <AdvancedAnalytics />}
         {activeTab === 'payments' && <PaymentBilling />}
 
