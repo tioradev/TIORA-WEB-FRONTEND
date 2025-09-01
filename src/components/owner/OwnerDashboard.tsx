@@ -15,7 +15,6 @@ import AddEmployeeModal from './AddEmployeeModal';
 import AdvancedAnalytics from './AdvancedAnalytics';
 import PaymentBilling from './PaymentBilling';
 import ProfileModal from '../shared/ProfileModal';
-import BookingModal from '../appointments/BookingModal';
 
 const OwnerDashboard: React.FC = () => {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(mockLeaveRequests);
@@ -498,7 +497,7 @@ const OwnerDashboard: React.FC = () => {
             onClose={() => setAddStaffModalOpen(false)}
             onAdd={() => setAddStaffModalOpen(false)}
             salonId={salon?.salonId || 1}
-            branchId={salon?.branchId || 1}
+            branchId={salon?.defaultBranchId || 1}
           />
         )}
         {activeTab === 'analytics' && <AdvancedAnalytics />}
