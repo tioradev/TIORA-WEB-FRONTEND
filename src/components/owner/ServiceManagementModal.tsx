@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { X, Clock, Users, Scissors, Trash2, Upload } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Clock, Users, Scissors, Trash2, Upload, Loader, CheckCircle } from 'lucide-react';
 import { Service } from '../../types';
 import { apiService, ServiceCreateRequest, ServiceUpdateRequest } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastProvider';
+import { imageUploadService } from '../../services/imageUploadService';
 
 interface ServiceManagementModalProps {
   isOpen: boolean;
@@ -39,6 +40,8 @@ const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
   useEffect(() => {
@@ -71,55 +74,88 @@ const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
     }
   }, [editingService, isOpen]);
 
-  // Handle image upload and convert to base64
+  // Handle image upload with Firebase
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    console.log('🖼️ [SERVICE] Starting Firebase image upload:', file.name);
     await processImageFile(file);
   };
 
-  // Process image file (used by both file input and drag-drop)
+  // Process image file with Firebase upload (used by both file input and drag-drop)
   const processImageFile = async (file: File) => {
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select a valid image file');
+      showError('Invalid File', 'Please select a valid image file');
       return;
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image size should be less than 5MB');
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      showError('File Too Large', 'Please select an image smaller than 10MB');
       return;
     }
-
-    setUploading(true);
 
     try {
-      // Convert to base64
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const base64String = e.target?.result as string;
-        
-        // Set the base64 string in the form data
-        setFormData({ ...formData, imageUrl: base64String });
-        setImagePreview(base64String);
-        
-        console.log('✅ [IMAGE UPLOAD] Image converted to base64 successfully');
-        setUploading(false);
-      };
+      setUploading(true);
+      setUploadProgress(0);
 
-      reader.onerror = () => {
-        console.error('❌ [IMAGE UPLOAD] Error reading file');
-        alert('Error reading the image file');
-        setUploading(false);
-      };
+      // Create preview URL immediately
+      const previewUrl = URL.createObjectURL(file);
+      setImagePreview(previewUrl);
+      console.log('🖼️ [SERVICE] Set temporary preview');
 
-      reader.readAsDataURL(file);
-    } catch (error) {
-      console.error('❌ [IMAGE UPLOAD] Error uploading image:', error);
-      alert('Error uploading image');
+      // Get salon ID for upload path
+      const salonId = getSalonId();
+      if (!salonId) {
+        showError('Upload Failed', 'Unable to determine salon ID');
+        setUploading(false);
+        return;
+      }
+
+      // Upload to Firebase
+      console.log('⬆️ [SERVICE] Initiating Firebase upload...');
+      const firebaseUrl = await imageUploadService.uploadImage(
+        file,
+        'service-images',
+        parseInt(salonId.toString()),
+        (progress) => {
+          setUploadProgress(progress.progress);
+          console.log('📊 [SERVICE] Upload progress:', progress.progress + '%');
+          
+          if (progress.error) {
+            console.error('❌ [SERVICE] Upload error:', progress.error);
+            showError('Upload Failed', progress.error);
+            setUploading(false);
+            return;
+          }
+        }
+      );
+
+      console.log('✅ [SERVICE] Firebase upload completed! URL:', firebaseUrl);
+
+      // Update form data with Firebase URL
+      setFormData({ ...formData, imageUrl: firebaseUrl });
       setUploading(false);
+      setUploadProgress(100);
+
+      showSuccess('Image Uploaded', 'Service image has been uploaded successfully to Firebase storage.');
+      
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      
+    } catch (error) {
+      console.error('❌ [SERVICE] Firebase upload error:', error);
+      showError('Upload Failed', 'Failed to upload image to Firebase. Please try again.');
+      setUploading(false);
+      setUploadProgress(0);
+      
+      // Clear preview on error
+      setImagePreview(null);
+      setFormData({ ...formData, imageUrl: '' });
     }
   };
 
@@ -140,7 +176,9 @@ const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
 
     const files = e.dataTransfer.files;
     if (files.length > 0) {
-      await processImageFile(files[0]);
+      const file = files[0];
+      console.log('📎 [SERVICE] File dropped:', file.name);
+      await processImageFile(file);
     }
   };
 
@@ -182,8 +220,12 @@ const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
           is_popular: false
         };
 
-        if (formData.imageUrl && formData.imageUrl.startsWith('data:')) {
-          console.log('📸 [SERVICE] Sending base64 image data (length:', formData.imageUrl.length, 'characters)');
+        if (formData.imageUrl) {
+          if (formData.imageUrl.startsWith('https://firebasestorage.googleapis.com')) {
+            console.log('📸 [SERVICE] Sending Firebase image URL:', formData.imageUrl);
+          } else if (formData.imageUrl.startsWith('data:')) {
+            console.log('📸 [SERVICE] Sending base64 image data (length:', formData.imageUrl.length, 'characters)');
+          }
         }
 
         console.log('📋 [SERVICE] Update data:', updateData);
@@ -250,8 +292,12 @@ const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
           is_popular: false
         };
 
-        if (formData.imageUrl && formData.imageUrl.startsWith('data:')) {
-          console.log('📸 [SERVICE] Sending base64 image data (length:', formData.imageUrl.length, 'characters)');
+        if (formData.imageUrl) {
+          if (formData.imageUrl.startsWith('https://firebasestorage.googleapis.com')) {
+            console.log('📸 [SERVICE] Sending Firebase image URL:', formData.imageUrl);
+          } else if (formData.imageUrl.startsWith('data:')) {
+            console.log('📸 [SERVICE] Sending base64 image data (length:', formData.imageUrl.length, 'characters)');
+          }
         }
 
         console.log('📋 [SERVICE] Create data:', createData);
@@ -539,14 +585,19 @@ const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                 >
-                  {imagePreview ? (
-                    /* Image Preview */
+                  {formData.imageUrl ? (
+                    /* Image Preview with Success State */
                     <div className="relative">
                       <img
-                        src={imagePreview}
+                        src={imagePreview || formData.imageUrl}
                         alt="Service preview"
-                        className="w-full h-32 object-cover rounded-lg"
+                        className="w-full h-32 object-cover rounded-lg border-2 border-green-200"
                       />
+                      <div className="absolute top-2 left-2">
+                        <div className="bg-green-100 text-green-600 p-1 rounded-full shadow-lg">
+                          <CheckCircle className="w-4 h-4" />
+                        </div>
+                      </div>
                       <button
                         type="button"
                         onClick={removeImage}
@@ -554,19 +605,53 @@ const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="flex items-center space-x-1 text-sm text-green-700">
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Uploaded successfully</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={removeImage}
+                          className="text-sm text-red-600 hover:text-red-700 font-medium"
+                        >
+                          Change Image
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     /* Upload Area */
                     <div className="text-center">
-                      <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-                      <div className="text-sm text-gray-600 mb-2">
-                        <label htmlFor="image-upload" className="cursor-pointer text-purple-600 hover:text-purple-700 font-medium">
-                          Click to upload
-                        </label>
-                        <span> or drag and drop</span>
-                      </div>
-                      <p className="text-xs text-gray-500">PNG, JPG, JPEG up to 5MB</p>
+                      {uploading ? (
+                        <div className="space-y-3">
+                          <div className="mx-auto w-8 h-8 text-blue-500">
+                            <Loader className="w-full h-full animate-spin" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-700">Uploading to Firebase...</p>
+                            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                              <div
+                                className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${uploadProgress}%` }}
+                              />
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">{uploadProgress}% complete</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                          <div className="text-sm text-gray-600 mb-2">
+                            <label htmlFor="image-upload" className="cursor-pointer text-purple-600 hover:text-purple-700 font-medium">
+                              Click to upload
+                            </label>
+                            <span> or drag and drop</span>
+                          </div>
+                          <p className="text-xs text-gray-500">PNG, JPG, JPEG up to 10MB</p>
+                        </>
+                      )}
                       <input
+                        ref={fileInputRef}
                         id="image-upload"
                         type="file"
                         accept="image/*"

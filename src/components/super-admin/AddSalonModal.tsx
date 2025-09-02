@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Mail, Navigation, X } from 'lucide-react';
-import { Salon } from '../../types';
+import React, { useState, useEffect, useRef } from 'react';
+import { Mail, Navigation, X, Upload, Loader, CheckCircle } from 'lucide-react';
 import { useToast } from '../../contexts/ToastProvider';
 import { apiService, SalonRegistrationRequest, ENDPOINTS } from '../../services/api';
 import { getCurrentConfig } from '../../config/environment';
+import { imageUploadService } from '../../services/imageUploadService';
 
 interface AddSalonModalProps {
   onClose: () => void;
@@ -50,6 +50,12 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onSalonAdded }) 
 
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [imagePreview, setImagePreview] = useState<string>('');
+  
+  // Firebase upload states
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Log form field changes for important fields
   const handleFormChange = (field: string, value: any) => {
@@ -84,22 +90,12 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onSalonAdded }) 
     'Badulla', 'Monaragala',
     'Ratnapura', 'Kegalle'
   ];
-  const convertImageToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        resolve(result);
-      };
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Handle image upload
+  // Handle image upload with Firebase
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    console.log('🖼️ [SALON] Starting Firebase image upload:', file.name);
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
@@ -107,24 +103,92 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onSalonAdded }) 
       return;
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      showError('File Too Large', 'Please select an image smaller than 5MB');
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      showError('File Too Large', 'Please select an image smaller than 10MB');
       return;
     }
 
     try {
-      // Create preview URL
+      setIsUploading(true);
+      setUploadProgress(0);
+
+      // Create preview URL immediately
       const previewUrl = URL.createObjectURL(file);
       setImagePreview(previewUrl);
+      console.log('🖼️ [SALON] Set temporary preview');
+
+      // Upload to Firebase (using salonId 1 as default for new salon images)
+      console.log('⬆️ [SALON] Initiating Firebase upload...');
+      const firebaseUrl = await imageUploadService.uploadImage(
+        file,
+        'salon-logos',
+        1, // Default salon ID for super-admin salon creation
+        (progress) => {
+          setUploadProgress(progress.progress);
+          console.log('📊 [SALON] Upload progress:', progress.progress + '%');
+          
+          if (progress.error) {
+            console.error('❌ [SALON] Upload error:', progress.error);
+            showError('Upload Failed', progress.error);
+            setIsUploading(false);
+            return;
+          }
+        }
+      );
+
+      console.log('✅ [SALON] Firebase upload completed! URL:', firebaseUrl);
+
+      // Update form data with Firebase URL
+      setFormData({ ...formData, imageUrl: firebaseUrl });
+      setIsUploading(false);
+      setUploadProgress(100);
+
+      showSuccess('Image Uploaded', 'Image has been uploaded successfully to Firebase storage.');
       
-      // Convert to base64 and store in form data
-      const base64 = await convertImageToBase64(file);
-      setFormData({ ...formData, imageUrl: base64 });
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       
-      showSuccess('Image Uploaded', 'Image uploaded successfully');
     } catch (error) {
-      showError('Upload Failed', 'Failed to process image');
+      console.error('❌ [SALON] Firebase upload error:', error);
+      showError('Upload Failed', 'Failed to upload image to Firebase. Please try again.');
+      setIsUploading(false);
+      setUploadProgress(0);
+      
+      // Clear preview on error
+      setImagePreview('');
+      setFormData({ ...formData, imageUrl: '' });
+    }
+  };
+
+  // Handle drag and drop
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      console.log('📎 [SALON] File dropped:', file.name);
+      
+      // Simulate file input change event
+      const fakeEvent = {
+        target: { files: [file] }
+      } as unknown as React.ChangeEvent<HTMLInputElement>;
+      
+      await handleImageUpload(fakeEvent);
     }
   };
 
@@ -438,27 +502,99 @@ const AddSalonModal: React.FC<AddSalonModalProps> = ({ onClose, onSalonAdded }) 
               {/* Image Upload */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Salon Image</label>
-                <div className="flex items-start space-x-4">
-                  <div className="flex-1">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all duration-200 bg-white"
-                      id="salon-image"
-                    />
-                    <p className="text-xs text-gray-500 mt-2">Maximum 5MB • JPG, PNG, GIF formats supported</p>
+                
+                {/* Show upload area only if no image is uploaded or upload failed */}
+                {!formData.imageUrl && (
+                  <div 
+                    className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 ${
+                      isDragOver 
+                        ? 'border-red-400 bg-red-50' 
+                        : 'border-gray-300 hover:border-red-400 hover:bg-gray-50'
+                    }`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  >
+                    {isUploading ? (
+                      <div className="space-y-3">
+                        <div className="mx-auto w-12 h-12 text-red-500">
+                          <Loader className="w-full h-full animate-spin" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">Uploading to Firebase...</p>
+                          <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                            <div
+                              className="bg-gradient-to-r from-red-500 to-red-600 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${uploadProgress}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">{uploadProgress}% complete</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="mx-auto w-12 h-12 text-gray-400 mb-3">
+                          <Upload className="w-full h-full" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm text-gray-600">
+                            <span className="font-medium text-red-600 cursor-pointer hover:text-red-700">
+                              Click to upload
+                            </span>
+                            {" or drag and drop"}
+                          </p>
+                          <p className="text-xs text-gray-500">Maximum 10MB • JPG, PNG, GIF formats supported</p>
+                        </div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                      </>
+                    )}
                   </div>
-                  {imagePreview && (
-                    <div className="w-24 h-24 border-2 border-red-200 rounded-lg overflow-hidden bg-white shadow-sm">
-                      <img 
-                        src={imagePreview} 
-                        alt="Salon Preview" 
-                        className="w-full h-full object-cover"
-                      />
+                )}
+
+                {/* Show image preview and success state */}
+                {formData.imageUrl && (
+                  <div className="space-y-3">
+                    <div className="relative">
+                      <div className="w-full h-48 border-2 border-green-200 rounded-lg overflow-hidden bg-white shadow-sm">
+                        <img 
+                          src={imagePreview || formData.imageUrl} 
+                          alt="Salon Preview" 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="absolute top-2 right-2">
+                        <div className="bg-green-100 text-green-600 p-2 rounded-full shadow-lg">
+                          <CheckCircle className="w-5 h-5" />
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <span className="text-sm font-medium text-green-700">Image uploaded successfully</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData({ ...formData, imageUrl: '' });
+                          setImagePreview('');
+                          if (fileInputRef.current) {
+                            fileInputRef.current.value = '';
+                          }
+                        }}
+                        className="text-sm text-red-600 hover:text-red-700 font-medium"
+                      >
+                        Change Image
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

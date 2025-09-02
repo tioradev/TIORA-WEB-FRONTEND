@@ -270,26 +270,55 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Current Image Preview */}
+      {/* Current Image Preview with Success State */}
       {currentImage && showPreview && (
-        <div className="relative inline-block">
-          <img
-            src={currentImage}
-            alt="Current"
-            className="w-32 h-32 object-cover rounded-xl border border-gray-200"
-          />
-          {onImageDelete && (
-            <button
-              onClick={handleDelete}
-              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+        <div className="space-y-3">
+          <div className="relative inline-block">
+            <img
+              src={currentImage}
+              alt="Current"
+              className="w-32 h-32 object-cover rounded-xl border border-gray-200"
+            />
+            {onImageDelete && (
+              <button
+                onClick={handleDelete}
+                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                title="Remove image"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          
+          {/* Success indicator for Firebase images */}
+          {currentImage.startsWith('https://firebasestorage.googleapis.com') && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
+                  <div>
+                    <p className="text-sm font-medium text-green-800">Image uploaded successfully!</p>
+                    <p className="text-xs text-green-600">Stored securely in Firebase Storage</p>
+                  </div>
+                </div>
+                {onImageDelete && (
+                  <button
+                    onClick={() => {
+                      console.log('🔄 User requested to change image via ImageUploader');
+                      onImageDelete();
+                    }}
+                    className="px-3 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-md transition-colors"
+                  >
+                    Change Image
+                  </button>
+                )}
+              </div>
+            </div>
           )}
         </div>
       )}
 
-      {/* Preview Images */}
+      {/* Preview Images from file selection */}
       {previewImages.length > 0 && showPreview && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -324,10 +353,10 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
         </div>
       )}
 
-      {/* Upload Area */}
-      {renderUploadArea()}
+      {/* Upload Area - Only show if no successful upload OR user is uploading */}
+      {(!currentImage || !currentImage.startsWith('https://firebasestorage.googleapis.com') || uploadProgress.isUploading) && renderUploadArea()}
 
-      {/* Upload Success */}
+      {/* Upload Success Message */}
       {uploadProgress.downloadURL && (
         <div className="flex items-center space-x-2 text-green-600 bg-green-50 p-3 rounded-lg">
           <CheckCircle className="w-5 h-5" />

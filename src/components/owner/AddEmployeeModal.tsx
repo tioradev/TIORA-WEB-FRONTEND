@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 // Config for API base URL (Vite uses import.meta.env)
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8090/api/v1';
-import { X, User, Mail, Phone, MapPin, DollarSign, Clock, Users, Shield, Camera } from 'lucide-react';
+import { X, User, Mail, Phone, MapPin, DollarSign, Clock, Users, Shield, Camera, RotateCcw } from 'lucide-react';
 import { apiService, EmployeeRegistrationRequest, EmployeeWeeklySchedule, BranchResponse } from '../../services/api';
 import { useToast } from '../../contexts/ToastProvider';
 import ImageUploader from '../shared/ImageUploader';
@@ -304,12 +304,12 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
         throw new Error('Phone number must be exactly 9 digits');
       }
 
-      if (formData.role === 'RECEPTIONIST' && (!formData.username.trim() || !formData.password.trim())) {
-        throw new Error('Username and password are required for reception staff');
+      if (formData.role === 'RECEPTIONIST' && !editingEmployee && (!formData.username.trim() || !formData.password.trim())) {
+        throw new Error('Username and password are required for new reception staff');
       }
 
-      if (formData.specializations.length === 0) {
-        throw new Error('At least one specialization is required');
+      if (formData.role === 'BARBER' && formData.specializations.length === 0) {
+        throw new Error('At least one specialization is required for barbers');
       }
 
       // Check for invalid specializations
@@ -731,18 +731,39 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     <Shield className="w-4 h-4 inline mr-2" />
-                    Password *
+                    Password {!editingEmployee && '*'}
                   </label>
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => handleInputChange('password', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="Enter password"
-                    minLength={8}
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Minimum 8 characters</p>
+                  {editingEmployee ? (
+                    // Show Reset Password button for editing mode
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // TODO: Implement reset password functionality
+                          showError('Feature Coming Soon', 'Password reset functionality will be implemented in a future update.');
+                        }}
+                        className="w-full px-4 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:from-orange-600 hover:to-red-700 transition-all duration-200 flex items-center justify-center space-x-2"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        <span>Reset Password</span>
+                      </button>
+                      <p className="text-xs text-gray-500">Click to send password reset link to employee's email</p>
+                    </div>
+                  ) : (
+                    // Show password input for new employees
+                    <>
+                      <input
+                        type="password"
+                        value={formData.password}
+                        onChange={(e) => handleInputChange('password', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="Enter password"
+                        minLength={8}
+                        required
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Minimum 8 characters</p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -998,7 +1019,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
             </button>
             <button
               type="submit"
-              disabled={isLoading || formData.specializations.length === 0}
+              disabled={isLoading || (formData.role === 'BARBER' && formData.specializations.length === 0)}
               className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (

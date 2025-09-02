@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Loader } from 'lucide-react';
+import { Plus, Loader, ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import ServiceListView from './ServiceListView';
@@ -12,9 +12,16 @@ const ServiceManagement: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const [pageSize] = useState(10); // Services per page
+  
   const { getSalonId } = useAuth();
 
-  const loadServices = async () => {
+  const loadServices = async (page: number = currentPage) => {
     try {
       setLoading(true);
       setError(null);
@@ -25,15 +32,20 @@ const ServiceManagement: React.FC = () => {
         return;
       }
 
-      console.log('🔄 [SERVICE MANAGEMENT] Loading services for salon:', salonId);
+      console.log('🔄 [SERVICE MANAGEMENT] Loading paginated services for salon:', salonId, 'Page:', page, 'Size:', pageSize);
       
-      const response = await apiService.getActiveServices(salonId);
+      const response = await apiService.getPaginatedActiveServices(salonId, page, pageSize);
       
-      console.log('📡 [SERVICE MANAGEMENT] API response received:', response);
+      console.log('📡 [SERVICE MANAGEMENT] Paginated API response received:', response);
       
       if (response.success !== false && response.services) {
-        console.log('✅ [SERVICE MANAGEMENT] Services loaded successfully:', response.services.length, 'services');
-        console.log('📋 [SERVICE MANAGEMENT] Raw service data:', response.services);
+        console.log('✅ [SERVICE MANAGEMENT] Paginated services loaded successfully:', response.services.length, 'services');
+        console.log('� [SERVICE MANAGEMENT] Pagination info - Page:', response.currentPage + 1, 'of', response.totalPages, 'Total:', response.totalElements);
+        
+        // Update pagination state
+        setCurrentPage(response.currentPage);
+        setTotalPages(response.totalPages);
+        setTotalElements(response.totalElements);
         
         // Map API category to internal category
         const mapApiCategory = (apiCategory: string): 'hair' | 'beard' | 'styling' | 'treatment' | 'coloring' | 'spa' => {
@@ -109,8 +121,14 @@ const ServiceManagement: React.FC = () => {
   };
 
   useEffect(() => {
-    loadServices();
+    loadServices(0); // Load first page
   }, []);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 0 && newPage < totalPages) {
+      loadServices(newPage);
+    }
+  };
 
   const handleAddService = () => {
     setEditingService(null);
@@ -142,8 +160,8 @@ const ServiceManagement: React.FC = () => {
     setIsModalOpen(false);
     setEditingService(null);
     
-    // Reload services to get fresh data from API
-    loadServices();
+    // Reload services to get fresh data from API - reset to first page
+    loadServices(0);
   };
 
   const handleDeleteService = async (serviceId: string) => {
@@ -175,7 +193,7 @@ const ServiceManagement: React.FC = () => {
         <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Services</h3>
         <p className="text-red-600 mb-4">{error}</p>
         <button
-          onClick={loadServices}
+          onClick={() => loadServices()}
           className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
         >
           Try Again
@@ -206,8 +224,63 @@ const ServiceManagement: React.FC = () => {
         services={services}
         onEditService={handleEditService}
         onDeleteService={handleDeleteService}
-        refreshServices={loadServices}
+        refreshServices={() => loadServices()}
       />
+
+      {/* Pagination Controls */}
+      {totalElements > 0 && totalPages > 1 && (
+        <div className="flex items-center justify-between bg-white px-6 py-3 border rounded-lg shadow-sm">
+          <div className="flex items-center text-sm text-gray-700">
+            <span>
+              Showing {currentPage * pageSize + 1} to {Math.min((currentPage + 1) * pageSize, totalElements)} of {totalElements} services
+            </span>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 0}
+              className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                currentPage === 0
+                  ? 'text-gray-400 cursor-not-allowed'
+                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              Previous
+            </button>
+            
+            <div className="flex items-center space-x-1">
+              {Array.from({ length: totalPages }, (_, index) => (
+                <button
+                  key={index}
+                  onClick={() => handlePageChange(index)}
+                  className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    index === currentPage
+                      ? 'bg-purple-600 text-white'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  {index + 1}
+                </button>
+              ))}
+            </div>
+            
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages - 1}
+              className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                currentPage === totalPages - 1
+                  ? 'text-gray-400 cursor-not-allowed'
+                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+            >
+              Next
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Service Management Modal */}
       {isModalOpen && (
@@ -219,7 +292,7 @@ const ServiceManagement: React.FC = () => {
           }}
           onSave={handleSaveService}
           editingService={editingService || undefined}
-          refreshServices={loadServices}
+          refreshServices={() => loadServices()}
         />
       )}
     </div>

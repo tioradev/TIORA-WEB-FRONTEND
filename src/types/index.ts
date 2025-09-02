@@ -417,6 +417,33 @@ export interface Promotion {
   createdBy: string;
 }
 
+// API-compatible promotion interfaces
+export interface PromotionResponse {
+  promotionId: number;
+  promotionName: string;
+  description: string;
+  startDate: string; // ISO date string
+  endDate: string; // ISO date string
+  imageUrl?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdBy: string;
+  createdAt: string; // ISO datetime string
+  updatedAt: string; // ISO datetime string
+  active: boolean;
+  currentlyValid: boolean;
+  expired: boolean;
+  upcoming: boolean;
+}
+
+export interface PromotionRequest {
+  promotionName: string;
+  description: string;
+  startDate: string; // ISO date string (YYYY-MM-DD)
+  endDate: string; // ISO date string (YYYY-MM-DD)
+  imageUrl?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+}
+
 export interface Integration {
   id: string;
   salonId: string;

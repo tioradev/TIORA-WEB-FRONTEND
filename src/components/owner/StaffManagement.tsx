@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Edit, Trash2, User, Phone, 
-  DollarSign, Star, Building, RotateCcw
+  DollarSign, Star, Building, RotateCcw,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { 
   apiService, 
@@ -62,8 +63,20 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | undefined>();
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const [paginatedLoading, setPaginatedLoading] = useState(false);
+  
+  // Statistics (non-paginated)
+  const [totalEmployees, setTotalEmployees] = useState(0);
+  const [activeEmployees, setActiveEmployees] = useState(0);
+  const [inactiveEmployees, setInactiveEmployees] = useState(0);
+  
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
     isOpen: boolean;
     staffId: string;
@@ -77,6 +90,10 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  useEffect(() => {
+    loadPaginatedStaff();
+  }, [currentPage, pageSize]);
 
   useEffect(() => {
     applyFilters();
@@ -94,29 +111,39 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
         return;
       }
       
-      // Load branches first
-      const branchesResponse = await apiService.getComprehensiveBranches(salonId);
+      // Load branches and statistics
+      const [branchesResponse, statsResponse] = await Promise.all([
+        apiService.getComprehensiveBranches(salonId),
+        apiService.getEmployeesBySalon(salonId) // For statistics only
+      ]);
+      
       if (branchesResponse.branches) {
         setBranches(branchesResponse.branches.map(branch => ({
           id: branch.branchId.toString(),
           name: branch.branchName
         })));
-        
-        // Load staff data
-        await loadStaffData();
       } else {
         setError('Failed to load branches');
       }
+      
+      // Set statistics from non-paginated response
+      if (statsResponse) {
+        setTotalEmployees(statsResponse.total_employees || 0);
+        setActiveEmployees(statsResponse.active_employees || 0);
+        setInactiveEmployees(statsResponse.inactive_employees || 0);
+      }
+      
     } catch (error) {
       console.error('Error loading initial data:', error);
-      setError('Failed to load data');
+      setError('Failed to load initial data');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadStaffData = async () => {
+  const loadPaginatedStaff = async () => {
     try {
+      setPaginatedLoading(true);
       setError(null);
       
       // Get the actual salon ID from the logged-in user
@@ -126,97 +153,60 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
         return;
       }
       
-      // Load receptionists and barbers
-      const [receptionistsResponse, barbersResponse] = await Promise.all([
-        apiService.getSalonReceptionists(salonId),
-        apiService.getSalonBarbers(salonId)
-      ]);
-
-      const allStaff: Staff[] = [];
-
-      // Process receptionists
-      if (Array.isArray(receptionistsResponse)) {
-        const receptionists = receptionistsResponse.map((emp: any) => ({
-          id: emp.id || emp.employee_id || Math.random().toString(),
-          firstName: emp.first_name || emp.firstName || '',
-          lastName: emp.last_name || emp.lastName || '',
+      // Load paginated employees
+      const paginatedResponse = await apiService.getPaginatedEmployeesBySalon(salonId, currentPage, pageSize);
+      
+      if (paginatedResponse && paginatedResponse.content) {
+        // Transform the API response to match our Staff interface
+        const transformedStaff: Staff[] = paginatedResponse.content.map((emp: any) => ({
+          id: emp.employee_id?.toString() || emp.id?.toString() || 'unknown',
+          firstName: emp.first_name || '',
+          lastName: emp.last_name || '',
           gender: emp.gender || 'male',
           email: emp.email || '',
-          phone: emp.phone_number || emp.phone || '',
-          role: 'reception' as const,
-          branchId: emp.branch_id?.toString() || 'default',
-          specialties: [], // Receptionists don't have specialties
-          schedule: emp.schedule || getDefaultSchedule(),
-          monthlySalary: emp.base_salary || emp.salary || 3000,
-          status: emp.status?.toLowerCase() || 'active',
-          joinDate: emp.hire_date || emp.joined_date || new Date().toISOString().split('T')[0],
-          dateOfBirth: emp.date_of_birth || emp.dateOfBirth || '',
-          address: emp.address || '',
-          emergencyContact: {
-            name: emp.emergency_contact_name || emp.emergencyContact || '',
-            phone: emp.emergency_contact_phone || emp.emergencyPhone || '',
-            relationship: emp.emergency_relationship || emp.emergencyRelationship || ''
-          },
-          username: emp.username || '',
-          password: emp.password || '',
-          salonId: emp.salon_id?.toString() || salonId.toString(),
-          performanceRating: emp.ratings || emp.performance_rating || 3,
-          profileImage: emp.profile_image_url || emp.profileImageUrl || emp.profileImage || emp.imageUrl || '', // Map profile image from API
-          notes: emp.notes || ''
-        }));
-        allStaff.push(...receptionists);
-      }
-
-      // Process barbers
-      if (Array.isArray(barbersResponse)) {
-        const barbers = barbersResponse.map((emp: any) => ({
-          id: emp.id || emp.employee_id || Math.random().toString(),
-          firstName: emp.first_name || emp.firstName || '',
-          lastName: emp.last_name || emp.lastName || '',
-          gender: emp.gender || 'male',
-          email: emp.email || '',
-          phone: emp.phone_number || emp.phone || '',
-          role: 'barber' as const,
+          phone: emp.phone_number || '', // Updated to match snake_case
+          role: (emp.role?.toLowerCase() === 'receptionist' ? 'reception' : 'barber') as 'barber' | 'reception',
           branchId: emp.branch_id?.toString() || 'default',
           specialties: Array.isArray(emp.specializations) 
-            ? emp.specializations.map((spec: any) => 
-                typeof spec === 'string' 
-                  ? { id: 0, name: spec } // Convert string to object
-                  : { id: spec.id || 0, name: spec.name || spec } // Handle object format
-              )
-            : Array.isArray(emp.specialties)
-            ? emp.specialties.map((spec: any) => 
-                typeof spec === 'string' 
-                  ? { id: 0, name: spec } 
-                  : { id: spec.id || 0, name: spec.name || spec }
-              )
+            ? emp.specializations.map((spec: string, index: number) => ({ id: index, name: spec }))
             : [],
-          schedule: emp.schedule || getDefaultSchedule(),
-          monthlySalary: emp.base_salary || emp.salary || 3000,
-          status: emp.status?.toLowerCase() || 'active',
-          joinDate: emp.hire_date || emp.joined_date || new Date().toISOString().split('T')[0],
-          dateOfBirth: emp.date_of_birth || emp.dateOfBirth || '',
+          schedule: emp.weekly_schedule ? 
+            (typeof emp.weekly_schedule === 'string' ? JSON.parse(emp.weekly_schedule) : emp.weekly_schedule) 
+            : getDefaultSchedule(),
+          monthlySalary: emp.base_salary || 3000,
+          status: 'active' as 'active' | 'inactive' | 'on-leave', // Assuming active by default
+          joinDate: emp.hire_date || new Date().toISOString().split('T')[0],
+          dateOfBirth: emp.date_of_birth || '',
           address: emp.address || '',
           emergencyContact: {
-            name: emp.emergency_contact_name || emp.emergencyContact || '',
-            phone: emp.emergency_contact_phone || emp.emergencyPhone || '',
-            relationship: emp.emergency_relationship || emp.emergencyRelationship || ''
+            name: emp.emergency_contact_name || '',
+            phone: emp.emergency_contact_phone || '',
+            relationship: emp.emergency_relationship || ''
           },
-          username: '', // Barbers don't have username/password
-          password: '',
+          username: emp.username || '',
+          password: '', // Don't expose password
           salonId: emp.salon_id?.toString() || salonId.toString(),
-          performanceRating: emp.ratings || emp.performance_rating || 3,
-          profileImage: emp.profile_image_url || emp.profileImageUrl || emp.profileImage || emp.imageUrl || '', // Map profile image from API
+          performanceRating: emp.ratings || 3,
+          profileImage: emp.profile_image_url || '',
           notes: emp.notes || '',
-          servesGender: emp.serves_gender ? emp.serves_gender.toLowerCase() as 'male' | 'female' | 'both' : 'both'
+          servesGender: emp.serves_gender?.toLowerCase() || 'both'
         }));
-        allStaff.push(...barbers);
+        
+        setStaff(transformedStaff);
+        setTotalPages(paginatedResponse.totalPages);
+        setTotalElements(paginatedResponse.totalElements);
+      } else {
+        setStaff([]);
+        setTotalPages(0);
+        setTotalElements(0);
       }
-
-      setStaff(allStaff);
+      
     } catch (error) {
-      console.error('Error loading staff data:', error);
+      console.error('Error loading paginated staff data:', error);
       setError('Failed to load staff data');
+      setStaff([]);
+    } finally {
+      setPaginatedLoading(false);
     }
   };
 
@@ -315,7 +305,6 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
 
   const handleSaveStaff = async (staffData: Omit<Staff, 'id'>) => {
     try {
-      setSaving(true);
       setError(null);
 
       if (editingStaff) {
@@ -325,11 +314,11 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
           last_name: staffData.lastName,
           email: staffData.email,
           phone_number: staffData.phone,
-          gender: staffData.gender.toUpperCase() as 'MALE' | 'FEMALE',
+          gender: (staffData.gender || 'male').toUpperCase() as 'MALE' | 'FEMALE',
           address: staffData.address || '',
           branch_id: staffData.branchId ? parseInt(staffData.branchId) : undefined,
           base_salary: staffData.monthlySalary,
-          status: staffData.status.toUpperCase() as 'ACTIVE' | 'INACTIVE',
+          status: (staffData.status || 'active').toUpperCase() as 'ACTIVE' | 'INACTIVE',
           emergency_contact_name: staffData.emergencyContact.name,
           emergency_contact_phone: staffData.emergencyContact.phone,
           emergency_relationship: staffData.emergencyContact.relationship,
@@ -346,7 +335,9 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
             'Employee Updated',
             `${staffData.firstName} ${staffData.lastName} has been updated successfully.`
           );
-          await loadStaffData(); // Reload data
+          await loadPaginatedStaff(); // Reload data
+          setIsModalOpen(false);
+          setEditingStaff(undefined);
         } else {
           setError('Failed to update staff');
           showError(
@@ -367,7 +358,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
           last_name: staffData.lastName,
           email: staffData.email,
           phone_number: staffData.phone,
-          gender: staffData.gender.toUpperCase() as 'MALE' | 'FEMALE',
+          gender: (staffData.gender || 'male').toUpperCase() as 'MALE' | 'FEMALE',
           date_of_birth: staffData.dateOfBirth || '1990-01-01', // Use actual date or default
           address: staffData.address || '',
           salon_id: salonId,
@@ -395,7 +386,14 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
             'Employee Added',
             `${staffData.firstName} ${staffData.lastName} has been successfully added to your team.`
           );
-          await loadStaffData(); // Reload data
+          // Force reload of current page data and reset to first page if not already there
+          if (currentPage === 0) {
+            await loadPaginatedStaff(); // Reload current page
+          } else {
+            setCurrentPage(0); // This will trigger loadPaginatedStaff via useEffect
+          }
+          setIsModalOpen(false);
+          setEditingStaff(undefined);
         } else {
           setError('Failed to create staff');
           showError(
@@ -404,9 +402,6 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
           );
         }
       }
-
-      setIsModalOpen(false);
-      setEditingStaff(undefined);
     } catch (error) {
       console.error('Error saving staff:', error);
       const action = editingStaff ? 'update' : 'add';
@@ -415,8 +410,6 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
         `${editingStaff ? 'Update' : 'Addition'} Failed`,
         `An error occurred while ${action}ing the employee. Please check your connection and try again.`
       );
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -442,7 +435,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
           'Employee Deleted',
           `${staffName} has been permanently removed from your salon.`
         );
-        await loadStaffData(); // Reload data
+        await loadPaginatedStaff(); // Reload data
       } else {
         setError('Failed to delete staff');
         showError(
@@ -480,7 +473,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
           `Employee ${action === 'activated' ? 'Activated' : 'Deactivated'}`,
           `${staffName} has been ${action} successfully.`
         );
-        await loadStaffData(); // Reload data
+        await loadPaginatedStaff(); // Reload data
       } else {
         setError('Failed to update staff status');
         showError(
@@ -651,8 +644,57 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
         </div>
       </div>
 
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Staff</p>
+              <p className="text-2xl font-bold text-gray-900">{totalEmployees}</p>
+            </div>
+            <div className="p-3 bg-blue-100 rounded-full">
+              <User className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Active Staff</p>
+              <p className="text-2xl font-bold text-green-600">{activeEmployees}</p>
+            </div>
+            <div className="p-3 bg-green-100 rounded-full">
+              <Star className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Inactive Staff</p>
+              <p className="text-2xl font-bold text-gray-600">{inactiveEmployees}</p>
+            </div>
+            <div className="p-3 bg-gray-100 rounded-full">
+              <Building className="w-6 h-6 text-gray-600" />
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Staff Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="relative">
+        {paginatedLoading && (
+          <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
+            <div className="flex items-center space-x-2">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
+              <span className="text-gray-600">Loading employees...</span>
+            </div>
+          </div>
+        )}
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredStaff.map(staffMember => (
           <div key={staffMember.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow duration-200">
             <div className="p-6">
@@ -744,6 +786,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
             </div>
           </div>
         ))}
+        </div>
       </div>
 
       {filteredStaff.length === 0 && (
@@ -766,6 +809,88 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
               <span>Add First Staff Member</span>
             </button>
           )}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2 text-sm text-gray-600">
+              <span>
+                Showing {currentPage * pageSize + 1} to {Math.min((currentPage + 1) * pageSize, totalElements)} of {totalElements} employees
+              </span>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              {/* Page Size Selector */}
+              <div className="flex items-center space-x-2 mr-4">
+                <label className="text-sm text-gray-600">Show:</label>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(0); // Reset to first page
+                  }}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+
+              {/* Pagination Buttons */}
+              <button
+                onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+                disabled={currentPage === 0}
+                className="flex items-center space-x-1 px-3 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Previous</span>
+              </button>
+
+              {/* Page Numbers */}
+              <div className="flex items-center space-x-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i;
+                  } else if (currentPage < 2) {
+                    pageNum = i;
+                  } else if (currentPage > totalPages - 3) {
+                    pageNum = totalPages - 5 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`px-3 py-2 text-sm rounded-lg ${
+                        currentPage === pageNum
+                          ? 'bg-purple-600 text-white'
+                          : 'border border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {pageNum + 1}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
+                disabled={currentPage === totalPages - 1}
+                className="flex items-center space-x-1 px-3 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                <span>Next</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

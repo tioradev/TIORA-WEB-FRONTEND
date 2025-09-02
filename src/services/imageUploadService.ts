@@ -13,7 +13,8 @@ export type ImageCategory =
   | 'salon-gallery' 
   | 'service-images' 
   | 'owner-profiles'
-  | 'salon-logos';
+  | 'salon-logos'
+  | 'promotions';
 
 class ImageUploadService {
   private readonly MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -288,7 +289,43 @@ class ImageUploadService {
         async () => {
           try {
             // Upload completed successfully
+            console.log('🔥 Firebase upload task completed successfully');
+            console.log('📦 Upload snapshot:', uploadTask.snapshot);
+            console.log('📍 Storage ref:', uploadTask.snapshot.ref);
+            console.log('📄 Metadata:', uploadTask.snapshot.metadata);
+            
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            console.log('✅ Download URL retrieved:', downloadURL);
+            console.log('🔍 URL validation:', {
+              isString: typeof downloadURL === 'string',
+              length: downloadURL?.length || 0,
+              startsWithHttps: downloadURL?.startsWith('https://'),
+              containsFirebaseStorage: downloadURL?.includes('firebasestorage.googleapis.com')
+            });
+            
+            // Additional check: If downloadURL is not a proper URL, try to construct it
+            if (!downloadURL || typeof downloadURL !== 'string' || !downloadURL.startsWith('https://')) {
+              console.warn('⚠️ Invalid download URL received, attempting to construct from metadata');
+              const metadata = uploadTask.snapshot.metadata;
+              const bucket = metadata.bucket;
+              const name = metadata.name;
+              const token = metadata.downloadTokens;
+              
+              if (bucket && name && token) {
+                const constructedURL = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(name)}?alt=media&token=${token}`;
+                console.log('🔧 Constructed download URL:', constructedURL);
+                
+                onProgress?.({
+                  progress: 100,
+                  isUploading: false,
+                  error: null,
+                  downloadURL: constructedURL
+                });
+                
+                resolve(constructedURL);
+                return;
+              }
+            }
             
             onProgress?.({
               progress: 100,
@@ -299,6 +336,7 @@ class ImageUploadService {
             
             resolve(downloadURL);
           } catch (error) {
+            console.error('❌ Failed to get download URL:', error);
             const errorMessage = 'Failed to get download URL.';
             onProgress?.({
               progress: 0,

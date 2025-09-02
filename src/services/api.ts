@@ -1,5 +1,9 @@
 import { getCurrentConfig, envLog } from '../config/environment';
-import type { PaginationParams, PaginatedResponse } from '../types';
+import type { 
+  PaginatedResponse, 
+  PromotionResponse, 
+  PromotionRequest 
+} from '../types';
 
 // API Endpoints
 const ENDPOINTS = {
@@ -24,6 +28,7 @@ const ENDPOINTS = {
     UPDATE_SALON: '/employees/salon',
     DELETE: '/employees',
     BY_SALON: '/employees/salon',
+    PAGINATED: '/employees/salon', // /employees/salon/{salonId}/paginated
     RECEPTIONISTS: '/employees/salon', // /employees/salon/{salonId}/receptionists
     BARBERS: '/employees/salon', // /employees/salon/{salonId}/barbers
     DETAILS: '/employees', // /employees/{employeeId}/details
@@ -31,6 +36,7 @@ const ENDPOINTS = {
   SERVICES: {
     CREATE: '/services',
     ACTIVE: '/services/active',
+    ACTIVE_PAGINATED: '/services/active/paginated',
     DETAIL: '/services',
     UPDATE: '/services',
     DELETE: '/services',
@@ -52,6 +58,12 @@ const ENDPOINTS = {
     CANCEL_WITH_ROLE: '/appointments', // PUT /appointments/{appointmentId}/cancel-with-role?userRole={role}
     CONFIRM_PAYMENT_WITH_ROLE: '/appointments', // PUT /appointments/{appointmentId}/confirm-payment?userRole={role}
     COMPLETE_SESSION_WITH_ROLE: '/appointments', // PUT /appointments/{appointmentId}/complete-session?userRole={role}
+  },
+  PROMOTIONS: {
+    CREATE: '/promotions',
+    GET_ALL: '/promotions', // GET /promotions?page=0&size=20
+    UPDATE: '/promotions', // PUT /promotions/{id}
+    DELETE: '/promotions', // DELETE /promotions/{id}
   },
 };
 
@@ -312,6 +324,61 @@ class ApiService {
     return this.request<ComprehensiveBranchResponse>(endpoint);
   }
 
+  // Promotion Management API
+  async getAllPromotions(page: number = 0, size: number = 20): Promise<PaginatedResponse<PromotionResponse>> {
+    const endpoint = `${ENDPOINTS.PROMOTIONS.GET_ALL}?page=${page}&size=${size}`;
+    envLog.info('🎁 [API] Getting all promotions with pagination...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('📄 [API] Page:', page, 'Size:', size);
+    
+    return this.request<PaginatedResponse<PromotionResponse>>(endpoint);
+  }
+
+  async createPromotion(promotionData: PromotionRequest): Promise<PromotionResponse> {
+    const endpoint = ENDPOINTS.PROMOTIONS.CREATE;
+    envLog.info('🎁 [API] Creating new promotion...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('📝 [API] Promotion data:', promotionData);
+    
+    return this.request<PromotionResponse>(
+      endpoint,
+      {
+        method: 'POST',
+        body: JSON.stringify(promotionData),
+      }
+    );
+  }
+
+  async updatePromotion(promotionId: number, promotionData: PromotionRequest): Promise<PromotionResponse> {
+    const endpoint = `${ENDPOINTS.PROMOTIONS.UPDATE}/${promotionId}`;
+    envLog.info('🎁 [API] Updating promotion...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🆔 [API] Promotion ID:', promotionId);
+    envLog.info('📝 [API] Promotion data:', promotionData);
+    
+    return this.request<PromotionResponse>(
+      endpoint,
+      {
+        method: 'PUT',
+        body: JSON.stringify(promotionData),
+      }
+    );
+  }
+
+  async deletePromotion(promotionId: number): Promise<any> {
+    const endpoint = `${ENDPOINTS.PROMOTIONS.DELETE}/${promotionId}`;
+    envLog.info('🎁 [API] Deleting promotion...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🆔 [API] Promotion ID:', promotionId);
+    
+    return this.request<any>(
+      endpoint,
+      {
+        method: 'DELETE',
+      }
+    );
+  }
+
   // Employee Management API
   async createEmployee(employeeData: EmployeeRegistrationRequest): Promise<EmployeeRegistrationResponse> {
     return this.request<EmployeeRegistrationResponse>(
@@ -390,6 +457,21 @@ class ApiService {
     return this.request<EmployeeRegistrationResponse[]>(endpoint);
   }
 
+  // Get paginated employees by salon ID
+  async getPaginatedEmployeesBySalon(
+    salonId: string | number, 
+    page: number = 0, 
+    size: number = 10
+  ): Promise<PaginatedEmployeesResponse> {
+    const endpoint = `${ENDPOINTS.EMPLOYEES.PAGINATED}/${salonId}/paginated?page=${page}&size=${size}`;
+    envLog.info('📄 [API] Getting paginated employees by salon...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🏢 [API] Salon ID:', salonId);
+    envLog.info('📊 [API] Page:', page, 'Size:', size);
+    
+    return this.request<PaginatedEmployeesResponse>(endpoint);
+  }
+
   // Delete employee by ID
   async deleteEmployee(employeeId: string | number): Promise<{ message: string; success: boolean }> {
     const endpoint = `${ENDPOINTS.EMPLOYEES.DELETE}/${employeeId}`;
@@ -450,6 +532,81 @@ class ApiService {
       return {
         services: [],
         message: 'Failed to load services',
+        success: false
+      };
+    }
+  }
+
+  async getPaginatedActiveServices(
+    salonId: string | number,
+    page: number = 0,
+    size: number = 10
+  ): Promise<PaginatedServicesResponse> {
+    const endpoint = `${ENDPOINTS.SERVICES.ACTIVE_PAGINATED}?salonId=${salonId}&page=${page}&size=${size}`;
+    envLog.info('📋 [API] Getting paginated active services...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('🏢 [API] Salon ID:', salonId);
+    envLog.info('📄 [API] Page:', page, 'Size:', size);
+    
+    try {
+      const response = await this.request<any>(endpoint);
+      envLog.info('📡 [API] Paginated services response received:', response);
+      
+      if (response && typeof response === 'object') {
+        // Handle Spring Boot pagination format
+        if ('content' in response) {
+          envLog.info('✅ [API] Paginated services loaded successfully (Spring format)');
+          envLog.info(`📊 [API] Total services: ${response.totalElements}, Current page: ${response.number + 1}/${response.totalPages}`);
+          return {
+            services: response.content || [],
+            currentPage: response.number || 0,
+            totalPages: response.totalPages || 0,
+            totalElements: response.totalElements || 0,
+            size: response.size || size,
+            message: 'Services loaded successfully',
+            success: true
+          };
+        }
+        // Handle direct services array format
+        else if ('services' in response) {
+          envLog.info('✅ [API] Paginated services loaded successfully (direct format)');
+          envLog.info(`📊 [API] Total services: ${response.totalElements}, Current page: ${response.currentPage + 1}/${response.totalPages}`);
+          return response;
+        }
+        // Handle array response
+        else if (Array.isArray(response)) {
+          envLog.info('✅ [API] Paginated services loaded successfully (array format)');
+          return {
+            services: response,
+            currentPage: 0,
+            totalPages: 1,
+            totalElements: response.length,
+            size: response.length,
+            message: 'Services loaded successfully',
+            success: true
+          };
+        }
+      }
+      
+      envLog.warn('⚠️ [API] Unexpected paginated services response format:', response);
+      return {
+        services: [],
+        currentPage: 0,
+        totalPages: 0,
+        totalElements: 0,
+        size: size,
+        message: 'Unexpected response format',
+        success: false
+      };
+    } catch (error) {
+      envLog.error('❌ [API] Error getting paginated active services:', error);
+      return {
+        services: [],
+        currentPage: 0,
+        totalPages: 0,
+        totalElements: 0,
+        size: size,
+        message: error instanceof Error ? error.message : 'Failed to load paginated services',
         success: false
       };
     }
@@ -1432,6 +1589,35 @@ export interface EmployeesResponse {
   success: boolean;
 }
 
+export interface PaginatedEmployeesResponse {
+  content: EmployeeData[];
+  pageable: {
+    pageNumber: number;
+    pageSize: number;
+    sort: {
+      empty: boolean;
+      sorted: boolean;
+      unsorted: boolean;
+    };
+    offset: number;
+    paged: boolean;
+    unpaged: boolean;
+  };
+  last: boolean;
+  totalPages: number;
+  totalElements: number;
+  size: number;
+  number: number;
+  sort: {
+    empty: boolean;
+    sorted: boolean;
+    unsorted: boolean;
+  };
+  first: boolean;
+  numberOfElements: number;
+  empty: boolean;
+}
+
 // Service Management Types
 export interface ServiceCreateRequest {
   salon_id: number;
@@ -1503,6 +1689,16 @@ export interface ServicesListResponse {
   services: ServiceData[];
   message: string;
   success: boolean;
+}
+
+export interface PaginatedServicesResponse {
+  services: ServiceData[];
+  currentPage: number;
+  totalPages: number;
+  totalElements: number;
+  size: number;
+  message?: string;
+  success?: boolean;
 }
 
 // Availability types

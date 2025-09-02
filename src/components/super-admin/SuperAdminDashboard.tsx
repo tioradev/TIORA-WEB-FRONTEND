@@ -11,7 +11,7 @@ import SalonManagement from './SalonManagement';
 import AuditReports from './AuditReports';
 import SystemSettings from './SystemSettings';
 import SystemAnalytics from './SystemAnalytics';
-import MarketingCommunication from '../owner/MarketingCommunication';
+import MarketingCommunication from './MarketingCommunication';
 import ProfileModal from '../shared/ProfileModal';
 import { mockSalons, mockSystemAnalytics, mockProfiles } from '../../data/mockData';
 
