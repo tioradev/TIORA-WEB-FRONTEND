@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Calendar, DollarSign, Clock, Users, Plus, Download, ChevronLeft, ChevronRight, X, CheckCircle, Star, Search, Loader } from 'lucide-react';
+import { Calendar, DollarSign, Clock, Users, Plus, Download, ChevronLeft, ChevronRight, X, CheckCircle, Star, Search, Loader, Wifi, WifiOff } from 'lucide-react';
 import { mockBarbers } from '../../data/mockData';
 import { Appointment } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
@@ -21,8 +21,20 @@ const ReceptionDashboard: React.FC = () => {
   const [paymentConfirmModal, setPaymentConfirmModal] = useState<{isOpen: boolean, appointment: Appointment | null}>({isOpen: false, appointment: null});
   const [completeSessionModal, setCompleteSessionModal] = useState<{isOpen: boolean, appointment: Appointment | null}>({isOpen: false, appointment: null});
   const [cancelAppointmentModal, setCancelAppointmentModal] = useState<{isOpen: boolean, appointment: Appointment | null}>({isOpen: false, appointment: null});
+  
+  // WebSocket state for real-time updates
+  const [wsConnected, setWsConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  
   const { triggerReceptionNotification } = useNotificationHelpers();
   const { isProfileModalOpen, closeProfileModal, user, employee, getSalonId, getBranchId } = useAuth();
+
+  // Manual reconnection function for the retry button
+  const handleRetryConnection = () => {
+    console.log('🔄 [WEBSOCKET] Manual retry requested');
+    window.location.reload(); // Simple approach - reload the page to restart WebSocket
+  };
 
   // Create user profile from real employee data instead of mock data
   const userProfile = {
@@ -61,12 +73,14 @@ const ReceptionDashboard: React.FC = () => {
   // Load appointments from API
   const loadAppointments = async () => {
     try {
+      console.log('🔄 [LOAD] Starting loadAppointments...');
       setLoading(true);
       setError(null);
       
       const salonId = getSalonId();
       const branchId = getBranchId();
       if (!salonId) {
+        console.error('❌ [LOAD] No salon ID found');
         setError('Salon ID not found. Please ensure you are logged in.');
         return;
       }
@@ -173,13 +187,6 @@ const ReceptionDashboard: React.FC = () => {
     }
   }, [employee?.salonId]);
 
-  // Refresh appointments function
-  const refreshAppointments = () => {
-    loadAppointments();
-    loadTodayAppointments();
-    loadPendingPayments();
-  };
-
   const [successMessage, setSuccessMessage] = useState<{show: boolean, message: string}>({show: false, message: ''});
   const [pendingPaymentsSearch, setPendingPaymentsSearch] = useState('');
   const [todayAppointmentsSearch, setTodayAppointmentsSearch] = useState('');
@@ -191,9 +198,13 @@ const ReceptionDashboard: React.FC = () => {
   // Load today's appointments from API
   const loadTodayAppointments = async () => {
     try {
+      console.log('🔄 [LOAD] Starting loadTodayAppointments...');
       const salonId = getSalonId();
       const branchId = getBranchId();
-      if (!salonId) return;
+      if (!salonId) {
+        console.error('❌ [LOAD] No salon ID found for today\'s appointments');
+        return;
+      }
 
       console.log('📅 [RECEPTION DASHBOARD] Loading today\'s appointments for salon:', salonId, 'branch:', branchId);
       
@@ -379,6 +390,61 @@ const ReceptionDashboard: React.FC = () => {
     }
   };
   
+  // Function to refresh appointments without page reload
+  const fetchAppointments = async () => {
+    try {
+      const salonId = getSalonId();
+      const branchId = getBranchId();
+      
+      if (!salonId) {
+        console.error('❌ [REFRESH] No salon ID found');
+        return;
+      }
+
+      console.log('🔄 [REFRESH] Refreshing all appointments via WebSocket...');
+      
+      // Refresh all appointment lists to ensure data consistency
+      await Promise.all([
+        loadAppointments(),        // All appointments
+        loadTodayAppointments(),   // Today's appointments  
+        loadPendingPayments()      // Pending payments
+      ]);
+      
+      console.log('✅ [REFRESH] All appointment lists refreshed via WebSocket');
+    } catch (error) {
+      console.error('❌ [REFRESH] Failed to refresh appointments:', error);
+    }
+  };
+
+  // Function to update a specific appointment in the list (for future granular updates)
+  const updateAppointmentInList = (updatedAppointment: Appointment) => {
+    setAppointments(prevAppointments => 
+      prevAppointments.map(appointment => 
+        appointment.id === updatedAppointment.id 
+          ? updatedAppointment 
+          : appointment
+      )
+    );
+    
+    setTodayAppointments(prevTodayAppointments =>
+      prevTodayAppointments.map(appointment =>
+        appointment.id === updatedAppointment.id
+          ? updatedAppointment
+          : appointment
+      )
+    );
+    
+    setPendingPayments(prevPendingPayments =>
+      prevPendingPayments.map(appointment =>
+        appointment.id === updatedAppointment.id
+          ? updatedAppointment
+          : appointment
+      )
+    );
+    
+    console.log('✅ [REFRESH] Appointment updated in list:', updatedAppointment.id);
+  };
+  
   // Search function for appointments
   const searchAppointments = (appointments: Appointment[], searchTerm: string) => {
     if (!searchTerm.trim()) return appointments;
@@ -413,6 +479,152 @@ const ReceptionDashboard: React.FC = () => {
     }, 3000); // Hide after 3 seconds
   };
 
+  const showErrorMessage = (message: string) => {
+    // You can implement error state here or use a toast library
+    console.error('❌ [ERROR]', message);
+    alert(message); // Simple alert for now, can be replaced with better UI
+  };
+
+  // Initialize WebSocket connection - run once on mount
+  useEffect(() => {
+    const initWebSocket = () => {
+      const salonId = getSalonId();
+      if (!salonId) {
+        console.warn('🔌 [WEBSOCKET] No salon ID available for WebSocket connection');
+        return;
+      }
+
+      // Close existing connection if any
+      if (wsRef.current) {
+        console.log('� [WEBSOCKET] Closing existing connection...');
+        wsRef.current.close();
+      }
+
+      const wsUrl = `ws://localhost:8090/ws/appointments/${salonId}`;
+      console.log('🔌 [WEBSOCKET] Attempting connection to:', wsUrl);
+      console.log('🔌 [WEBSOCKET] Salon ID:', salonId);
+
+      try {
+        const socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+          console.log('✅ [WEBSOCKET] Successfully connected to appointment updates!');
+          setWsConnected(true);
+          wsRef.current = socket;
+          reconnectAttemptsRef.current = 0;
+          console.log('🎯 [WEBSOCKET] Ready to receive real-time updates');
+        };
+
+        socket.onmessage = (event) => {
+          // Skip heartbeat messages before attempting JSON parsing
+          if (event.data === 'heartbeat' || event.data === 'ping' || event.data === 'pong') {
+            console.log('💓 [WEBSOCKET] Received heartbeat message, skipping...');
+            return;
+          }
+
+          try {
+            const update = JSON.parse(event.data);
+            console.log('📨 [WEBSOCKET] Received update:', update);
+
+            // Show real-time notification and update data based on update type
+            switch (update.type) {
+              case 'APPOINTMENT_CREATED':
+                console.log('🆕 [WEBSOCKET] New appointment created:', update.customerName);
+                showSuccessMessage(`🆕 New appointment booked for ${update.customerName || 'customer'} at ${update.timeSlot || 'scheduled time'}!`);
+                triggerReceptionNotification('appointmentConfirmed', update.customerName, update.timeSlot);
+                // Use auto-refresh function instead of individual loads
+                console.log('🔄 [WEBSOCKET] Auto-refreshing data after appointment creation...');
+                fetchAppointments();
+                loadTodayAppointments();
+                break;
+              case 'APPOINTMENT_UPDATED':
+                console.log('📝 [WEBSOCKET] Appointment updated:', update.customerName);
+                showSuccessMessage(`📝 Appointment updated for ${update.customerName || 'customer'}!`);
+                // Use auto-refresh function instead of individual loads
+                console.log('🔄 [WEBSOCKET] Auto-refreshing data after appointment update...');
+                fetchAppointments();
+                loadTodayAppointments();
+                break;
+              case 'APPOINTMENT_CANCELLED':
+                console.log('❌ [WEBSOCKET] Appointment cancelled:', update.customerName);
+                showSuccessMessage(`❌ Appointment cancelled for ${update.customerName || 'customer'}!`);
+                // Use auto-refresh function instead of individual loads
+                console.log('🔄 [WEBSOCKET] Auto-refreshing data after appointment cancellation...');
+                fetchAppointments();
+                loadTodayAppointments();
+                break;
+              case 'PAYMENT_RECEIVED':
+                console.log('💰 [WEBSOCKET] Payment received:', update.customerName);
+                showSuccessMessage(`💰 Payment received from ${update.customerName || 'customer'}!`);
+                triggerReceptionNotification('paymentReceived', update.customerName, update.timeSlot);
+                // Use auto-refresh function instead of individual loads
+                console.log('🔄 [WEBSOCKET] Auto-refreshing data after payment received...');
+                fetchAppointments();
+                loadTodayAppointments();
+                loadPendingPayments();
+                break;
+              case 'SESSION_COMPLETED':
+                console.log('✅ [WEBSOCKET] Session completed:', update.customerName);
+                showSuccessMessage(`✅ Session completed for ${update.customerName || 'customer'}!`);
+                triggerReceptionNotification('sessionCompleted', update.customerName, update.timeSlot);
+                // Use auto-refresh function instead of individual loads
+                console.log('🔄 [WEBSOCKET] Auto-refreshing data after session completion...');
+                fetchAppointments();
+                break;
+              case 'PAYMENT_CONFIRMED':
+                console.log('💳 [WEBSOCKET] Payment confirmed:', update.customerName);
+                showSuccessMessage(`💳 Payment confirmed for ${update.customerName || 'customer'}!`);
+                triggerReceptionNotification('paymentReceived', update.customerName, update.timeSlot);
+                // Use auto-refresh function to update all lists
+                console.log('🔄 [WEBSOCKET] Auto-refreshing data after payment confirmation...');
+                fetchAppointments();
+                break;
+              default:
+                console.log('📨 [WEBSOCKET] Unknown update type:', update.type);
+            }
+
+            console.log('✅ [WEBSOCKET] Real-time update processed successfully');
+          } catch (error) {
+            console.error('❌ [WEBSOCKET] Error parsing message:', error);
+          }
+        };
+
+        socket.onclose = (event) => {
+          console.log('🔌 [WEBSOCKET] Connection closed. Code:', event.code, 'Reason:', event.reason);
+          setWsConnected(false);
+          wsRef.current = null;
+
+          // Don't auto-reconnect to prevent loops
+          if (event.code !== 1000) {
+            console.log('🔄 [WEBSOCKET] Connection closed unexpectedly. Manual reconnection may be needed.');
+          }
+        };
+
+        socket.onerror = (error) => {
+          console.error('❌ [WEBSOCKET] Connection error occurred:', error);
+          console.error('❌ [WEBSOCKET] Make sure your Spring Boot backend is running on port 8090');
+          setWsConnected(false);
+        };
+
+      } catch (error) {
+        console.error('❌ [WEBSOCKET] Failed to create WebSocket connection:', error);
+        setWsConnected(false);
+      }
+    };
+
+    console.log('🚀 [WEBSOCKET] Initializing WebSocket connection...');
+    initWebSocket();
+
+    // Cleanup on unmount
+    return () => {
+      if (wsRef.current) {
+        console.log('🧹 [WEBSOCKET] Cleaning up WebSocket connection');
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, []); // Empty dependency array - run only once on mount
+
   const handleBookAppointment = (bookingData: any) => {
     if (editingAppointment) {
       showSuccessMessage(`Appointment for ${bookingData.customerName} has been updated successfully!`);
@@ -422,8 +634,7 @@ const ReceptionDashboard: React.FC = () => {
       triggerReceptionNotification('appointmentConfirmed', bookingData.customerName, bookingData.time);
     }
     
-    // Refresh appointments to get the latest data from API
-    refreshAppointments();
+    // WebSocket will automatically refresh the data when the backend broadcasts the update
     setEditingAppointment(null);
   };
 
@@ -440,13 +651,30 @@ const ReceptionDashboard: React.FC = () => {
     }
   };
 
-  const confirmCancelAppointment = () => {
+  const confirmCancelAppointment = async () => {
     if (cancelAppointmentModal.appointment) {
-      showSuccessMessage(`Appointment for ${cancelAppointmentModal.appointment.customerName} has been cancelled successfully!`);
-      setCancelAppointmentModal({isOpen: false, appointment: null});
-      
-      // Refresh appointments to get the latest data from API
-      refreshAppointments();
+      try {
+        console.log('🔄 [CANCEL] Starting appointment cancellation for appointment:', cancelAppointmentModal.appointment.id);
+        
+        // Call API to cancel the appointment
+        await apiService.cancelAppointment(
+          parseInt(cancelAppointmentModal.appointment.id), 
+          {
+            userRole: 'RECEPTION',
+            reason: 'Cancelled by reception'
+          }
+        );
+        
+        console.log('✅ [CANCEL] Appointment cancelled successfully via API');
+        showSuccessMessage(`Appointment for ${cancelAppointmentModal.appointment.customerName} has been cancelled successfully!`);
+        setCancelAppointmentModal({isOpen: false, appointment: null});
+        
+        // The WebSocket will automatically refresh the data when the backend broadcasts the update
+        console.log('🎯 [CANCEL] Waiting for WebSocket update...');
+      } catch (error) {
+        console.error('❌ [CANCEL] Error cancelling appointment:', error);
+        showErrorMessage(`Failed to cancel appointment for ${cancelAppointmentModal.appointment.customerName}. Please try again.`);
+      }
     }
   };
 
@@ -496,25 +724,53 @@ const ReceptionDashboard: React.FC = () => {
     }
   };
 
-  const confirmCompleteSession = () => {
+  const confirmCompleteSession = async () => {
     if (completeSessionModal.appointment) {
-      showSuccessMessage(`Session for ${completeSessionModal.appointment.customerName} has been completed successfully!`);
-      triggerReceptionNotification('sessionCompleted', completeSessionModal.appointment.customerName, completeSessionModal.appointment.timeSlot);
-      setCompleteSessionModal({isOpen: false, appointment: null});
-      
-      // Refresh appointments to get the latest data from API
-      refreshAppointments();
+      try {
+        console.log('🔄 [COMPLETE SESSION] Starting session completion for appointment:', completeSessionModal.appointment.id);
+        
+        // Call API to complete the session
+        await apiService.completeSession(
+          parseInt(completeSessionModal.appointment.id), 
+          'RECEPTION' // userRole
+        );
+        
+        console.log('✅ [COMPLETE SESSION] Session completed successfully via API');
+        showSuccessMessage(`Session for ${completeSessionModal.appointment.customerName} has been completed successfully!`);
+        triggerReceptionNotification('sessionCompleted', completeSessionModal.appointment.customerName, completeSessionModal.appointment.timeSlot);
+        setCompleteSessionModal({isOpen: false, appointment: null});
+        
+        // The WebSocket will automatically refresh the data when the backend broadcasts the update
+        console.log('🎯 [COMPLETE SESSION] Waiting for WebSocket update...');
+      } catch (error) {
+        console.error('❌ [COMPLETE SESSION] Error completing session:', error);
+        showErrorMessage(`Failed to complete session for ${completeSessionModal.appointment.customerName}. Please try again.`);
+      }
     }
   };
 
-  const confirmPaymentReceived = () => {
+  const confirmPaymentReceived = async () => {
     if (paymentConfirmModal.appointment) {
-      showSuccessMessage(`Payment of LKR ${paymentConfirmModal.appointment.finalAmount} from ${paymentConfirmModal.appointment.customerName} has been received successfully!`);
-      triggerReceptionNotification('paymentReceived', paymentConfirmModal.appointment.finalAmount, paymentConfirmModal.appointment.customerName);
-      setPaymentConfirmModal({isOpen: false, appointment: null});
-      
-      // Refresh appointments to get the latest data from API
-      refreshAppointments();
+      try {
+        console.log('🔄 [PAYMENT] Starting payment confirmation for appointment:', paymentConfirmModal.appointment.id);
+        
+        // Call API to confirm payment
+        await apiService.confirmAppointmentPayment(
+          parseInt(paymentConfirmModal.appointment.id), 
+          'RECEPTION' // userRole
+        );
+        
+        console.log('✅ [PAYMENT] Payment confirmed successfully via API');
+        showSuccessMessage(`Payment of LKR ${paymentConfirmModal.appointment.finalAmount} from ${paymentConfirmModal.appointment.customerName} has been received successfully!`);
+        triggerReceptionNotification('paymentReceived', paymentConfirmModal.appointment.finalAmount, paymentConfirmModal.appointment.customerName);
+        setPaymentConfirmModal({isOpen: false, appointment: null});
+        
+        // The WebSocket will automatically refresh the data when the backend broadcasts the update
+        console.log('🎯 [PAYMENT] Waiting for WebSocket update...');
+      } catch (error) {
+        console.error('❌ [PAYMENT] Error confirming payment:', error);
+        showErrorMessage(`Failed to confirm payment for ${paymentConfirmModal.appointment.customerName}. Please try again.`);
+      }
     }
   };
 
@@ -605,12 +861,7 @@ Generated on: ${new Date().toLocaleString()}
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
             <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Appointments</h3>
             <p className="text-red-600 mb-4">{error}</p>
-            <button
-              onClick={refreshAppointments}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Try Again
-            </button>
+            <p className="text-sm text-gray-600">Data will automatically refresh once the connection is restored.</p>
           </div>
         )}
 
@@ -640,13 +891,29 @@ Generated on: ${new Date().toLocaleString()}
                   </h1>
                   <p className="text-gray-600">Manage appointments and customer services efficiently</p>
                 </div>
-                <button
-                  onClick={refreshAppointments}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
-                >
-                  <Calendar className="w-4 h-4" />
-                  Refresh
-                </button>
+                <div className="flex items-center gap-4">
+                  {/* WebSocket Status Indicator */}
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50">
+                    {wsConnected ? (
+                      <>
+                        <Wifi className="w-4 h-4 text-green-500" />
+                        <span className="text-sm text-green-600 font-medium">Live Updates</span>
+                      </>
+                    ) : (
+                      <>
+                        <WifiOff className="w-4 h-4 text-red-500" />
+                        <span className="text-sm text-red-600 font-medium">Connecting...</span>
+                        <button
+                          onClick={handleRetryConnection}
+                          className="text-xs text-blue-600 hover:text-blue-700 ml-2 underline"
+                          title="Reconnect to live updates"
+                        >
+                          Retry
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 

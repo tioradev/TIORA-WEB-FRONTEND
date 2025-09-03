@@ -46,92 +46,6 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
     return 'ADMIN'; // for super-admin
   };
 
-  // Handle API-based payment confirmation
-  const handleConfirmPayment = async () => {
-    try {
-      setLoading(true);
-      const appointmentId = parseInt(appointment.id);
-      const apiUserRole = getApiUserRole();
-      
-      console.log('💳 [APPOINTMENT] Confirming payment for appointment:', appointmentId);
-      console.log('👤 [APPOINTMENT] User role:', apiUserRole);
-      
-      const response = await apiService.confirmAppointmentPayment(appointmentId, apiUserRole);
-      
-      console.log('✅ [APPOINTMENT] Payment confirmed:', response);
-      
-      showSuccess('Payment Confirmed', response.message || `Payment confirmed successfully`);
-      
-      // Call the parent's onMarkPaid if provided, or refresh
-      if (onMarkPaid) {
-        onMarkPaid(appointment.id);
-      } else if (onRefresh) {
-        onRefresh();
-      }
-    } catch (error) {
-      console.error('❌ [APPOINTMENT] Error confirming payment:', error);
-      let errorMessage = 'Failed to confirm payment';
-      
-      if (error instanceof Error) {
-        if (error.message.includes('PERMISSION_DENIED')) {
-          errorMessage = 'You do not have permission to confirm payments';
-        } else if (error.message.includes('INVALID_STATUS')) {
-          errorMessage = 'Payment can only be confirmed for pending payments';
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      
-      showError('Payment Failed', errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle API-based appointment completion (Reception only)
-  const handleCompleteAppointment = async () => {
-    try {
-      setLoading(true);
-      const appointmentId = parseInt(appointment.id);
-      const apiUserRole = getApiUserRole();
-      
-      console.log('✅ [APPOINTMENT] Completing appointment:', appointmentId);
-      console.log('👤 [APPOINTMENT] User role:', apiUserRole);
-      
-      const response = await apiService.completeSession(appointmentId, apiUserRole);
-      
-      console.log('✅ [APPOINTMENT] Appointment completed:', response);
-      
-      showSuccess('Session Completed', response.message || `Session completed successfully`);
-      
-      // Call the parent's onCompleteSession if provided, or refresh
-      if (onCompleteSession) {
-        onCompleteSession(appointment.id);
-      } else if (onRefresh) {
-        onRefresh();
-      }
-    } catch (error) {
-      console.error('❌ [APPOINTMENT] Error completing appointment:', error);
-      let errorMessage = 'Failed to complete appointment';
-      
-      if (error instanceof Error) {
-        if (error.message.includes('PERMISSION_DENIED')) {
-          errorMessage = 'Only reception staff can complete sessions';
-        } else if (error.message.includes('BUSINESS_RULE_VIOLATION')) {
-          errorMessage = 'Can only complete appointments scheduled for today';
-        } else if (error.message.includes('INVALID_STATUS')) {
-          errorMessage = 'Can only complete scheduled appointments';
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      
-      showError('Completion Failed', errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Handle API-based appointment cancellation
   const handleCancelAppointment = async () => {
     try {
@@ -471,7 +385,7 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
            appointment.date === new Date().toISOString().split('T')[0] && 
            onCompleteSession && (
             <button
-              onClick={handleCompleteAppointment}
+              onClick={() => onCompleteSession?.(appointment.id)}
               disabled={loading}
               className={`flex items-center space-x-1 px-3 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700 rounded-lg transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl transform hover:scale-105 flex-1 ${
                 loading ? 'opacity-50 cursor-not-allowed' : ''
@@ -485,7 +399,7 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
           {/* Payment Received Button - For payment pending appointments */}
           {appointment.status === 'payment-pending' && onMarkPaid && (
             <button
-              onClick={handleConfirmPayment}
+              onClick={() => onMarkPaid(appointment.id)}
               disabled={loading}
               className={`flex items-center space-x-1 px-3 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white hover:from-emerald-600 hover:to-emerald-700 rounded-lg transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl transform hover:scale-105 flex-1 ${
                 loading ? 'opacity-50 cursor-not-allowed' : ''

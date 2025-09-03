@@ -466,6 +466,13 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
       const convertTo24Hour = (timeString: string): string => {
         console.log('🔄 [BOOKING] Converting time:', timeString);
         
+        // Remove microseconds if present (e.g., 11:30:50.6540768 -> 11:30:50)
+        if (timeString.includes('.')) {
+          const withoutMicroseconds = timeString.split('.')[0];
+          console.log('✂️ [BOOKING] Removed microseconds:', { original: timeString, cleaned: withoutMicroseconds });
+          timeString = withoutMicroseconds;
+        }
+        
         // If it's already in 24-hour format with seconds (HH:mm:ss), return as is
         if (/^\d{1,2}:\d{2}:\d{2}$/.test(timeString)) {
           const parts = timeString.split(':');
@@ -529,6 +536,26 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
       // This creates the appointment start time in local timezone
       const appointmentDateTime = `${formData.date}T${timeIn24Hour}`;
       
+      // Debug: Check the exact format being generated
+      console.log('🔍 [BOOKING] Debugging datetime format generation:', {
+        formDataDate: formData.date,
+        formDataDateType: typeof formData.date,
+        formDataTimeSlot: formData.timeSlot,
+        formDataTimeSlotType: typeof formData.timeSlot,
+        convertedTime: timeIn24Hour,
+        convertedTimeLength: timeIn24Hour?.length,
+        dateTimeCombined: appointmentDateTime,
+        dateTimeCombinedLength: appointmentDateTime.length,
+        expectedFormat: 'YYYY-MM-DDTHH:mm:ss (length: 19)',
+        actualFormat: appointmentDateTime,
+        splitCheck: {
+          datePart: formData.date,
+          timePart: timeIn24Hour,
+          hasCorrectDateFormat: /^\d{4}-\d{2}-\d{2}$/.test(formData.date),
+          hasCorrectTimeFormat: /^\d{2}:\d{2}:\d{2}$/.test(timeIn24Hour)
+        }
+      });
+      
       console.log('🔄 [BOOKING] Creating appointment start time:', {
         selectedDate: formData.date,
         selectedTimeSlot: formData.timeSlot,
@@ -548,14 +575,25 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
       const calculateEstimatedEndTime = (startDateTime: string, durationMinutes: number): string => {
         console.log('🔄 [BOOKING] Calculating end time:', { startDateTime, durationMinutes });
         
+        // Remove microseconds from datetime if present
+        let cleanStartDateTime = startDateTime;
+        if (startDateTime.includes('.')) {
+          const parts = startDateTime.split('.');
+          cleanStartDateTime = parts[0];
+          console.log('✂️ [BOOKING] Removed microseconds from datetime:', { 
+            original: startDateTime, 
+            cleaned: cleanStartDateTime 
+          });
+        }
+        
         // Validate input format first
-        if (!startDateTime || !startDateTime.includes('T')) {
-          console.error('❌ [BOOKING] Invalid startDateTime format:', startDateTime);
-          throw new Error(`Invalid startDateTime format: ${startDateTime}`);
+        if (!cleanStartDateTime || !cleanStartDateTime.includes('T')) {
+          console.error('❌ [BOOKING] Invalid startDateTime format:', cleanStartDateTime);
+          throw new Error(`Invalid startDateTime format: ${cleanStartDateTime}`);
         }
         
         // Parse the start datetime (which is already in local time format)
-        const [datePart, timePart] = startDateTime.split('T');
+        const [datePart, timePart] = cleanStartDateTime.split('T');
         
         if (!datePart || !timePart) {
           console.error('❌ [BOOKING] Failed to split datetime:', { datePart, timePart });
@@ -633,6 +671,18 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
       // Validate the datetime formats
       const isValidDateTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(appointmentDateTime);
       const isValidEndTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(estimatedEndTime);
+      
+      // Debug the exact format issue
+      console.log('🔍 [BOOKING] Format validation debug:', {
+        appointmentDateTime: appointmentDateTime,
+        appointmentDateTimeLength: appointmentDateTime.length,
+        appointmentDateTimeRegexTest: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(appointmentDateTime),
+        estimatedEndTime: estimatedEndTime,
+        estimatedEndTimeLength: estimatedEndTime.length,
+        estimatedEndTimeRegexTest: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(estimatedEndTime),
+        expectedFormat: 'YYYY-MM-DDTHH:mm:ss',
+        expectedLength: 19
+      });
       
       // Additional validation: end time should be after start time
       const startTime = new Date(appointmentDateTime);
