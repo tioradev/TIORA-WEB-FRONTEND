@@ -4,6 +4,7 @@ import { mockBarbers } from '../../data/mockData';
 import { Appointment } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotificationHelpers } from '../../utils/notificationHelpers';
+import { useToast } from '../../contexts/ToastProvider';
 import { apiService } from '../../services/api';
 import StatsCard from '../shared/StatsCard';
 import AppointmentCard from '../appointments/AppointmentCard';
@@ -28,6 +29,7 @@ const ReceptionDashboard: React.FC = () => {
   const reconnectAttemptsRef = useRef(0);
   
   const { triggerReceptionNotification } = useNotificationHelpers();
+  const { showSuccess, showError, showInfo, showWarning } = useToast();
   const { isProfileModalOpen, closeProfileModal, user, employee, getSalonId, getBranchId } = useAuth();
 
   // Manual reconnection function for the retry button
@@ -513,6 +515,8 @@ const ReceptionDashboard: React.FC = () => {
           wsRef.current = socket;
           reconnectAttemptsRef.current = 0;
           console.log('🎯 [WEBSOCKET] Ready to receive real-time updates');
+          // Show toast notification for successful connection
+          showSuccess('Real-time Updates Active', 'Connected to live appointment updates');
         };
 
         socket.onmessage = (event) => {
@@ -525,38 +529,63 @@ const ReceptionDashboard: React.FC = () => {
           try {
             const update = JSON.parse(event.data);
             console.log('📨 [WEBSOCKET] Received update:', update);
+            console.log('📨 [WEBSOCKET] Available properties:', Object.keys(update || {}));
+            
+            // Ensure we have a valid update object
+            if (!update || typeof update !== 'object') {
+              console.warn('⚠️ [WEBSOCKET] Invalid update object received:', update);
+              return;
+            }
 
             // Show real-time notification and update data based on update type
             switch (update.type) {
               case 'APPOINTMENT_CREATED':
-                console.log('🆕 [WEBSOCKET] New appointment created:', update.customerName);
-                showSuccessMessage(`🆕 New appointment booked for ${update.customerName || 'customer'} at ${update.timeSlot || 'scheduled time'}!`);
-                triggerReceptionNotification('appointmentConfirmed', update.customerName, update.timeSlot);
+                console.log('🆕 [WEBSOCKET] New appointment created:', update);
+                const customerName = update.customerName || update.customer_name || update.name || 'customer';
+                const timeSlot = update.timeSlot || update.time_slot || update.appointmentTime || update.appointment_time || update.appointmentDate || update.appointment_date || update.scheduled_time || 'scheduled time';
+                
+                // Additional safety check for undefined values
+                console.log('🔍 [WEBSOCKET] Customer name resolved to:', customerName);
+                console.log('🔍 [WEBSOCKET] Time slot resolved to:', timeSlot);
+                
+                showSuccessMessage(`🆕 New appointment booked for ${customerName} at ${timeSlot}!`);
+                // Show toast notification for immediate feedback
+                showSuccess('New Appointment!', `${customerName} booked for ${timeSlot}`);
+                triggerReceptionNotification('appointmentConfirmed', customerName, timeSlot);
                 // Use auto-refresh function instead of individual loads
                 console.log('🔄 [WEBSOCKET] Auto-refreshing data after appointment creation...');
                 fetchAppointments();
                 loadTodayAppointments();
                 break;
               case 'APPOINTMENT_UPDATED':
-                console.log('📝 [WEBSOCKET] Appointment updated:', update.customerName);
-                showSuccessMessage(`📝 Appointment updated for ${update.customerName || 'customer'}!`);
+                console.log('📝 [WEBSOCKET] Appointment updated:', update);
+                const updatedCustomer = update.customerName || update.customer_name || update.name || 'customer';
+                showSuccessMessage(`📝 Appointment updated for ${updatedCustomer}!`);
+                // Show toast notification
+                showInfo('Appointment Updated', `${updatedCustomer}'s appointment has been modified`);
                 // Use auto-refresh function instead of individual loads
                 console.log('🔄 [WEBSOCKET] Auto-refreshing data after appointment update...');
                 fetchAppointments();
                 loadTodayAppointments();
                 break;
               case 'APPOINTMENT_CANCELLED':
-                console.log('❌ [WEBSOCKET] Appointment cancelled:', update.customerName);
-                showSuccessMessage(`❌ Appointment cancelled for ${update.customerName || 'customer'}!`);
+                console.log('❌ [WEBSOCKET] Appointment cancelled:', update);
+                const cancelledCustomer = update.customerName || update.customer_name || update.name || 'customer';
+                showSuccessMessage(`❌ Appointment cancelled for ${cancelledCustomer}!`);
+                // Show toast notification
+                showWarning('Appointment Cancelled', `${cancelledCustomer}'s appointment has been cancelled`);
                 // Use auto-refresh function instead of individual loads
                 console.log('🔄 [WEBSOCKET] Auto-refreshing data after appointment cancellation...');
                 fetchAppointments();
                 loadTodayAppointments();
                 break;
               case 'PAYMENT_RECEIVED':
-                console.log('💰 [WEBSOCKET] Payment received:', update.customerName);
-                showSuccessMessage(`💰 Payment received from ${update.customerName || 'customer'}!`);
-                triggerReceptionNotification('paymentReceived', update.customerName, update.timeSlot);
+                console.log('💰 [WEBSOCKET] Payment received:', update);
+                const paymentCustomer = update.customerName || update.customer_name || update.name || 'customer';
+                showSuccessMessage(`💰 Payment received from ${paymentCustomer}!`);
+                // Show toast notification
+                showSuccess('Payment Received', `Received payment from ${paymentCustomer}`);
+                triggerReceptionNotification('paymentReceived', update.amount || 0, paymentCustomer);
                 // Use auto-refresh function instead of individual loads
                 console.log('🔄 [WEBSOCKET] Auto-refreshing data after payment received...');
                 fetchAppointments();
@@ -564,17 +593,24 @@ const ReceptionDashboard: React.FC = () => {
                 loadPendingPayments();
                 break;
               case 'SESSION_COMPLETED':
-                console.log('✅ [WEBSOCKET] Session completed:', update.customerName);
-                showSuccessMessage(`✅ Session completed for ${update.customerName || 'customer'}!`);
-                triggerReceptionNotification('sessionCompleted', update.customerName, update.timeSlot);
+                console.log('✅ [WEBSOCKET] Session completed:', update);
+                const sessionCustomer = update.customerName || update.customer_name || update.name || 'customer';
+                const sessionTime = update.timeSlot || update.time_slot || update.appointmentTime || update.scheduled_time || 'scheduled time';
+                showSuccessMessage(`✅ Session completed for ${sessionCustomer}!`);
+                // Show toast notification
+                showSuccess('Session Complete', `${sessionCustomer}'s appointment is finished`);
+                triggerReceptionNotification('sessionCompleted', sessionCustomer, sessionTime);
                 // Use auto-refresh function instead of individual loads
                 console.log('🔄 [WEBSOCKET] Auto-refreshing data after session completion...');
                 fetchAppointments();
                 break;
               case 'PAYMENT_CONFIRMED':
-                console.log('💳 [WEBSOCKET] Payment confirmed:', update.customerName);
-                showSuccessMessage(`💳 Payment confirmed for ${update.customerName || 'customer'}!`);
-                triggerReceptionNotification('paymentReceived', update.customerName, update.timeSlot);
+                console.log('💳 [WEBSOCKET] Payment confirmed:', update);
+                const confirmedCustomer = update.customerName || update.customer_name || update.name || 'customer';
+                showSuccessMessage(`💳 Payment confirmed for ${confirmedCustomer}!`);
+                // Show toast notification
+                showSuccess('Payment Confirmed', `Payment confirmed for ${confirmedCustomer}`);
+                triggerReceptionNotification('paymentReceived', update.amount || 0, confirmedCustomer);
                 // Use auto-refresh function to update all lists
                 console.log('🔄 [WEBSOCKET] Auto-refreshing data after payment confirmation...');
                 fetchAppointments();
@@ -597,6 +633,8 @@ const ReceptionDashboard: React.FC = () => {
           // Don't auto-reconnect to prevent loops
           if (event.code !== 1000) {
             console.log('🔄 [WEBSOCKET] Connection closed unexpectedly. Manual reconnection may be needed.');
+            // Show toast notification for connection loss
+            showWarning('Connection Lost', 'Real-time updates disconnected. Check your connection.');
           }
         };
 
@@ -604,6 +642,8 @@ const ReceptionDashboard: React.FC = () => {
           console.error('❌ [WEBSOCKET] Connection error occurred:', error);
           console.error('❌ [WEBSOCKET] Make sure your Spring Boot backend is running on port 8090');
           setWsConnected(false);
+          // Show toast notification for connection error
+          showError('Connection Error', 'Failed to connect to real-time updates');
         };
 
       } catch (error) {
@@ -628,9 +668,13 @@ const ReceptionDashboard: React.FC = () => {
   const handleBookAppointment = (bookingData: any) => {
     if (editingAppointment) {
       showSuccessMessage(`Appointment for ${bookingData.customerName} has been updated successfully!`);
+      // Show toast notification for editing
+      showSuccess('Appointment Updated', `${bookingData.customerName}'s appointment updated successfully`);
       triggerReceptionNotification('appointmentConfirmed', bookingData.customerName, bookingData.time);
     } else {
       showSuccessMessage(`New appointment for ${bookingData.customerName} has been booked successfully!`);
+      // Show toast notification for new booking
+      showSuccess('Appointment Booked', `${bookingData.customerName} scheduled for ${bookingData.time}`);
       triggerReceptionNotification('appointmentConfirmed', bookingData.customerName, bookingData.time);
     }
     
@@ -737,6 +781,8 @@ const ReceptionDashboard: React.FC = () => {
         
         console.log('✅ [COMPLETE SESSION] Session completed successfully via API');
         showSuccessMessage(`Session for ${completeSessionModal.appointment.customerName} has been completed successfully!`);
+        // Show toast notification for session completion
+        showSuccess('Session Complete', `${completeSessionModal.appointment.customerName}'s appointment finished`);
         triggerReceptionNotification('sessionCompleted', completeSessionModal.appointment.customerName, completeSessionModal.appointment.timeSlot);
         setCompleteSessionModal({isOpen: false, appointment: null});
         
@@ -745,6 +791,8 @@ const ReceptionDashboard: React.FC = () => {
       } catch (error) {
         console.error('❌ [COMPLETE SESSION] Error completing session:', error);
         showErrorMessage(`Failed to complete session for ${completeSessionModal.appointment.customerName}. Please try again.`);
+        // Show toast notification for session completion error
+        showError('Session Error', `Failed to complete session for ${completeSessionModal.appointment.customerName}`);
       }
     }
   };
@@ -762,6 +810,8 @@ const ReceptionDashboard: React.FC = () => {
         
         console.log('✅ [PAYMENT] Payment confirmed successfully via API');
         showSuccessMessage(`Payment of LKR ${paymentConfirmModal.appointment.finalAmount} from ${paymentConfirmModal.appointment.customerName} has been received successfully!`);
+        // Show toast notification for payment confirmation
+        showSuccess('Payment Received', `LKR ${paymentConfirmModal.appointment.finalAmount} received from ${paymentConfirmModal.appointment.customerName}`);
         triggerReceptionNotification('paymentReceived', paymentConfirmModal.appointment.finalAmount, paymentConfirmModal.appointment.customerName);
         setPaymentConfirmModal({isOpen: false, appointment: null});
         
@@ -770,6 +820,8 @@ const ReceptionDashboard: React.FC = () => {
       } catch (error) {
         console.error('❌ [PAYMENT] Error confirming payment:', error);
         showErrorMessage(`Failed to confirm payment for ${paymentConfirmModal.appointment.customerName}. Please try again.`);
+        // Show toast notification for payment error
+        showError('Payment Error', `Failed to confirm payment for ${paymentConfirmModal.appointment.customerName}`);
       }
     }
   };

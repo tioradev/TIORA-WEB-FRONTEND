@@ -14,6 +14,7 @@ export type ImageCategory =
   | 'service-images' 
   | 'owner-profiles'
   | 'salon-logos'
+  | 'branch-images'
   | 'promotions';
 
 class ImageUploadService {

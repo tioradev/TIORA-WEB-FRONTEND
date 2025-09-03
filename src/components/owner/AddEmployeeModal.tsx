@@ -18,7 +18,7 @@ interface AddEmployeeModalProps {
 
 const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, salonId, branchId, editingEmployee }) => {
   const { showSuccess, showError } = useToast();
-  const { salon } = useAuth();
+  const { salon, employee, isReceptionUser } = useAuth();
   
   // Branch state
   const [branches, setBranches] = useState<BranchResponse[]>([]);
@@ -194,8 +194,10 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
         setWeeklySchedule(editingEmployee.schedule);
       }
 
-      // Set branch
-      if (editingEmployee.branchId) {
+      // Set branch - reception users should always use their own branch
+      if (isReceptionUser() && employee?.branchId) {
+        setSelectedBranchId(employee.branchId);
+      } else if (editingEmployee.branchId) {
         setSelectedBranchId(parseInt(editingEmployee.branchId));
       }
 
@@ -567,7 +569,19 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Branch *</label>
-                {loadingBranches ? (
+                {/* Show read-only branch name for reception users in edit mode */}
+                {isReceptionUser() && editingEmployee ? (
+                  <div className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-700">
+                        {salon?.defaultBranchName || 
+                         branches.find(branch => branch.branchId === selectedBranchId)?.branchName || 
+                         'Current Branch'}
+                      </span>
+                      <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">Read Only</span>
+                    </div>
+                  </div>
+                ) : loadingBranches ? (
                   <div className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50">
                     <div className="animate-pulse text-gray-500">Loading branches...</div>
                   </div>

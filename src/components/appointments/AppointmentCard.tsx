@@ -153,7 +153,7 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
 
   return (
     <div className={`relative overflow-hidden rounded-2xl shadow-lg border-2 p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 ${getCardBorderColor(appointment.status)} ${
-      appointment.status === 'payment-pending' ? 'shadow-xl animate-pulse' : ''
+      appointment.status === 'payment-pending' ? 'shadow-xl animate-slow-pulse' : ''
     }`}>
       {/* Enhanced Payment Pending Banner */}
       {appointment.status === 'payment-pending' && (
@@ -304,13 +304,13 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
         {/* Status Messages */}
         {appointment.status === 'payment-pending' && (
           <div className="mt-3 flex items-center space-x-2 p-2 bg-red-50 rounded-lg border border-red-200">
-            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+            <div className="w-2 h-2 bg-red-500 rounded-full animate-slow-pulse"></div>
             <span className="text-xs text-red-700 font-medium">⚠️ Waiting for payment to complete the appointment</span>
           </div>
         )}
         {appointment.status === 'in-progress' && (
           <div className="mt-3 flex items-center space-x-2 p-2 bg-amber-50 rounded-lg border border-amber-200">
-            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
+            <div className="w-2 h-2 bg-amber-500 rounded-full animate-slow-pulse"></div>
             <span className="text-xs text-amber-700 font-medium">🔄 Service is currently being provided</span>
           </div>
         )}

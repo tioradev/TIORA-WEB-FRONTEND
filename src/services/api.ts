@@ -1172,6 +1172,7 @@ export interface BranchCreateRequest {
   branchName: string;
   branchPhoneNumber: string;
   branchEmail: string;
+  description?: string;
   latitude: number;
   longitude: number;
   branchImage?: string;
@@ -1214,6 +1215,7 @@ export interface BranchUpdateRequest {
   branchName: string;
   branchPhoneNumber: string;
   branchEmail: string;
+  description?: string;
   latitude: number;
   longitude: number;
   branchImage?: string;
@@ -1265,6 +1267,7 @@ export interface ComprehensiveBranchData {
   branchName: string;
   branchPhoneNumber: string;
   branchEmail: string;
+  description?: string;
   longitude: number;
   latitude: number;
   branchImage?: string;

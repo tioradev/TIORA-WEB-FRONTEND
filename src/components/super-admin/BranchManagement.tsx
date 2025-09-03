@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Edit, Trash2, MapPin, Phone, Mail, 
-  Clock, Users, Building, Eye, EyeOff, X, Save, Camera
+  Clock, Users, Building, Eye, EyeOff, X, Save
 } from 'lucide-react';
 import { SalonBranch } from '../../types';
 import { 
@@ -13,6 +13,7 @@ import {
   ComprehensiveBranchData
 } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import ImageUploader from '../shared/ImageUploader';
 
 const BranchManagement: React.FC = () => {
   const { getSalonId } = useAuth();
@@ -103,6 +104,7 @@ const BranchManagement: React.FC = () => {
         salonId: branch.salonId.toString(),
         name: branch.branchName,
         address: `${branch.latitude}, ${branch.longitude}`, // You might want to format this better
+        description: branch.description, // Add description mapping
         phone: branch.branchPhoneNumber,
         email: branch.branchEmail,
         isActive: branch.status === 'ACTIVE',
@@ -214,6 +216,7 @@ const BranchManagement: React.FC = () => {
           branchName: branchData.name,
           branchPhoneNumber: branchData.phone,
           branchEmail: branchData.email,
+          description: branchData.description, // Add description field
           latitude: 6.9271, // Default coordinates for Colombo, Sri Lanka
           longitude: 79.8612,
           branchImage: branchData.image || undefined,
@@ -271,6 +274,7 @@ const BranchManagement: React.FC = () => {
           name: response.branchName,
           phone: response.branchPhoneNumber,
           email: response.branchEmail,
+          description: branchData.description, // Add description from form data
           isActive: response.status === 'ACTIVE',
           image: response.branchImage,
           openingHours: branchData.openingHours, // Use form data for display
@@ -299,6 +303,7 @@ const BranchManagement: React.FC = () => {
           branchName: branchData.name,
           branchPhoneNumber: branchData.phone,
           branchEmail: branchData.email,
+          description: branchData.description, // Add description field
           latitude: 6.9271, // Default coordinates for Colombo - should be from form
           longitude: 79.8612,
           branchImage: branchData.image || undefined,
@@ -356,6 +361,7 @@ const BranchManagement: React.FC = () => {
           salonId: response.salonId.toString(),
           name: response.branchName,
           address: branchData.address, // API doesn't return address, use form data
+          description: branchData.description, // Add description from form data
           phone: response.branchPhoneNumber,
           email: response.branchEmail,
           isActive: response.status === 'ACTIVE',
@@ -428,6 +434,7 @@ const BranchManagement: React.FC = () => {
         branchName: branch.name,
         branchPhoneNumber: branch.phone,
         branchEmail: branch.email,
+        description: branch.description, // Add description field
         latitude: (branch as any).latitude || 6.9271,
         longitude: (branch as any).longitude || 79.8612,
         branchImage: branch.image || undefined,
@@ -578,8 +585,20 @@ const BranchManagement: React.FC = () => {
             <div className="p-6 border-b border-gray-100">
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                    <Building className="w-6 h-6 text-red-600" />
+                  <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center overflow-hidden">
+                    {branch.image ? (
+                      <img 
+                        src={branch.image} 
+                        alt={`${branch.name} branch`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // Fallback to Building icon if image fails to load
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling?.setAttribute('style', 'display: flex');
+                        }}
+                      />
+                    ) : null}
+                    <Building className={`w-6 h-6 text-red-600 ${branch.image ? 'hidden' : 'block'}`} />
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">{branch.name}</h3>
@@ -623,6 +642,15 @@ const BranchManagement: React.FC = () => {
 
             {/* Content */}
             <div className="p-6 space-y-4">
+              {/* Description */}
+              {branch.description && (
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    {branch.description}
+                  </p>
+                </div>
+              )}
+
               {/* Contact Info */}
               <div className="space-y-2">
                 <div className="flex items-start space-x-2">
@@ -795,9 +823,12 @@ const BranchModal: React.FC<BranchModalProps> = ({
   onSave,
   editingBranch
 }) => {
+  const { getSalonId } = useAuth(); // Add useAuth hook to modal
+  
   const [formData, setFormData] = useState({
     name: editingBranch?.name || '',
     address: editingBranch?.address || '',
+    description: editingBranch?.description || '', // Add description field
     phone: editingBranch?.phone || '',
     email: editingBranch?.email || '',
     image: editingBranch?.image || '',
@@ -817,6 +848,32 @@ const BranchModal: React.FC<BranchModalProps> = ({
 
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+
+  // Update formData when editingBranch changes
+  useEffect(() => {
+    if (editingBranch) {
+      setFormData({
+        name: editingBranch.name || '',
+        address: editingBranch.address || '',
+        description: editingBranch.description || '',
+        phone: editingBranch.phone || '',
+        email: editingBranch.email || '',
+        image: editingBranch.image || '',
+        isActive: editingBranch.isActive ?? true,
+        latitude: (editingBranch as any)?.latitude || null,
+        longitude: (editingBranch as any)?.longitude || null,
+        openingHours: editingBranch.openingHours || {
+          monday: { open: '09:00', close: '18:00', isOpen: true },
+          tuesday: { open: '09:00', close: '18:00', isOpen: true },
+          wednesday: { open: '09:00', close: '18:00', isOpen: true },
+          thursday: { open: '09:00', close: '18:00', isOpen: true },
+          friday: { open: '09:00', close: '18:00', isOpen: true },
+          saturday: { open: '09:00', close: '17:00', isOpen: true },
+          sunday: { open: '10:00', close: '16:00', isOpen: false },
+        },
+      });
+    }
+  }, [editingBranch]);
 
   // Function to get current location
   const getCurrentLocation = () => {
@@ -900,43 +957,26 @@ const BranchModal: React.FC<BranchModalProps> = ({
     alert('Select your location on Google Maps, then copy the coordinates back to this form.');
   };
 
-  // Function to handle image upload
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      console.log('🖼️ [BRANCH] Image upload started:', file.name, file.size, file.type);
-      
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        console.error('❌ [BRANCH] Invalid file type:', file.type);
-        alert('Please select a valid image file.');
-        return;
-      }
-      
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        console.error('❌ [BRANCH] File too large:', file.size);
-        alert('Please select an image smaller than 5MB.');
-        return;
-      }
-      
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        console.log('✅ [BRANCH] Image converted to base64, length:', result.length);
-        setFormData(prev => ({ 
-          ...prev, 
-          image: result
-        }));
-      };
-      
-      reader.onerror = (error) => {
-        console.error('❌ [BRANCH] Error reading file:', error);
-        alert('Error reading the selected file. Please try again.');
-      };
-      
-      reader.readAsDataURL(file);
-    }
+  // Firebase image upload handlers
+  const handleBranchImageUpload = (downloadURL: string) => {
+    console.log('✅ [BRANCH] Firebase image uploaded successfully:', downloadURL);
+    setFormData(prev => ({
+      ...prev,
+      image: downloadURL
+    }));
+  };
+
+  const handleBranchImageError = (error: string) => {
+    console.error('❌ [BRANCH] Firebase image upload error:', error);
+    alert(`Image upload failed: ${error}`);
+  };
+
+  const handleBranchImageDelete = () => {
+    console.log('🗑️ [BRANCH] Branch image deleted');
+    setFormData(prev => ({
+      ...prev,
+      image: ''
+    }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1012,59 +1052,38 @@ const BranchModal: React.FC<BranchModalProps> = ({
               </div>
             </div>
 
+            {/* Description Field */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Branch Description</label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                rows={3}
+                placeholder="Enter a brief description of this branch location..."
+              />
+              <p className="text-sm text-gray-500 mt-1">Optional: Describe the branch location, special features, or services offered.</p>
+            </div>
+
             {/* Branch Image Upload */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Branch Image</label>
               <div className="space-y-4">
-                {/* Image Preview */}
-                <div className="flex justify-center">
-                  <div className="relative">
-                    <div className="w-32 h-32 rounded-lg bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden">
-                      {formData.image ? (
-                        <img 
-                          src={formData.image} 
-                          alt="Branch Preview" 
-                          className="w-full h-full object-cover rounded-lg"
-                          onError={(e) => {
-                            console.error('Failed to load branch image preview');
-                            e.currentTarget.style.display = 'none';
-                          }}
-                          onLoad={() => {
-                            console.log('Branch image preview loaded successfully');
-                          }}
-                        />
-                      ) : (
-                        <div className="text-center">
-                          <Building className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                          <p className="text-sm text-gray-500">No image</p>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Upload Button */}
-                    <label className="absolute bottom-0 right-0 bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-full cursor-pointer transition-colors duration-200 shadow-lg">
-                      <Camera className="w-4 h-4" />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                      />
-                    </label>
-                    
-                    {/* Remove Image Button */}
-                    {formData.image && (
-                      <button
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, image: '' }))}
-                        className="absolute top-0 right-0 bg-red-500 hover:bg-red-600 text-white p-1 rounded-full transition-colors duration-200 shadow-lg"
-                        title="Remove image"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                </div>
+                {/* Firebase Image Uploader */}
+                <ImageUploader
+                  category="branch-images"
+                  salonId={getSalonId() || 0}
+                  onUploadComplete={handleBranchImageUpload}
+                  onUploadError={handleBranchImageError}
+                  currentImage={formData.image}
+                  onImageDelete={handleBranchImageDelete}
+                  maxWidth={400}
+                  maxHeight={400}
+                  placeholder="Upload branch image"
+                  className="w-full"
+                  showPreview={true}
+                  compressImages={true}
+                />
                 
                 {/* Upload Instructions */}
                 <div className="text-center">
@@ -1072,7 +1091,7 @@ const BranchModal: React.FC<BranchModalProps> = ({
                     Upload a branch image (max 5MB). Recommended size: 400x400px
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Supported formats: JPG, PNG, WebP
+                    Images are stored securely in Firebase Storage
                   </p>
                 </div>
               </div>

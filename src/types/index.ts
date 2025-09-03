@@ -275,6 +275,7 @@ export interface SalonBranch {
   salonId: string;
   name: string;
   address: string;
+  description?: string; // Add description field
   phone: string;
   email: string;
   managerId?: string;
