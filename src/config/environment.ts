@@ -11,8 +11,8 @@ export const ENV_CONFIG = {
   },
   
   production: {
-    API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://54.169.11.244/api/v1',
-    WS_BASE_URL: import.meta.env.VITE_WS_BASE_URL || 'ws://54.169.11.244/ws',
+    API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'https://salon.run.place/api/v1',
+    WS_BASE_URL: import.meta.env.VITE_WS_BASE_URL || 'wss://salon.run.place/ws',
     API_TIMEOUT: 30000,
     ENABLE_LOGGING: false,
   }
