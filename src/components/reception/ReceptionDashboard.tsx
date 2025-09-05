@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNotificationHelpers } from '../../utils/notificationHelpers';
 import { useToast } from '../../contexts/ToastProvider';
 import { apiService } from '../../services/api';
+import { getCurrentConfig } from '../../config/environment';
 import StatsCard from '../shared/StatsCard';
 import AppointmentCard from '../appointments/AppointmentCard';
 import BookingModal from '../appointments/BookingModal';
@@ -730,7 +731,7 @@ const ReceptionDashboard: React.FC = () => {
         wsRef.current.close();
       }
 
-      const wsUrl = `ws://localhost:8090/ws/appointments/${salonId}`;
+      const wsUrl = `${getCurrentConfig().WS_BASE_URL}/appointments/${salonId}`;
       console.log('🔌 [WEBSOCKET] Attempting connection to:', wsUrl);
       console.log('🔌 [WEBSOCKET] Salon ID:', salonId);
 

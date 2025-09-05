@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-
-// Config for API base URL (Vite uses import.meta.env)
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8090/api/v1';
 import { X, User, Mail, Phone, MapPin, DollarSign, Clock, Users, Shield, Camera, RotateCcw } from 'lucide-react';
 import { apiService, EmployeeRegistrationRequest, EmployeeWeeklySchedule, BranchResponse } from '../../services/api';
+import { getCurrentConfig } from '../../config/environment';
 import { useToast } from '../../contexts/ToastProvider';
 import ImageUploader from '../shared/ImageUploader';
 import { useAuth } from '../../contexts/AuthContext';
@@ -114,7 +112,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
     
     setLoadingServices(true);
     try {
-      const url = `${API_BASE_URL}/services/booking?salonId=${salonId}&gender=${gender}`;
+      const url = `${getCurrentConfig().API_BASE_URL}/services/booking?salonId=${salonId}&gender=${gender}`;
       
       const response = await fetch(url, {
         headers: {
