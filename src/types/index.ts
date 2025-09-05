@@ -168,6 +168,9 @@ export interface Appointment {
   barberName: string;
   serviceId: string;
   serviceName: string;
+  // Store original API IDs for editing appointments
+  originalEmployeeId?: number;
+  originalServiceId?: number;
   date: string;
   timeSlot: string;
   status: 'booked' | 'in-progress' | 'completed' | 'payment-pending' | 'paid' | 'cancelled' | 'no-show';

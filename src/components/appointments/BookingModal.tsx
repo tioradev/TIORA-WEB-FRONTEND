@@ -125,7 +125,8 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
           // Convert single service to array format (legacy format)
           // Use available data from the appointment since we don't have access to service details
           selectedServices = [{
-            id: editingAppointment.serviceId,
+            // Use original service ID if available, otherwise use display ID
+            id: editingAppointment.originalServiceId || editingAppointment.serviceId,
             name: editingAppointment.serviceName,
             duration: 60, // Default duration if not available
             price: editingAppointment.amount || 0,
@@ -134,14 +135,30 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
         }
 
         setCurrentStep(0); // Start with gender selection for editing too
+        
+        // Try to determine gender from appointment data
+        // This could be from customerGender field or inferred from service type
+        let inferredGender: 'MALE' | 'FEMALE' | null = null;
+        if (editingAppointment.customerGender === 'MALE' || editingAppointment.customerGender === 'FEMALE') {
+          inferredGender = editingAppointment.customerGender;
+        }
+        // If no explicit gender, we'll let user select it again
+        
+        setSelectedGender(inferredGender);
+        
+        // If we have an inferred gender, load services for that gender
+        if (inferredGender) {
+          loadServices(inferredGender);
+        }
+        
         setFormData({
           customerFirstName: editingAppointment.customerName?.split(' ')[0] || '',
           customerLastName: editingAppointment.customerName?.split(' ').slice(1).join(' ') || '',
           customerPhone: editingAppointment.customerPhone?.startsWith('+94') ? editingAppointment.customerPhone : '+94' + (editingAppointment.customerPhone || ''),
-          customerGender: null as 'MALE' | 'FEMALE' | 'OTHER' | null, // Will be set from selectedGender state
+          customerGender: inferredGender,
           selectedServices: selectedServices,
           date: editingAppointment.date || '',
-          barberId: editingAppointment.barberId || '',
+          barberId: editingAppointment.originalEmployeeId || editingAppointment.barberId || '',
           timeSlot: editingAppointment.timeSlot || '',
         });
       }
@@ -162,8 +179,15 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
             return;
           }
 
-          // Extract service IDs from selected services
-          const serviceIds = formData.selectedServices.map((service: SelectedService) => service.id);
+          // Extract service IDs from selected services, using original IDs if in edit mode
+          const serviceIds = formData.selectedServices.map((service: SelectedService) => {
+            // If editing and we have original service ID, use it for the first service
+            // For multiple services, we'll need to use the display ID as fallback
+            if (editingAppointment && editingAppointment.originalServiceId && service === formData.selectedServices[0]) {
+              return editingAppointment.originalServiceId;
+            }
+            return service.id;
+          });
           
           console.log('👥 [BOOKING] Loading available barbers for services:', serviceIds, 'date:', formData.date, 'gender:', selectedGender);
           
@@ -275,19 +299,30 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
             return;
           }
 
-          // Extract service IDs from selected services
-          const serviceIds = formData.selectedServices.map((service: SelectedService) => service.id);
+          // Extract service IDs from selected services, using original IDs if in edit mode
+          const serviceIds = formData.selectedServices.map((service: SelectedService) => {
+            // If editing and we have original service ID, use it for the first service
+            // For multiple services, we'll need to use the display ID as fallback
+            if (editingAppointment && editingAppointment.originalServiceId && service === formData.selectedServices[0]) {
+              return editingAppointment.originalServiceId;
+            }
+            return service.id;
+          });
           
           console.log('🔄 [BOOKING] Preparing to load time slots with parameters:');
-          console.log('👤 [BOOKING] Barber ID:', formData.barberId);
+          // Use original barber ID if available for edit mode
+          const barberIdToUse = editingAppointment && editingAppointment.originalEmployeeId 
+            ? editingAppointment.originalEmployeeId 
+            : formData.barberId;
+          console.log('👤 [BOOKING] Barber ID:', barberIdToUse, '(original:', editingAppointment?.originalEmployeeId, ', display:', formData.barberId, ')');
           console.log('🛠️ [BOOKING] Service IDs:', serviceIds);
           console.log('📅 [BOOKING] Date:', formData.date);
           console.log('🏪 [BOOKING] Salon ID:', salonId);
           console.log('🌐 [BOOKING] Expected endpoint: /api/v1/availability/time-slots');
           
-          // Call the new time slots API
+          // Call the new time slots API with original IDs
           const response = await apiService.getAvailableTimeSlots(
-            formData.barberId,
+            barberIdToUse,
             serviceIds,
             formData.date,
             salonId

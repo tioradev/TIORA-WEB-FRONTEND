@@ -2,9 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Clock, User, Scissors, Edit, CheckCircle, Star, Calendar, ClipboardCheck, XCircle, ChevronDown } from 'lucide-react';
 import { Appointment } from '../../types';
 import { mockBarbers } from '../../data/mockData';
-import { apiService } from '../../services/api';
-import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from '../../contexts/ToastProvider';
 import RupeeIcon from '../shared/RupeeIcon';
 
 interface AppointmentCardProps {
@@ -14,7 +11,6 @@ interface AppointmentCardProps {
   onCompleteSession?: (appointmentId: string) => void;
   onDelete?: (appointmentId: string) => void;
   onAssignBarber?: (appointmentId: string, barberId: string) => void;
-  onRefresh?: () => void; // Add refresh callback
   showActions?: boolean;
   userRole?: 'reception' | 'owner' | 'super-admin';
 }
@@ -26,71 +22,15 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
   onCompleteSession,
   onDelete,
   onAssignBarber,
-  onRefresh,
   showActions = true,
   userRole = 'reception',
 }) => {
   const [showBarberDropdown, setShowBarberDropdown] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { showSuccess, showError } = useToast();
-  const { isReceptionUser, isOwnerUser } = useAuth();
   
   // Get available barbers (filter out inactive ones)
   const availableBarbers = mockBarbers.filter(barber => barber.isActive);
-
-  // Convert userRole to API format
-  const getApiUserRole = (): 'RECEPTION' | 'OWNER' | 'ADMIN' => {
-    if (isReceptionUser() || userRole === 'reception') return 'RECEPTION';
-    if (isOwnerUser() || userRole === 'owner') return 'OWNER';
-    return 'ADMIN'; // for super-admin
-  };
-
-  // Handle API-based appointment cancellation
-  const handleCancelAppointment = async () => {
-    try {
-      setLoading(true);
-      const appointmentId = parseInt(appointment.id);
-      const apiUserRole = getApiUserRole();
-      
-      console.log('❌ [APPOINTMENT] Cancelling appointment:', appointmentId);
-      console.log('👤 [APPOINTMENT] User role:', apiUserRole);
-      
-      const response = await apiService.cancelAppointment(appointmentId, {
-        userRole: apiUserRole,
-        reason: 'Cancelled from appointment card',
-        cancelledBy: apiUserRole
-      });
-      
-      console.log('✅ [APPOINTMENT] Appointment cancelled:', response);
-      
-      showSuccess('Appointment Cancelled', response.message || `Appointment cancelled successfully`);
-      
-      // Call the parent's onDelete if provided, or refresh
-      if (onDelete) {
-        onDelete(appointment.id);
-      } else if (onRefresh) {
-        onRefresh();
-      }
-    } catch (error) {
-      console.error('❌ [APPOINTMENT] Error cancelling appointment:', error);
-      let errorMessage = 'Failed to cancel appointment';
-      
-      if (error instanceof Error) {
-        if (error.message.includes('PERMISSION_DENIED')) {
-          errorMessage = 'You do not have permission to cancel this appointment';
-        } else if (error.message.includes('INVALID_STATUS')) {
-          errorMessage = 'Cannot cancel completed or already cancelled appointments';
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      
-      showError('Cancellation Failed', errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -423,14 +363,14 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
           {/* Cancel Appointment Button - Last in order, only for booked appointments */}
           {appointment.status === 'booked' && onDelete && (
             <button
-              onClick={handleCancelAppointment}
+              onClick={() => onDelete(appointment.id)}
               disabled={loading}
               className={`flex items-center space-x-1 px-3 py-2 text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md transform hover:scale-105 border border-red-200 flex-1 ${
                 loading ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
               <XCircle className="w-4 h-4" />
-              <span>{loading ? 'Cancelling...' : 'Cancel'}</span>
+              <span>Cancel</span>
             </button>
           )}
         </div>

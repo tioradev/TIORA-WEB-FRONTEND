@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Calendar, DollarSign, Clock, Users, Plus, Download, ChevronLeft, ChevronRight, X, CheckCircle, Star, Search, Loader, Wifi, WifiOff } from 'lucide-react';
+import { Calendar, DollarSign, Clock, Users, Plus, Download, X, CheckCircle, Star, Search, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { mockBarbers } from '../../data/mockData';
 import { Appointment } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
@@ -22,6 +22,35 @@ const ReceptionDashboard: React.FC = () => {
   const [paymentConfirmModal, setPaymentConfirmModal] = useState<{isOpen: boolean, appointment: Appointment | null}>({isOpen: false, appointment: null});
   const [completeSessionModal, setCompleteSessionModal] = useState<{isOpen: boolean, appointment: Appointment | null}>({isOpen: false, appointment: null});
   const [cancelAppointmentModal, setCancelAppointmentModal] = useState<{isOpen: boolean, appointment: Appointment | null}>({isOpen: false, appointment: null});
+  
+  // Pagination state for different appointment types
+  const [allAppointmentsPagination, setAllAppointmentsPagination] = useState({
+    currentPage: 0,
+    totalPages: 0,
+    totalElements: 0,
+    size: 9
+  });
+  const [todayAppointmentsPagination, setTodayAppointmentsPagination] = useState({
+    currentPage: 0,
+    totalPages: 0,
+    totalElements: 0,
+    size: 9
+  });
+  const [pendingPaymentsPagination, setPendingPaymentsPagination] = useState({
+    currentPage: 0,
+    totalPages: 0,
+    totalElements: 0,
+    size: 9
+  });
+  
+  // Total statistics state (not affected by pagination)
+  const [totalStatistics, setTotalStatistics] = useState({
+    totalCustomers: 0,
+    totalTodayAppointments: 0,
+    totalPendingPayments: 0,
+    totalDailyIncome: 0,
+    loading: true
+  });
   
   // WebSocket state for real-time updates
   const [wsConnected, setWsConnected] = useState(false);
@@ -72,10 +101,10 @@ const ReceptionDashboard: React.FC = () => {
     profileImageUrl: employee?.profileImageUrl || ''
   };
 
-  // Load appointments from API
-  const loadAppointments = async () => {
+  // Load all appointments from API with pagination
+  const loadAppointments = async (page: number = 0, size: number = 9) => {
     try {
-      console.log('🔄 [LOAD] Starting loadAppointments...');
+      console.log('🔄 [LOAD] Starting loadAppointments with pagination...', { page, size });
       setLoading(true);
       setError(null);
       
@@ -89,10 +118,64 @@ const ReceptionDashboard: React.FC = () => {
 
       console.log('📅 [RECEPTION DASHBOARD] Loading appointments for salon:', salonId, 'branch:', branchId);
       
-      // Load all appointments for the salon using the new endpoint
-      const allAppointmentsData = await apiService.getAllAppointmentsForSalon(parseInt(salonId.toString()), branchId || undefined);
+      // Load all appointments for the salon using the new endpoint with pagination
+      const response = await apiService.getAllAppointmentsForSalon(
+        parseInt(salonId.toString()), 
+        branchId || undefined, 
+        page, 
+        size, 
+        'createdAt', 
+        'asc'
+      );
       
-      console.log('✅ [RECEPTION DASHBOARD] Appointments loaded:', allAppointmentsData.length);
+      console.log('📡 [RECEPTION DASHBOARD] All appointments response:', response);
+      console.log('📡 [RECEPTION DASHBOARD] Response type:', typeof response);
+      console.log('📡 [RECEPTION DASHBOARD] Is Array:', Array.isArray(response));
+      if (response && typeof response === 'object') {
+        console.log('📡 [RECEPTION DASHBOARD] Response keys:', Object.keys(response));
+        console.log('📡 [RECEPTION DASHBOARD] Response.content:', response.content);
+        console.log('📡 [RECEPTION DASHBOARD] Response.total_elements:', response.total_elements);
+        console.log('📡 [RECEPTION DASHBOARD] Response.total_pages:', response.total_pages);
+        console.log('📡 [RECEPTION DASHBOARD] Response.page:', response.page);
+      }
+      
+      // Extract data and pagination from response
+      let allAppointmentsData: any[] = [];
+      let totalElements = 0;
+      let totalPages = 0;
+      let currentPage = 0;
+      
+      if (response && typeof response === 'object' && !Array.isArray(response)) {
+        // Handle Spring Boot paginated response structure
+        if (Array.isArray(response.content)) {
+          allAppointmentsData = response.content;
+          // Handle both camelCase and snake_case property names from backend
+          totalElements = response.total_elements || response.totalElements || 0;
+          totalPages = response.total_pages || response.totalPages || Math.ceil(totalElements / size);
+          currentPage = response.page !== undefined ? response.page : (response.number || 0);
+        } else if (Array.isArray(response.appointments)) {
+          allAppointmentsData = response.appointments;
+          totalElements = response.total_elements || response.totalElements || response.appointments.length;
+          totalPages = response.total_pages || response.totalPages || Math.ceil(totalElements / size);
+          currentPage = response.page !== undefined ? response.page : (response.number || 0);
+        }
+      } else if (Array.isArray(response)) {
+        // Direct array response (fallback)
+        allAppointmentsData = response;
+        totalElements = response.length;
+        totalPages = 1;
+        currentPage = 0;
+      }
+      
+      console.log('✅ [RECEPTION DASHBOARD] Appointments loaded:', allAppointmentsData.length, 'total:', totalElements, 'pages:', totalPages, 'current page:', currentPage);
+      
+      // Update pagination metadata with correct values from API response
+      setAllAppointmentsPagination({
+        currentPage: currentPage,
+        totalPages: totalPages,
+        totalElements: totalElements,
+        size: size
+      });
       
       // Convert API data to frontend format
       const appointmentsWithSalonId = allAppointmentsData.map(apiAppointment => {
@@ -132,13 +215,19 @@ const ReceptionDashboard: React.FC = () => {
           }
         };
 
-        // Extract time from appointmentDate
+        // Extract time from appointmentDate - fix timezone issue
         const appointmentDateTime = new Date(apiAppointment.appointmentDate);
         const timeSlot = appointmentDateTime.toLocaleTimeString('en-US', { 
           hour: '2-digit', 
           minute: '2-digit',
           hour12: true 
         });
+
+        // Fix date display issue by using local date instead of UTC
+        const appointmentDate = new Date(apiAppointment.appointmentDate);
+        const localDateString = appointmentDate.getFullYear() + '-' + 
+                               String(appointmentDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                               String(appointmentDate.getDate()).padStart(2, '0');
 
         return {
           id: apiAppointment.id.toString(),
@@ -148,11 +237,14 @@ const ReceptionDashboard: React.FC = () => {
           customerPhone: apiAppointment.customerPhone,
           customerEmail: '',
           customerGender: undefined,
-          barberId: `employee_${apiAppointment.id}`,
+          barberId: apiAppointment.employeeId ? apiAppointment.employeeId.toString() : `employee_${apiAppointment.id}`,
           barberName: apiAppointment.employeeName,
-          serviceId: `service_${apiAppointment.id}`,
+          serviceId: apiAppointment.serviceId ? apiAppointment.serviceId.toString() : `service_${apiAppointment.id}`,
           serviceName: apiAppointment.serviceName,
-          date: appointmentDateTime.toISOString().split('T')[0],
+          // Store original API IDs for editing appointments
+          originalEmployeeId: apiAppointment.employeeId,
+          originalServiceId: apiAppointment.serviceId,
+          date: localDateString,
           timeSlot: timeSlot,
           status: mapStatus(apiAppointment.status, apiAppointment.paymentStatus),
           paymentStatus: mapPaymentStatus(apiAppointment.paymentStatus),
@@ -186,6 +278,7 @@ const ReceptionDashboard: React.FC = () => {
       loadAppointments();
       loadTodayAppointments();
       loadPendingPayments();
+      loadTotalStatistics();
     }
   }, [employee?.salonId]);
 
@@ -194,13 +287,11 @@ const ReceptionDashboard: React.FC = () => {
   const [todayAppointmentsSearch, setTodayAppointmentsSearch] = useState('');
   const [allAppointmentsSearch, setAllAppointmentsSearch] = useState('');
   const [allAppointmentsDateFilter, setAllAppointmentsDateFilter] = useState('');
-  const allAppointmentsScrollRef = useRef<HTMLDivElement>(null);
-  const todayAppointmentsScrollRef = useRef<HTMLDivElement>(null);
 
-  // Load today's appointments from API
-  const loadTodayAppointments = async () => {
+  // Load today's appointments from API with pagination
+  const loadTodayAppointments = async (page: number = 0, size: number = 9) => {
     try {
-      console.log('🔄 [LOAD] Starting loadTodayAppointments...');
+      console.log('🔄 [LOAD] Starting loadTodayAppointments with pagination...', { page, size });
       const salonId = getSalonId();
       const branchId = getBranchId();
       if (!salonId) {
@@ -210,13 +301,30 @@ const ReceptionDashboard: React.FC = () => {
 
       console.log('📅 [RECEPTION DASHBOARD] Loading today\'s appointments for salon:', salonId, 'branch:', branchId);
       
-      const response = await apiService.getTodayAppointments(parseInt(salonId.toString()), branchId || undefined);
+      const response = await apiService.getTodayAppointments(
+        parseInt(salonId.toString()), 
+        branchId || undefined, 
+        page, 
+        size, 
+        'appointmentDate', 
+        'asc'
+      );
       console.log('📡 [RECEPTION DASHBOARD] Today\'s appointments response:', response);
+      
+      // Update pagination metadata using snake_case property names from API
+      setTodayAppointmentsPagination({
+        currentPage: response.page !== undefined ? response.page : (response.number || page),
+        totalPages: response.total_pages || response.totalPages || Math.ceil((response.total_elements || response.totalElements || 0) / size),
+        totalElements: response.total_elements || response.totalElements || 0,
+        size: size
+      });
       
       let appointmentsData: any[] = [];
       
-      // Handle different response structures
-      if (response && response.appointments) {
+      // Handle different response structures (Spring Boot pagination)
+      if (response && response.content) {
+        appointmentsData = response.content;
+      } else if (response && response.appointments) {
         appointmentsData = response.appointments;
       } else if (Array.isArray(response)) {
         appointmentsData = response as any[];
@@ -238,6 +346,12 @@ const ReceptionDashboard: React.FC = () => {
             minute: '2-digit',
             hour12: true 
           });
+
+          // Fix date display issue by using local date instead of UTC
+          const appointmentDate = new Date(apiAppointment.appointmentDate);
+          const localDateString = appointmentDate.getFullYear() + '-' + 
+                                 String(appointmentDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                                 String(appointmentDate.getDate()).padStart(2, '0');
 
           // Map status for today's appointments
           let status: 'booked' | 'in-progress' | 'completed' | 'payment-pending' | 'paid' | 'cancelled' | 'no-show';
@@ -277,11 +391,14 @@ const ReceptionDashboard: React.FC = () => {
             customerPhone: apiAppointment.customerPhone,
             customerEmail: '',
             customerGender: undefined,
-            barberId: `employee_${apiAppointment.id}`,
+            barberId: apiAppointment.employeeId ? apiAppointment.employeeId.toString() : `employee_${apiAppointment.id}`,
             barberName: apiAppointment.employeeName,
-            serviceId: `service_${apiAppointment.id}`,
+            serviceId: apiAppointment.serviceId ? apiAppointment.serviceId.toString() : `service_${apiAppointment.id}`,
             serviceName: apiAppointment.serviceName,
-            date: appointmentDateTime.toISOString().split('T')[0],
+            // Store original API IDs for editing appointments
+            originalEmployeeId: apiAppointment.employeeId,
+            originalServiceId: apiAppointment.serviceId,
+            date: localDateString,
             timeSlot: timeSlot,
             status,
             paymentStatus,
@@ -308,22 +425,39 @@ const ReceptionDashboard: React.FC = () => {
     }
   };
 
-  // Load pending payments from API
-  const loadPendingPayments = async () => {
+  // Load pending payments from API with pagination
+  const loadPendingPayments = async (page: number = 0, size: number = 9) => {
     try {
       const salonId = getSalonId();
       const branchId = getBranchId();
       if (!salonId) return;
 
-      console.log('💰 [RECEPTION DASHBOARD] Loading pending payments for salon:', salonId, 'branch:', branchId);
+      console.log('💰 [RECEPTION DASHBOARD] Loading pending payments with pagination...', { page, size, salonId, branchId });
       
-      const response = await apiService.getPendingPaymentAppointments(parseInt(salonId.toString()), branchId || undefined);
+      const response = await apiService.getPendingPaymentAppointments(
+        parseInt(salonId.toString()), 
+        branchId || undefined, 
+        page, 
+        size, 
+        'totalAmount', 
+        'desc'
+      );
       console.log('📡 [RECEPTION DASHBOARD] Pending payments response:', response);
+      
+      // Update pagination metadata using snake_case property names from API
+      setPendingPaymentsPagination({
+        currentPage: response.page !== undefined ? response.page : (response.number || page),
+        totalPages: response.total_pages || response.totalPages || Math.ceil((response.total_elements || response.totalElements || 0) / size),
+        totalElements: response.total_elements || response.totalElements || 0,
+        size: size
+      });
       
       let appointmentsData: any[] = [];
       
-      // Handle different response structures
-      if (response && response.appointments) {
+      // Handle different response structures (Spring Boot pagination)
+      if (response && response.content) {
+        appointmentsData = response.content;
+      } else if (response && response.appointments) {
         appointmentsData = response.appointments;
       } else if (Array.isArray(response)) {
         appointmentsData = response as any[];
@@ -338,13 +472,14 @@ const ReceptionDashboard: React.FC = () => {
       console.log('💰 [RECEPTION DASHBOARD] Processing pending payments:', appointmentsData.length);
       
       if (appointmentsData.length > 0) {
-        // Only include appointments with status COMPLETED and paymentStatus PENDING
+        // Include appointments with paymentStatus PENDING (regardless of appointment status)
+        // This shows all appointments that need payment
         const filteredAppointments = appointmentsData.filter(
-          (apiAppointment: any) =>
-            apiAppointment.status === 'COMPLETED' &&
-            apiAppointment.paymentStatus === 'PENDING'
+          (apiAppointment: any) => apiAppointment.paymentStatus === 'PENDING'
         );
 
+        console.log('💰 [RECEPTION DASHBOARD] Filtered pending payments:', filteredAppointments.length, 'out of', appointmentsData.length);
+        
         const convertedAppointments = filteredAppointments.map((apiAppointment: any) => {
           const appointmentDateTime = new Date(apiAppointment.appointmentDate);
           const timeSlot = appointmentDateTime.toLocaleTimeString('en-US', { 
@@ -352,6 +487,12 @@ const ReceptionDashboard: React.FC = () => {
             minute: '2-digit',
             hour12: true 
           });
+
+          // Fix timezone-aware date formatting to prevent 1-day offset
+          const appointmentDate = new Date(apiAppointment.appointmentDate);
+          const formattedDate = appointmentDate.getFullYear() + '-' + 
+                               String(appointmentDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                               String(appointmentDate.getDate()).padStart(2, '0');
 
           return {
             id: apiAppointment.id.toString(),
@@ -361,11 +502,14 @@ const ReceptionDashboard: React.FC = () => {
             customerPhone: apiAppointment.customerPhone,
             customerEmail: '',
             customerGender: undefined,
-            barberId: `employee_${apiAppointment.id}`,
+            barberId: apiAppointment.employeeId ? apiAppointment.employeeId.toString() : `employee_${apiAppointment.id}`,
             barberName: apiAppointment.employeeName,
-            serviceId: `service_${apiAppointment.id}`,
+            serviceId: apiAppointment.serviceId ? apiAppointment.serviceId.toString() : `service_${apiAppointment.id}`,
             serviceName: apiAppointment.serviceName,
-            date: appointmentDateTime.toISOString().split('T')[0],
+            // Store original API IDs for editing appointments
+            originalEmployeeId: apiAppointment.employeeId,
+            originalServiceId: apiAppointment.serviceId,
+            date: formattedDate,
             timeSlot: timeSlot,
             status: 'payment-pending' as const,
             paymentStatus: 'pending' as const,
@@ -392,11 +536,101 @@ const ReceptionDashboard: React.FC = () => {
     }
   };
   
+  // Function to load total statistics (independent of pagination)
+  const loadTotalStatistics = async () => {
+    try {
+      console.log('📊 [STATS] Loading total statistics...');
+      setTotalStatistics(prev => ({ ...prev, loading: true }));
+      
+      const salonId = getSalonId();
+      if (!salonId) {
+        console.error('❌ [STATS] No salon ID found');
+        return;
+      }
+
+      // Load statistics with large page size to get accurate totals
+      const [allAppointmentsData, todayAppointmentsData, pendingPaymentsData] = await Promise.all([
+        apiService.getAllAppointmentsForSalon(parseInt(salonId.toString()), undefined, 0, 1000, 'createdAt', 'asc'),
+        apiService.getTodayAppointments(parseInt(salonId.toString()), undefined, 0, 1000, 'appointmentDate', 'asc'),
+        apiService.getPendingPaymentAppointments(parseInt(salonId.toString()), undefined, 0, 1000, 'appointmentDate', 'desc')
+      ]);
+
+      // Handle different response structures for statistics
+      let allAppointmentsForStats: any[] = [];
+      if (Array.isArray(allAppointmentsData)) {
+        allAppointmentsForStats = allAppointmentsData;
+      } else if (allAppointmentsData && (allAppointmentsData as any).appointments) {
+        allAppointmentsForStats = (allAppointmentsData as any).appointments;
+      } else if (allAppointmentsData && (allAppointmentsData as any).content) {
+        allAppointmentsForStats = (allAppointmentsData as any).content;
+      }
+
+      // Calculate total customers (unique customers from all appointments)
+      const uniqueCustomers = new Set();
+      allAppointmentsForStats.forEach((appointment: any) => {
+        if (appointment.customerPhone) {
+          uniqueCustomers.add(appointment.customerPhone);
+        }
+      });
+
+      // Handle pending payments data structure
+      let pendingPaymentsForStats: any[] = [];
+      if (Array.isArray(pendingPaymentsData)) {
+        pendingPaymentsForStats = pendingPaymentsData;
+      } else if (pendingPaymentsData && (pendingPaymentsData as any).appointments) {
+        pendingPaymentsForStats = (pendingPaymentsData as any).appointments;
+      } else if (pendingPaymentsData && (pendingPaymentsData as any).content) {
+        pendingPaymentsForStats = (pendingPaymentsData as any).content;
+      }
+
+      // Calculate daily income from pending payments that are actually completed
+      const completedPayments = pendingPaymentsForStats.filter((appointment: any) => 
+        appointment.status === 'COMPLETED' && appointment.paymentStatus === 'PAID'
+      );
+      const totalDailyIncome = completedPayments.reduce((sum: number, appointment: any) => 
+        sum + (appointment.totalAmount || 0), 0
+      );
+
+      // Handle today's appointments data structure
+      let todayAppointmentsForStats: any[] = [];
+      if (Array.isArray(todayAppointmentsData)) {
+        todayAppointmentsForStats = todayAppointmentsData;
+      } else if (todayAppointmentsData && (todayAppointmentsData as any).appointments) {
+        todayAppointmentsForStats = (todayAppointmentsData as any).appointments;
+      } else if (todayAppointmentsData && (todayAppointmentsData as any).content) {
+        todayAppointmentsForStats = (todayAppointmentsData as any).content;
+      }
+      
+      // Calculate pending payments count (completed but not paid)
+      const actualPendingPayments = pendingPaymentsForStats.filter((appointment: any) => 
+        appointment.status === 'COMPLETED' && appointment.paymentStatus === 'PENDING'
+      );
+
+      setTotalStatistics({
+        totalCustomers: uniqueCustomers.size,
+        totalTodayAppointments: todayAppointmentsForStats.length,
+        totalPendingPayments: actualPendingPayments.length,
+        totalDailyIncome: totalDailyIncome,
+        loading: false
+      });
+
+      console.log('✅ [STATS] Total statistics loaded:', {
+        totalCustomers: uniqueCustomers.size,
+        totalTodayAppointments: todayAppointmentsForStats.length,
+        totalPendingPayments: actualPendingPayments.length,
+        totalDailyIncome: totalDailyIncome
+      });
+
+    } catch (error) {
+      console.error('❌ [STATS] Error loading total statistics:', error);
+      setTotalStatistics(prev => ({ ...prev, loading: false }));
+    }
+  };
+  
   // Function to refresh appointments without page reload
   const fetchAppointments = async () => {
     try {
       const salonId = getSalonId();
-      const branchId = getBranchId();
       
       if (!salonId) {
         console.error('❌ [REFRESH] No salon ID found');
@@ -405,11 +639,11 @@ const ReceptionDashboard: React.FC = () => {
 
       console.log('🔄 [REFRESH] Refreshing all appointments via WebSocket...');
       
-      // Refresh all appointment lists to ensure data consistency
+      // Refresh all appointment lists to ensure data consistency - use current page numbers
       await Promise.all([
-        loadAppointments(),        // All appointments
-        loadTodayAppointments(),   // Today's appointments  
-        loadPendingPayments()      // Pending payments
+        loadAppointments(allAppointmentsPagination.currentPage, allAppointmentsPagination.size),
+        loadTodayAppointments(todayAppointmentsPagination.currentPage, todayAppointmentsPagination.size),   
+        loadPendingPayments(pendingPaymentsPagination.currentPage, pendingPaymentsPagination.size)
       ]);
       
       console.log('✅ [REFRESH] All appointment lists refreshed via WebSocket');
@@ -418,33 +652,33 @@ const ReceptionDashboard: React.FC = () => {
     }
   };
 
-  // Function to update a specific appointment in the list (for future granular updates)
-  const updateAppointmentInList = (updatedAppointment: Appointment) => {
-    setAppointments(prevAppointments => 
-      prevAppointments.map(appointment => 
-        appointment.id === updatedAppointment.id 
-          ? updatedAppointment 
-          : appointment
-      )
-    );
-    
-    setTodayAppointments(prevTodayAppointments =>
-      prevTodayAppointments.map(appointment =>
-        appointment.id === updatedAppointment.id
-          ? updatedAppointment
-          : appointment
-      )
-    );
-    
-    setPendingPayments(prevPendingPayments =>
-      prevPendingPayments.map(appointment =>
-        appointment.id === updatedAppointment.id
-          ? updatedAppointment
-          : appointment
-      )
-    );
-    
-    console.log('✅ [REFRESH] Appointment updated in list:', updatedAppointment.id);
+  // Pagination handlers
+  const handleAllAppointmentsPageChange = (newPage: number) => {
+    console.log('🔄 [PAGINATION] All Appointments page change requested:', newPage);
+    console.log('📊 [PAGINATION] Current pagination state:', allAppointmentsPagination);
+    // TEMPORARILY DISABLED bounds checking for testing
+    // if (newPage >= 0 && newPage < allAppointmentsPagination.totalPages) {
+      console.log('✅ [PAGINATION] Loading page:', newPage);
+      loadAppointments(newPage, allAppointmentsPagination.size);
+    // } else {
+    //   console.log('⚠️ [PAGINATION] Page change blocked - out of bounds');
+    // }
+  };
+
+  const handleTodayAppointmentsPageChange = (newPage: number) => {
+    console.log('🔄 [PAGINATION] Today\'s Appointments page change requested:', newPage);
+    // TEMPORARILY DISABLED bounds checking for testing
+    // if (newPage >= 0 && newPage < todayAppointmentsPagination.totalPages) {
+      loadTodayAppointments(newPage, todayAppointmentsPagination.size);
+    // }
+  };
+
+  const handlePendingPaymentsPageChange = (newPage: number) => {
+    console.log('🔄 [PAGINATION] Pending Payments page change requested:', newPage);
+    // TEMPORARILY DISABLED bounds checking for testing
+    // if (newPage >= 0 && newPage < pendingPaymentsPagination.totalPages) {
+      loadPendingPayments(newPage, pendingPaymentsPagination.size);
+    // }
   };
   
   // Search function for appointments
@@ -467,12 +701,6 @@ const ReceptionDashboard: React.FC = () => {
     filteredAllAppointments = filteredAllAppointments.filter(app => app.date === allAppointmentsDateFilter);
   }
   
-  // Calculate daily income from appointments with completed payments only
-  const dailyIncomeFromPayments = [...appointments, ...todayAppointments]
-    .filter((app, index, self) => self.findIndex(a => a.id === app.id) === index) // Remove duplicates
-    .filter(app => app.paymentStatus === 'completed' && app.date === new Date().toISOString().split('T')[0])
-    .reduce((sum, app) => sum + app.finalAmount, 0);
-
   // Function to show success message
   const showSuccessMessage = (message: string) => {
     setSuccessMessage({show: true, message});
@@ -687,6 +915,23 @@ const ReceptionDashboard: React.FC = () => {
     setIsBookingModalOpen(true);
   };
 
+  // Function to refresh all appointment lists
+  const refreshAllAppointments = async () => {
+    console.log('🔄 [REFRESH] Refreshing all appointment lists...');
+    try {
+      // Refresh all three types of appointments and statistics
+      await Promise.all([
+        loadAppointments(allAppointmentsPagination.currentPage),
+        loadTodayAppointments(todayAppointmentsPagination.currentPage),
+        loadPendingPayments(pendingPaymentsPagination.currentPage),
+        loadTotalStatistics()
+      ]);
+      console.log('✅ [REFRESH] All appointment lists and statistics refreshed successfully');
+    } catch (error) {
+      console.error('❌ [REFRESH] Error refreshing appointment lists:', error);
+    }
+  };
+
   const handleDeleteAppointment = (appointmentId: string) => {
     const appointment = [...appointments, ...todayAppointments, ...pendingPayments]
       .find(app => app.id === appointmentId);
@@ -713,8 +958,11 @@ const ReceptionDashboard: React.FC = () => {
         showSuccessMessage(`Appointment for ${cancelAppointmentModal.appointment.customerName} has been cancelled successfully!`);
         setCancelAppointmentModal({isOpen: false, appointment: null});
         
-        // The WebSocket will automatically refresh the data when the backend broadcasts the update
-        console.log('🎯 [CANCEL] Waiting for WebSocket update...');
+        // Refresh all appointment lists after cancellation
+        console.log('🔄 [CANCEL] Refreshing appointment lists...');
+        await refreshAllAppointments();
+        
+        console.log('🎯 [CANCEL] Appointment lists refreshed successfully');
       } catch (error) {
         console.error('❌ [CANCEL] Error cancelling appointment:', error);
         showErrorMessage(`Failed to cancel appointment for ${cancelAppointmentModal.appointment.customerName}. Please try again.`);
@@ -786,8 +1034,11 @@ const ReceptionDashboard: React.FC = () => {
         triggerReceptionNotification('sessionCompleted', completeSessionModal.appointment.customerName, completeSessionModal.appointment.timeSlot);
         setCompleteSessionModal({isOpen: false, appointment: null});
         
-        // The WebSocket will automatically refresh the data when the backend broadcasts the update
-        console.log('🎯 [COMPLETE SESSION] Waiting for WebSocket update...');
+        // Refresh all appointment lists after session completion
+        console.log('🔄 [COMPLETE SESSION] Refreshing appointment lists...');
+        await refreshAllAppointments();
+        
+        console.log('🎯 [COMPLETE SESSION] Appointment lists refreshed successfully');
       } catch (error) {
         console.error('❌ [COMPLETE SESSION] Error completing session:', error);
         showErrorMessage(`Failed to complete session for ${completeSessionModal.appointment.customerName}. Please try again.`);
@@ -815,8 +1066,11 @@ const ReceptionDashboard: React.FC = () => {
         triggerReceptionNotification('paymentReceived', paymentConfirmModal.appointment.finalAmount, paymentConfirmModal.appointment.customerName);
         setPaymentConfirmModal({isOpen: false, appointment: null});
         
-        // The WebSocket will automatically refresh the data when the backend broadcasts the update
-        console.log('🎯 [PAYMENT] Waiting for WebSocket update...');
+        // Refresh all appointment lists after payment confirmation
+        console.log('🔄 [PAYMENT] Refreshing appointment lists...');
+        await refreshAllAppointments();
+        
+        console.log('🎯 [PAYMENT] Appointment lists refreshed successfully');
       } catch (error) {
         console.error('❌ [PAYMENT] Error confirming payment:', error);
         showErrorMessage(`Failed to confirm payment for ${paymentConfirmModal.appointment.customerName}. Please try again.`);
@@ -837,7 +1091,7 @@ TODAY'S APPOINTMENTS: ${todayAppointments.length}
 PAYMENT STATUS:
 - Completed Payments: ${[...appointments, ...todayAppointments].filter((app, index, self) => self.findIndex(a => a.id === app.id) === index).filter(app => app.paymentStatus === 'completed' && app.date === new Date().toISOString().split('T')[0]).length}
 - Pending Payments: ${pendingPayments.length}
-- Total Income from Completed Payments: Rs. ${dailyIncomeFromPayments.toFixed(2)}
+- Total Income from Completed Payments: Rs. ${totalStatistics.totalDailyIncome.toFixed(2)}
 
 APPOINTMENT DETAILS:
 ${todayAppointments.map(app => 
@@ -856,23 +1110,6 @@ Generated on: ${new Date().toLocaleString()}
     a.click();
     window.URL.revokeObjectURL(url);
   };
-
-  // Scroll functions for all appointments carousel
-  const scrollAllAppointments = (direction: 'left' | 'right') => {
-    if (allAppointmentsScrollRef.current) {
-      const scrollAmount = 408; // Width of one card (384px/w-96) plus gap (24px)
-      const currentScroll = allAppointmentsScrollRef.current.scrollLeft;
-      const targetScroll = direction === 'left' 
-        ? currentScroll - scrollAmount 
-        : currentScroll + scrollAmount;
-      
-      allAppointmentsScrollRef.current.scrollTo({
-        left: targetScroll,
-        behavior: 'smooth'
-      });
-    }
-  };
-
   const handleProfileSave = (updatedProfile: any) => {
     // Profile updates should be handled through the AuthContext
     // For now, we'll just log the changes and show success message
@@ -881,29 +1118,13 @@ Generated on: ${new Date().toLocaleString()}
     triggerReceptionNotification('appointmentConfirmed', 'Profile updated successfully', '');
   };
 
-  // Scroll functions for today's appointments carousel
-  const scrollTodayAppointments = (direction: 'left' | 'right') => {
-    if (todayAppointmentsScrollRef.current) {
-      const scrollAmount = 408; // Width of one card (384px/w-96) plus gap (24px)
-      const currentScroll = todayAppointmentsScrollRef.current.scrollLeft;
-      const targetScroll = direction === 'left' 
-        ? currentScroll - scrollAmount 
-        : currentScroll + scrollAmount;
-      
-      todayAppointmentsScrollRef.current.scrollTo({
-        left: targetScroll,
-        behavior: 'smooth'
-      });
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Loading State */}
         {loading && (
           <div className="flex items-center justify-center h-64">
-            <Loader className="w-8 h-8 animate-spin text-purple-600" />
+            <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
             <span className="ml-3 text-gray-600 font-medium">Loading appointments...</span>
           </div>
         )}
@@ -974,30 +1195,32 @@ Generated on: ${new Date().toLocaleString()}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatsCard
           title="Today's Appointments"
-          value={searchAppointments(todayAppointments, todayAppointmentsSearch).length}
+          value={totalStatistics.totalTodayAppointments}
           icon={Calendar}
           color="blue"
+          loading={totalStatistics.loading}
         />
         <StatsCard
           title="Pending Payments"
-          value={searchAppointments(pendingPayments, pendingPaymentsSearch).length}
+          value={totalStatistics.totalPendingPayments}
           icon={Clock}
           color="amber"
+          loading={totalStatistics.loading}
         />
         <StatsCard
           title="Daily Income"
-          value={`Rs. ${dailyIncomeFromPayments.toFixed(2)}`}
+          value={`Rs. ${totalStatistics.totalDailyIncome.toFixed(2)}`}
           icon={DollarSign}
           color="emerald"
           subtitle="From completed payments"
+          loading={totalStatistics.loading}
         />
         <StatsCard
           title="Total Customers"
-          value={searchAppointments(appointments, allAppointmentsSearch).filter(app => 
-            allAppointmentsDateFilter ? app.date === allAppointmentsDateFilter : true
-          ).length}
+          value={totalStatistics.totalCustomers}
           icon={Users}
           color="purple"
+          loading={totalStatistics.loading}
         />
       </div>
 
@@ -1039,7 +1262,7 @@ Generated on: ${new Date().toLocaleString()}
             {filteredPendingPayments.map(appointment => (
               <AppointmentCard
                 key={appointment.id}
-               appointment={appointment}
+                appointment={appointment}
                 onMarkPaid={handleMarkPaid}
                 onDelete={handleDeleteAppointment}
                 onAssignBarber={handleAssignBarber}
@@ -1051,6 +1274,54 @@ Generated on: ${new Date().toLocaleString()}
           {filteredPendingPayments.length === 0 && pendingPaymentsSearch && (
             <div className="text-center py-8 text-gray-500">
               No pending payments found for "{pendingPaymentsSearch}"
+            </div>
+          )}
+          
+          {/* Pagination for Pending Payments */}
+          {pendingPaymentsPagination.totalPages > 1 && (
+            <div className="flex items-center justify-between mt-6 px-4">
+              <p className="text-sm text-gray-600">
+                Showing {(pendingPaymentsPagination.currentPage * pendingPaymentsPagination.size) + 1} to {Math.min((pendingPaymentsPagination.currentPage + 1) * pendingPaymentsPagination.size, pendingPaymentsPagination.totalElements)} of {pendingPaymentsPagination.totalElements} payments
+              </p>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => handlePendingPaymentsPageChange(pendingPaymentsPagination.currentPage - 1)}
+                  disabled={pendingPaymentsPagination.currentPage <= 0}
+                  className="px-3 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                
+                {Array.from({length: Math.min(5, pendingPaymentsPagination.totalPages)}, (_, index) => {
+                  const page = pendingPaymentsPagination.currentPage <= 2 
+                    ? index 
+                    : pendingPaymentsPagination.currentPage + index - 2;
+                  
+                  if (page >= pendingPaymentsPagination.totalPages || page < 0) return null;
+                  
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => handlePendingPaymentsPageChange(page)}
+                      className={`px-3 py-1 text-sm rounded-md ${
+                        pendingPaymentsPagination.currentPage === page
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white border border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {page + 1}
+                    </button>
+                  );
+                })}
+                
+                <button
+                  onClick={() => handlePendingPaymentsPageChange(pendingPaymentsPagination.currentPage + 1)}
+                  disabled={pendingPaymentsPagination.currentPage >= pendingPaymentsPagination.totalPages - 1}
+                  className="px-3 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1077,55 +1348,74 @@ Generated on: ${new Date().toLocaleString()}
                   className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm w-64"
                 />
               </div>
-              {filteredTodayAppointments.length > 3 && (
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => scrollTodayAppointments('left')}
-                    className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors duration-200 shadow-sm"
-                    aria-label="Scroll left"
-                  >
-                    <ChevronLeft className="w-5 h-5 text-gray-600" />
-                  </button>
-                  <button
-                    onClick={() => scrollTodayAppointments('right')}
-                    className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors duration-200 shadow-sm"
-                    aria-label="Scroll right"
-                  >
-                    <ChevronRight className="w-5 h-5 text-gray-600" />
-                  </button>
-                </div>
-              )}
             </div>
           </div>
           
-          <div className="relative">
-            <div
-              ref={todayAppointmentsScrollRef}
-              className="flex space-x-6 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400"
-              style={{
-                scrollbarWidth: 'thin',
-                msOverflowStyle: 'auto',
-              }}
-            >
-              {filteredTodayAppointments.map(appointment => (
-                <div key={appointment.id} className="flex-none w-96">
-                  <AppointmentCard
-                    appointment={appointment}
-                    onEdit={handleEditAppointment}
-                    onMarkPaid={handleMarkPaid}
-                    onCompleteSession={handleCompleteSession}
-                    onDelete={handleDeleteAppointment}
-                    onAssignBarber={handleAssignBarber}
-                    showActions={true}
-                    userRole="reception"
-                  />
-                </div>
-              ))}
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredTodayAppointments.map(appointment => (
+              <AppointmentCard
+                appointment={appointment}
+                onEdit={handleEditAppointment}
+                onMarkPaid={handleMarkPaid}
+                onCompleteSession={handleCompleteSession}
+                onDelete={handleDeleteAppointment}
+                onAssignBarber={handleAssignBarber}
+                showActions={true}
+                userRole="reception"
+              />
+            ))}
           </div>
           {filteredTodayAppointments.length === 0 && todayAppointmentsSearch && (
             <div className="text-center py-8 text-gray-500">
               No appointments found for "{todayAppointmentsSearch}"
+            </div>
+          )}
+          
+          {/* Pagination for Today's Appointments */}
+          {todayAppointmentsPagination.totalPages > 1 && (
+            <div className="flex items-center justify-between mt-6 px-4">
+              <p className="text-sm text-gray-600">
+                Showing {(todayAppointmentsPagination.currentPage * todayAppointmentsPagination.size) + 1} to {Math.min((todayAppointmentsPagination.currentPage + 1) * todayAppointmentsPagination.size, todayAppointmentsPagination.totalElements)} of {todayAppointmentsPagination.totalElements} appointments
+              </p>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => handleTodayAppointmentsPageChange(todayAppointmentsPagination.currentPage - 1)}
+                  disabled={todayAppointmentsPagination.currentPage <= 0}
+                  className="px-3 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                
+                {Array.from({length: Math.min(5, todayAppointmentsPagination.totalPages)}, (_, index) => {
+                  const page = todayAppointmentsPagination.currentPage <= 2 
+                    ? index 
+                    : todayAppointmentsPagination.currentPage + index - 2;
+                  
+                  if (page >= todayAppointmentsPagination.totalPages || page < 0) return null;
+                  
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => handleTodayAppointmentsPageChange(page)}
+                      className={`px-3 py-1 text-sm rounded-md ${
+                        todayAppointmentsPagination.currentPage === page
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white border border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {page + 1}
+                    </button>
+                  );
+                })}
+                
+                <button
+                  onClick={() => handleTodayAppointmentsPageChange(todayAppointmentsPagination.currentPage + 1)}
+                  disabled={todayAppointmentsPagination.currentPage >= todayAppointmentsPagination.totalPages - 1}
+                  className="px-3 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1163,67 +1453,80 @@ Generated on: ${new Date().toLocaleString()}
                 Clear Date
               </button>
             )}
-            {filteredAllAppointments.length > 3 && (
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => scrollAllAppointments('left')}
-                  className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors duration-200 shadow-sm"
-                  aria-label="Scroll left"
-                >
-                  <ChevronLeft className="w-5 h-5 text-gray-600" />
-                </button>
-                <button
-                  onClick={() => scrollAllAppointments('right')}
-                  className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors duration-200 shadow-sm"
-                  aria-label="Scroll right"
-                >
-                  <ChevronRight className="w-5 h-5 text-gray-600" />
-                </button>
-              </div>
-            )}
           </div>
         </div>
         
-        <div className="relative">
-          <div
-            ref={allAppointmentsScrollRef}
-            className="flex space-x-6 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400"
-            style={{
-              scrollbarWidth: 'thin',
-              msOverflowStyle: 'auto',
-            }}
-          >
-            {filteredAllAppointments.map(appointment => (
-              <div key={appointment.id} className="flex-none w-96">
-                <AppointmentCard
-                  appointment={appointment}
-                  onEdit={handleEditAppointment}
-                  onMarkPaid={handleMarkPaid}
-                  onCompleteSession={handleCompleteSession}
-                  onDelete={handleDeleteAppointment}
-                  onAssignBarber={handleAssignBarber}
-                  showActions={true}
-                  userRole="reception"
-                />
-              </div>
-            ))}
-          </div>
-          
-          {/* Fade effect on edges */}
-          {filteredAllAppointments.length > 3 && (
-            <>
-              <div className="absolute left-0 top-0 bottom-4 w-8 bg-gradient-to-r from-gray-50 to-transparent pointer-events-none" />
-              <div className="absolute right-0 top-0 bottom-4 w-8 bg-gradient-to-l from-gray-50 to-transparent pointer-events-none" />
-            </>
-          )}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredAllAppointments.map(appointment => (
+            <AppointmentCard
+              appointment={appointment}
+              onEdit={handleEditAppointment}
+              onMarkPaid={handleMarkPaid}
+              onCompleteSession={handleCompleteSession}
+              onDelete={handleDeleteAppointment}
+              onAssignBarber={handleAssignBarber}
+              showActions={true}
+              userRole="reception"
+            />
+          ))}
         </div>
         {filteredAllAppointments.length === 0 && (allAppointmentsSearch || allAppointmentsDateFilter) && (
           <div className="text-center py-8 text-gray-500">
             No appointments found for the current search criteria
           </div>
         )}
+        
+        {/* Pagination for All Appointments */}
+        {allAppointmentsPagination.totalPages > 1 && (
+          <div className="flex items-center justify-between mt-6 px-4">
+            <p className="text-sm text-gray-600">
+              Showing {(allAppointmentsPagination.currentPage * allAppointmentsPagination.size) + 1} to {Math.min((allAppointmentsPagination.currentPage + 1) * allAppointmentsPagination.size, allAppointmentsPagination.totalElements)} of {allAppointmentsPagination.totalElements} appointments
+            </p>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handleAllAppointmentsPageChange(allAppointmentsPagination.currentPage - 1)}
+                disabled={allAppointmentsPagination.currentPage <= 0}
+                className="px-3 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              
+              {Array.from({length: Math.min(5, allAppointmentsPagination.totalPages)}, (_, index) => {
+                const page = allAppointmentsPagination.currentPage <= 2 
+                  ? index 
+                  : allAppointmentsPagination.currentPage + index - 2;
+                
+                if (page >= allAppointmentsPagination.totalPages || page < 0) return null;
+                
+                return (
+                  <button
+                    key={page}
+                    onClick={() => handleAllAppointmentsPageChange(page)}
+                    className={`px-3 py-1 text-sm rounded-md ${
+                      allAppointmentsPagination.currentPage === page
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {page + 1}
+                  </button>
+                );
+              })}
+              
+              <button
+                onClick={() => handleAllAppointmentsPageChange(allAppointmentsPagination.currentPage + 1)}
+                disabled={allAppointmentsPagination.currentPage >= allAppointmentsPagination.totalPages - 1}
+                className="px-3 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
         </div>
-      </div>
+        </div>
+        </>
+      )}
 
       {/* Booking Modal */}
       <BookingModal
@@ -1427,8 +1730,6 @@ Generated on: ${new Date().toLocaleString()}
         onSave={handleProfileSave}
         userRole="reception"
       />
-          </>
-        )}
       </div>
     </div>
   );

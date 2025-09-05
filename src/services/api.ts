@@ -964,16 +964,41 @@ class ApiService {
     }
   }
 
-  // Get today's appointments for a salon using new endpoint with branch
-  async getTodayAppointments(salonId: number, branchId?: number): Promise<AppointmentListResponse> {
-    const endpoint = branchId 
+  // Get today's appointments for a salon using new endpoint with branch and pagination
+  async getTodayAppointments(
+    salonId: number, 
+    branchId?: number, 
+    page: number = 0, 
+    size: number = 10, 
+    sort: string = 'appointmentDate', 
+    direction: string = 'asc',
+    search?: string
+  ): Promise<AppointmentListResponse> {
+    let endpoint = branchId 
       ? `${ENDPOINTS.APPOINTMENTS.TODAY_BY_SALON}/${salonId}/branch/${branchId}/today`
       : `${ENDPOINTS.APPOINTMENTS.TODAY_BY_SALON}/${salonId}/today`;
+    
+    // Add pagination and search parameters
+    const params = new URLSearchParams({
+      page: page.toString(),
+      size: size.toString(),
+      sort: sort,
+      direction: direction
+    });
+    
+    // Add search parameter if provided
+    if (search && search.trim()) {
+      params.append('search', search.trim());
+    }
+    
+    endpoint += `?${params.toString()}`;
     
     envLog.info('📅 [API] Fetching today\'s appointments...');
     envLog.info('🌐 [API] Endpoint:', endpoint);
     envLog.info('🏢 [API] Salon ID:', salonId);
     envLog.info('🌿 [API] Branch ID:', branchId || 'not specified');
+    envLog.info('📄 [API] Page:', page, 'Size:', size, 'Sort:', sort, 'Direction:', direction);
+    envLog.info('🔍 [API] Search:', search || 'not specified');
     
     try {
       const response = await this.request<AppointmentListResponse>(endpoint, {
@@ -993,16 +1018,41 @@ class ApiService {
     }
   }
 
-  // Get pending payment appointments for a salon using new endpoint with branch
-  async getPendingPaymentAppointments(salonId: number, branchId?: number): Promise<AppointmentListResponse> {
-    const endpoint = branchId 
+  // Get pending payment appointments for a salon using new endpoint with branch and pagination
+  async getPendingPaymentAppointments(
+    salonId: number, 
+    branchId?: number, 
+    page: number = 0, 
+    size: number = 10, 
+    sort: string = 'totalAmount', 
+    direction: string = 'desc',
+    search?: string
+  ): Promise<AppointmentListResponse> {
+    let endpoint = branchId 
       ? `${ENDPOINTS.APPOINTMENTS.PENDING_PAYMENTS_BY_SALON}/${salonId}/branch/${branchId}/pending-payments`
       : `${ENDPOINTS.APPOINTMENTS.PENDING_PAYMENTS_BY_SALON}/${salonId}/pending-payments`;
+    
+    // Add pagination and search parameters
+    const params = new URLSearchParams({
+      page: page.toString(),
+      size: size.toString(),
+      sort: sort,
+      direction: direction
+    });
+    
+    // Add search parameter if provided
+    if (search && search.trim()) {
+      params.append('search', search.trim());
+    }
+    
+    endpoint += `?${params.toString()}`;
     
     envLog.info('💰 [API] Fetching pending payment appointments...');
     envLog.info('🌐 [API] Endpoint:', endpoint);
     envLog.info('🏢 [API] Salon ID:', salonId);
     envLog.info('🌿 [API] Branch ID:', branchId || 'not specified');
+    envLog.info('📄 [API] Page:', page, 'Size:', size, 'Sort:', sort, 'Direction:', direction);
+    envLog.info('🔍 [API] Search:', search || 'not specified');
     
     try {
       const response = await this.request<AppointmentListResponse>(endpoint, {
@@ -1017,27 +1067,50 @@ class ApiService {
     }
   }
 
-  // ReceptionDashboard: Get all appointments for a salon using new endpoint with branch
-  async getAllAppointmentsForSalon(salonId: number, branchId?: number): Promise<AppointmentListItem[]> {
-    const endpoint = branchId 
+  // ReceptionDashboard: Get all appointments for a salon using new endpoint with branch and pagination
+  async getAllAppointmentsForSalon(
+    salonId: number, 
+    branchId?: number, 
+    page: number = 0, 
+    size: number = 10, 
+    sort: string = 'createdAt', 
+    direction: string = 'asc',
+    search?: string
+  ): Promise<any> {
+    let endpoint = branchId 
       ? `${ENDPOINTS.APPOINTMENTS.BY_SALON}/${salonId}/branch/${branchId}`
       : `${ENDPOINTS.APPOINTMENTS.BY_SALON}/${salonId}`;
     
+    // Add pagination and search parameters
+    const params = new URLSearchParams({
+      page: page.toString(),
+      size: size.toString(),
+      sort: sort,
+      direction: direction
+    });
+    
+    // Add search parameter if provided
+    if (search && search.trim()) {
+      params.append('search', search.trim());
+    }
+    
+    endpoint += `?${params.toString()}`;
+
     envLog.info('📅 [API] Getting all appointments for salon:', salonId);
     envLog.info('🌐 [API] Endpoint:', endpoint);
     envLog.info('🌿 [API] Branch ID:', branchId || 'not specified');
+    envLog.info('📄 [API] Page:', page, 'Size:', size, 'Sort:', sort, 'Direction:', direction);
+    envLog.info('🔍 [API] Search:', search || 'not specified');
     
-    const response = await this.request<any>(endpoint, { method: 'GET' });
-    // If response is an array, return it directly
-    if (Array.isArray(response)) {
+    try {
+      const response = await this.request<any>(endpoint, { method: 'GET' });
+      
+      // Return the full response to preserve pagination metadata
       return response;
+    } catch (error) {
+      envLog.error('❌ [API] Error getting all appointments:', error);
+      throw error;
     }
-    // If response is an object with appointments property, return that
-    if (response && Array.isArray(response.appointments)) {
-      return response.appointments;
-    }
-    // Otherwise, return empty array
-    return [];
   }
 
   // Utility function to convert API appointment data to frontend Appointment format
@@ -1935,6 +2008,21 @@ export interface AppointmentListResponse {
   totalCount: number;
   page?: number;
   limit?: number;
+  // Additional pagination fields for Spring Boot pagination
+  totalPages?: number;
+  totalElements?: number;
+  size?: number;
+  number?: number; // current page number (0-based)
+  numberOfElements?: number; // number of elements in current page
+  // Snake_case variants to support backend API format
+  total_pages?: number;
+  total_elements?: number;
+  number_of_elements?: number;
+  // Spring Boot pagination response format
+  content?: AppointmentListItem[];
+  first?: boolean;
+  last?: boolean;
+  empty?: boolean;
 }
 
 export interface GetAppointmentsRequest {
