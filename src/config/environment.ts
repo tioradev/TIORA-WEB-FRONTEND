@@ -1,16 +1,16 @@
 // Environment Configuration
 export const ENV_CONFIG = {
-  // Current environment - change this to switch between environments
-  CURRENT_ENV: 'development' as 'development' | 'production',
+  // Current environment - automatically determined or fallback to production
+  CURRENT_ENV: (import.meta.env.VITE_ENVIRONMENT || 'production') as 'development' | 'production',
   
   development: {
-    API_BASE_URL: 'http://localhost:8090/api/v1',
+    API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8090/api/v1',
     API_TIMEOUT: 10000,
     ENABLE_LOGGING: true,
   },
   
   production: {
-    API_BASE_URL: 'https://your-production-domain.com/api/v1', // TODO: Update with actual production URL
+    API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://54.169.11.244/api/v1',
     API_TIMEOUT: 30000,
     ENABLE_LOGGING: false,
   }
