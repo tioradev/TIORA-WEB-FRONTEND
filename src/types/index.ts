@@ -5,15 +5,83 @@ export interface User {
   role: 'reception' | 'owner' | 'super-admin';
   profilePicture?: string;
   salonId?: string; // For reception and owner roles
+  salon?: SalonInfo; // For owner role - will contain full salon details
+  employee?: EmployeeInfo; // For reception role - will contain employee details
+}
+
+export interface EmployeeInfo {
+  employeeId: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  username: string;
+  phoneNumber: string;
+  dateOfBirth: string | null;
+  gender: "MALE" | "FEMALE" | "OTHER";
+  address: string;
+  city: string | null;
+  role: "RECEPTIONIST" | "BARBER";
+  status: "ACTIVE" | "INACTIVE";
+  hireDate: string;
+  terminationDate: string | null;
+  baseSalary: number;
+  experience: string | null;
+  specializations: string[];
+  emergencyContact: string;
+  emergencyPhone: string;
+  emergencyRelationship: string;
+  ratings: number;
+  experienceYears: number | null;
+  notes: string | null;
+  profileImageUrl: string | null;
+  salonName: string;
+  salonId: number;
+  branchId: number;
+  employeeWeeklySchedule: string;
+  createdAt: string;
+  updatedAt: string;
+  active: boolean;
+  fullName: string;
+}
+
+export interface SalonInfo {
+  salonId: number;
+  name: string;
+  address: string;
+  district: string;
+  postalCode: string;
+  phoneNumber: string;
+  email: string;
+  ownerFirstName: string;
+  ownerLastName: string;
+  ownerPhone: string;
+  ownerEmail: string;
+  brNumber: string;
+  taxId: string;
+  imageUrl: string;
+  ownerImgUrl?: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  username?: string;
+  userRole?: string;
+  defaultBranchId?: number;
+  defaultBranchName?: string;
+  fullOwnerName: string;
 }
 
 export interface Salon {
   id: string;
   name: string;
   businessName: string;
-  ownerName: string;
+  salonEmail: string;
+  branchName: string;
+  ownerFirstName: string;
+  ownerLastName: string;
   ownerEmail: string;
   ownerPhone: string;
+  username?: string;
+  defaultPassword?: string;
   address: string;
   city: string;
   state: string;
@@ -100,6 +168,9 @@ export interface Appointment {
   barberName: string;
   serviceId: string;
   serviceName: string;
+  // Store original API IDs for editing appointments
+  originalEmployeeId?: number;
+  originalServiceId?: number;
   date: string;
   timeSlot: string;
   status: 'booked' | 'in-progress' | 'completed' | 'payment-pending' | 'paid' | 'cancelled' | 'no-show';
@@ -207,10 +278,13 @@ export interface SalonBranch {
   salonId: string;
   name: string;
   address: string;
+  description?: string; // Add description field
   phone: string;
   email: string;
   managerId?: string;
   isActive: boolean;
+  image?: string;
+  employeeCount?: number;
   openingHours: {
     [key: string]: { open: string; close: string; isOpen: boolean };
   };
@@ -347,6 +421,33 @@ export interface Promotion {
   createdBy: string;
 }
 
+// API-compatible promotion interfaces
+export interface PromotionResponse {
+  promotionId: number;
+  promotionName: string;
+  description: string;
+  startDate: string; // ISO date string
+  endDate: string; // ISO date string
+  imageUrl?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdBy: string;
+  createdAt: string; // ISO datetime string
+  updatedAt: string; // ISO datetime string
+  active: boolean;
+  currentlyValid: boolean;
+  expired: boolean;
+  upcoming: boolean;
+}
+
+export interface PromotionRequest {
+  promotionName: string;
+  description: string;
+  startDate: string; // ISO date string (YYYY-MM-DD)
+  endDate: string; // ISO date string (YYYY-MM-DD)
+  imageUrl?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+}
+
 export interface Integration {
   id: string;
   salonId: string;
@@ -397,4 +498,22 @@ export interface CustomerAnalytics {
     totalSpent: number;
     visitCount: number;
   }>;
+}
+
+// Pagination interfaces
+export interface PaginationParams {
+  page: number;
+  size: number;
+}
+
+export interface PaginatedResponse<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  size: number;
+  number: number;
+  numberOfElements: number;
+  first: boolean;
+  last: boolean;
+  empty: boolean;
 }

@@ -1,34 +1,59 @@
 import React, { useState } from 'react';
 import { 
-  Coins, Users, Plus, UserPlus, Clock, Building, 
-  BarChart3, CreditCard, AlertTriangle, Calendar,
-  TrendingUp, Star, Search,
-  Sparkles, Shield, Target, Briefcase
+  Coins, Users, UserPlus, Clock, Building, Sparkles, AlertTriangle, Shield, Target, Star,
+  Search, Calendar, TrendingUp, BarChart3, CreditCard, Briefcase
 } from 'lucide-react';
-import { mockAppointments, mockEarnings, mockLeaveRequests, mockBarbers, mockProfiles, mockServices } from '../../data/mockData';
-import { LeaveRequest, Service } from '../../types';
+import { mockAppointments, mockEarnings, mockLeaveRequests, mockBarbers } from '../../data/mockData';
+import { LeaveRequest } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import LeaveRequestCard from './LeaveRequestCard';
-import ServiceManagementModal from './ServiceManagementModal';
-import ServiceListView from './ServiceListView';
+import ServiceManagement from './ServiceManagement';
 import ExpenseManagement from '../super-admin/ExpenseManagement';
 import BranchManagement from '../super-admin/BranchManagement';
 import StaffManagement from './StaffManagement';
+import AddEmployeeModal from './AddEmployeeModal';
 import AdvancedAnalytics from './AdvancedAnalytics';
 import PaymentBilling from './PaymentBilling';
 import ProfileModal from '../shared/ProfileModal';
 
 const OwnerDashboard: React.FC = () => {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(mockLeaveRequests);
-  const [services, setServices] = useState<Service[]>(mockServices);
-  const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
-  const [editingService, setEditingService] = useState<Service | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'staff' | 'analytics' | 'payments' | 'services' | 'leaves' | 'expenses' | 'branches'>('overview');
-  const [userProfile, setUserProfile] = useState(mockProfiles.owner);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [servicesSearch, setServicesSearch] = useState<string>('');
+  const [addStaffModalOpen, setAddStaffModalOpen] = useState(false);
   const [leaveRequestsSearch, setLeaveRequestsSearch] = useState<string>('');
-  const { isProfileModalOpen, closeProfileModal } = useAuth();
+  const { isProfileModalOpen, closeProfileModal, user, salon } = useAuth();
+
+  // Create user profile from real salon data instead of mock data
+  const userProfile = {
+    id: user?.id || '',
+    name: salon?.fullOwnerName || user?.name || '',
+    firstName: salon?.ownerFirstName || '',
+    lastName: salon?.ownerLastName || '',
+    fullOwnerName: salon?.fullOwnerName || '',
+    email: salon?.email || user?.email || '',
+    phone: salon?.phoneNumber || '',
+    role: 'owner' as const,
+    avatar: salon?.ownerImgUrl || salon?.imageUrl || user?.profilePicture || '',
+    profilePicture: salon?.ownerImgUrl || user?.profilePicture || '',
+    // Owner specific fields
+    ownerFirstName: salon?.ownerFirstName || '',
+    ownerLastName: salon?.ownerLastName || '',
+    ownerPhone: salon?.ownerPhone || '',
+    ownerEmail: salon?.ownerEmail || '',
+    // Salon specific fields
+    salonName: salon?.name || '',
+    salonId: salon?.salonId?.toString() || '',
+    address: salon?.address || '',
+    district: salon?.district || '',
+    postalCode: salon?.postalCode || '',
+    brNumber: salon?.brNumber || '',
+    salonImageUrl: salon?.imageUrl || '',
+    ownerImgUrl: salon?.ownerImgUrl || '',
+    // Business fields
+    businessName: salon?.name || '',
+    taxId: salon?.taxId || ''
+  };
 
   const todayEarnings = mockEarnings.reduce((sum, earning) => sum + earning.finalAmount, 0);
   const pendingLeaves = leaveRequests.filter(req => req.status === 'pending');
@@ -45,14 +70,6 @@ const OwnerDashboard: React.FC = () => {
     acc[earning.barberName] = (acc[earning.barberName] || 0) + earning.finalAmount;
     return acc;
   }, {} as Record<string, number>);
-
-  // Search functions
-  const searchServices = (services: Service[], searchTerm: string) => {
-    if (!searchTerm.trim()) return services;
-    return services.filter(service =>
-      service.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  };
 
   const searchLeaveRequests = (requests: LeaveRequest[], searchTerm: string) => {
     if (!searchTerm.trim()) return requests;
@@ -87,79 +104,10 @@ const OwnerDashboard: React.FC = () => {
     console.log(`Leave request ${action} notification sent to barber`);
   };
 
-  const handleEditService = (service: Service) => {
-    setEditingService(service);
-    setIsServiceModalOpen(true);
-  };
-
-  const handleSaveService = (serviceData: any) => {
-    console.log('handleSaveService called with:', serviceData);
-    
-    if (editingService) {
-      // Update existing service
-      console.log('Updating service:', serviceData);
-      setServices(services.map(service => 
-        service.id === editingService.id ? { ...service, ...serviceData } : service
-      ));
-      setSuccessMessage('Service updated successfully!');
-    } else {
-      // Add new service
-      console.log('Adding new service:', serviceData);
-      const newService = {
-        ...serviceData,
-        id: Date.now().toString(),
-        salonId: 'salon1',
-        isActive: true,
-        popularity: 1,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        createdBy: 'current-user-id',
-        profitMargin: 75,
-      };
-      setServices([...services, newService]);
-      setSuccessMessage('Service added successfully!');
-    }
-    
-    console.log('Success message set, closing modal...');
-    setEditingService(null);
-    setIsServiceModalOpen(false);
-    
-    // Auto-hide success message after 3 seconds
-    setTimeout(() => {
-      console.log('Auto-hiding success message');
-      setSuccessMessage(null);
-    }, 3000);
-  };
-
   const handleProfileSave = (updatedProfile: any) => {
-    setUserProfile(updatedProfile);
+    // Profile updates should be handled through the AuthContext
+    // For now, we'll just log the changes
     console.log('Owner profile updated:', updatedProfile);
-  };
-
-  const handleUpdateService = (service: Service) => {
-    console.log('Service updated:', service);
-    setServices(services.map(s => s.id === service.id ? { ...s, ...service } : s));
-    setSuccessMessage('Service status updated successfully!');
-    
-    // Auto-hide success message after 3 seconds
-    setTimeout(() => {
-      setSuccessMessage(null);
-    }, 3000);
-  };
-
-  const handleDeleteService = (serviceId: string) => {
-    console.log('Service deleted:', serviceId);
-    setServices(services.filter(s => s.id !== serviceId));
-    setSuccessMessage('Service deleted successfully!');
-    
-    // Auto-hide success message after 3 seconds
-    setTimeout(() => {
-      setSuccessMessage(null);
-    }, 3000);
-  };
-
-  const handleDeleteServiceFromModal = (service: any) => {
-    handleDeleteService(service.id);
   };
 
   const tabs = [
@@ -323,11 +271,7 @@ const OwnerDashboard: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* First Row */}
               <button
-                onClick={() => {
-                  setActiveTab('services');
-                  setEditingService(null);
-                  setIsServiceModalOpen(true);
-                }}
+                onClick={() => setActiveTab('services')}
                 className="group relative overflow-hidden flex flex-col items-center space-y-2 p-4 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl hover:from-cyan-600 hover:to-cyan-700 transition-all duration-300 transform hover:scale-105 shadow-lg"
               >
                 <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full transform translate-x-8 -translate-y-8"></div>
@@ -543,48 +487,25 @@ const OwnerDashboard: React.FC = () => {
         )}
 
         {/* Enhanced Feature Tabs */}
-        {activeTab === 'staff' && <StaffManagement />}
+        {activeTab === 'staff' && (
+          <StaffManagement
+            onAddStaffClick={() => setAddStaffModalOpen(true)}
+          />
+        )}
+        {addStaffModalOpen && (
+          <AddEmployeeModal
+            onClose={() => setAddStaffModalOpen(false)}
+            onAdd={() => setAddStaffModalOpen(false)}
+            salonId={salon?.salonId || 1}
+            branchId={salon?.defaultBranchId || 1}
+          />
+        )}
         {activeTab === 'analytics' && <AdvancedAnalytics />}
         {activeTab === 'payments' && <PaymentBilling />}
 
       {/* Services Tab */}
       {activeTab === 'services' && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Service Management</h3>
-            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-              {/* Search Bar */}
-              <div className="relative flex-1 sm:flex-initial">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search services by name..."
-                  value={servicesSearch}
-                  onChange={(e) => setServicesSearch(e.target.value)}
-                  className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
-              </div>
-              {/* Add Service Button */}
-              <button
-                onClick={() => {
-                  setEditingService(null);
-                  setIsServiceModalOpen(true);
-                }}
-                className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700 rounded-lg transition-all duration-200 whitespace-nowrap"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Service</span>
-              </button>
-            </div>
-          </div>
-          
-          <ServiceListView 
-            services={searchServices(services, servicesSearch)}
-            onEditService={handleEditService}
-            onUpdateService={handleUpdateService}
-            onDeleteService={handleDeleteService}
-          />
-        </div>
+        <ServiceManagement />
       )}
 
       {/* Leave Requests Tab */}
@@ -630,18 +551,6 @@ const OwnerDashboard: React.FC = () => {
 
       {/* Branch Management Tab */}
       {activeTab === 'branches' && <BranchManagement />}
-
-      {/* Modals */}
-      <ServiceManagementModal
-        isOpen={isServiceModalOpen}
-        onClose={() => {
-          setIsServiceModalOpen(false);
-          setEditingService(null);
-        }}
-        onSave={handleSaveService}
-        editingService={editingService || undefined}
-        onDelete={handleDeleteServiceFromModal}
-      />
 
       {/* Profile Modal */}
       <ProfileModal

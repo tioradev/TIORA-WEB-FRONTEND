@@ -26,6 +26,7 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
   userRole = 'reception',
 }) => {
   const [showBarberDropdown, setShowBarberDropdown] = useState(false);
+  const [loading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
   // Get available barbers (filter out inactive ones)
@@ -92,7 +93,7 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
 
   return (
     <div className={`relative overflow-hidden rounded-2xl shadow-lg border-2 p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 ${getCardBorderColor(appointment.status)} ${
-      appointment.status === 'payment-pending' ? 'shadow-xl animate-pulse' : ''
+      appointment.status === 'payment-pending' ? 'shadow-xl animate-slow-pulse' : ''
     }`}>
       {/* Enhanced Payment Pending Banner */}
       {appointment.status === 'payment-pending' && (
@@ -243,13 +244,13 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
         {/* Status Messages */}
         {appointment.status === 'payment-pending' && (
           <div className="mt-3 flex items-center space-x-2 p-2 bg-red-50 rounded-lg border border-red-200">
-            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+            <div className="w-2 h-2 bg-red-500 rounded-full animate-slow-pulse"></div>
             <span className="text-xs text-red-700 font-medium">⚠️ Waiting for payment to complete the appointment</span>
           </div>
         )}
         {appointment.status === 'in-progress' && (
           <div className="mt-3 flex items-center space-x-2 p-2 bg-amber-50 rounded-lg border border-amber-200">
-            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
+            <div className="w-2 h-2 bg-amber-500 rounded-full animate-slow-pulse"></div>
             <span className="text-xs text-amber-700 font-medium">🔄 Service is currently being provided</span>
           </div>
         )}
@@ -324,11 +325,14 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
            appointment.date === new Date().toISOString().split('T')[0] && 
            onCompleteSession && (
             <button
-              onClick={() => onCompleteSession(appointment.id)}
-              className="flex items-center space-x-1 px-3 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700 rounded-lg transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl transform hover:scale-105 flex-1"
+              onClick={() => onCompleteSession?.(appointment.id)}
+              disabled={loading}
+              className={`flex items-center space-x-1 px-3 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700 rounded-lg transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl transform hover:scale-105 flex-1 ${
+                loading ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
             >
               <ClipboardCheck className="w-4 h-4" />
-              <span>Complete</span>
+              <span>{loading ? 'Completing...' : 'Complete'}</span>
             </button>
           )}
           
@@ -336,10 +340,13 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
           {appointment.status === 'payment-pending' && onMarkPaid && (
             <button
               onClick={() => onMarkPaid(appointment.id)}
-              className="flex items-center space-x-1 px-3 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white hover:from-emerald-600 hover:to-emerald-700 rounded-lg transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl transform hover:scale-105 flex-1"
+              disabled={loading}
+              className={`flex items-center space-x-1 px-3 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white hover:from-emerald-600 hover:to-emerald-700 rounded-lg transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl transform hover:scale-105 flex-1 ${
+                loading ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
             >
               <CheckCircle className="w-4 h-4" />
-              <span>Payment</span>
+              <span>{loading ? 'Processing...' : 'Payment'}</span>
             </button>
           )}
           
@@ -357,7 +364,10 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
           {appointment.status === 'booked' && onDelete && (
             <button
               onClick={() => onDelete(appointment.id)}
-              className="flex items-center space-x-1 px-3 py-2 text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md transform hover:scale-105 border border-red-200 flex-1"
+              disabled={loading}
+              className={`flex items-center space-x-1 px-3 py-2 text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md transform hover:scale-105 border border-red-200 flex-1 ${
+                loading ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
             >
               <XCircle className="w-4 h-4" />
               <span>Cancel</span>

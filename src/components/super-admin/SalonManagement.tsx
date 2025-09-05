@@ -1,110 +1,252 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Plus, Search, Filter, Download, Edit, Trash2, 
-  Eye, EyeOff, Building, Mail, Phone, MapPin,
-  Calendar, DollarSign, Users, Activity, AlertTriangle,
-  CheckCircle, Clock, Globe, CreditCard, Navigation, X
+  Plus, Search, Download, Trash2, 
+  Eye, Building, Mail, Phone, MapPin,
+  DollarSign, Users, Activity,
+  CheckCircle, X, Loader,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { mockSalons } from '../../data/mockData';
-import { Salon } from '../../types';
+import { apiService, SalonResponse } from '../../services/api';
+import type { PaginatedResponse } from '../../types';
+import { useToast } from '../../contexts/ToastProvider';
 import AddSalonModal from './AddSalonModal';
 
 const SalonManagement: React.FC = () => {
-  const [salons, setSalons] = useState<Salon[]>(mockSalons);
+  const [salons, setSalons] = useState<SalonResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingStats, setLoadingStats] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive' | 'trial'>('all');
-  const [filterPlan, setFilterPlan] = useState<'all' | 'basic' | 'premium' | 'enterprise'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [selectedSalon, setSelectedSalon] = useState<Salon | null>(null);
+  const [selectedSalon, setSelectedSalon] = useState<SalonResponse | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
-
-  const filteredSalons = salons.filter(salon => {
-    const matchesSearch = 
-      salon.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      salon.ownerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      salon.ownerEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      salon.city.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = 
-      filterStatus === 'all' || 
-      (filterStatus === 'active' && salon.subscriptionStatus === 'active') ||
-      (filterStatus === 'inactive' && salon.subscriptionStatus === 'inactive') ||
-      (filterStatus === 'trial' && salon.subscriptionStatus === 'trial');
-
-    const matchesPlan = 
-      filterPlan === 'all' || salon.subscriptionPlan === filterPlan;
-
-    return matchesSearch && matchesStatus && matchesPlan;
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  
+  // Statistics state (non-paginated totals)
+  const [stats, setStats] = useState({
+    totalSalons: 0,
+    activeSalons: 0,
+    inactiveSalons: 0,
+    totalRevenue: 0,
+    totalEmployees: 0,
+    totalCustomers: 0
   });
+  
+  const { showSuccess, showError } = useToast();
 
-  const handleToggleStatus = (salonId: string) => {
-    setSalons(salons.map(salon => 
-      salon.id === salonId 
-        ? { 
-            ...salon, 
-            isActive: !salon.isActive,
-            subscriptionStatus: salon.isActive ? 'inactive' : 'active',
-            updatedAt: new Date()
-          }
-        : salon
-    ));
-  };
+  // Load salons from API with pagination
+  useEffect(() => {
+    loadSalons();
+  }, [currentPage, pageSize]);
 
-  const handleDeleteSalon = (salonId: string) => {
-    if (window.confirm('Are you sure you want to delete this salon? This action cannot be undone.')) {
-      setSalons(salons.filter(salon => salon.id !== salonId));
+  // Load statistics once on component mount
+  useEffect(() => {
+    loadStatistics();
+  }, []);
+
+  // Reload when search or filter changes (with debounce for search)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setCurrentPage(0); // Reset to first page when search/filter changes
+      loadSalons();
+    }, searchTerm ? 500 : 0); // Debounce search, immediate for filter
+    
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, filterStatus]);
+
+  const loadStatistics = async () => {
+    try {
+      setLoadingStats(true);
+      const statisticsData = await apiService.getSalonStatistics();
+      setStats(statisticsData);
+      console.log('Loaded salon statistics:', statisticsData);
+    } catch (error) {
+      console.error('Failed to load salon statistics:', error);
+      // Fallback: if statistics endpoint doesn't exist, we'll calculate from a large page
+      try {
+        const allSalonsResponse = await apiService.getAllSalons(0, 1000);
+        const allSalons = allSalonsResponse.content;
+        const calculatedStats = {
+          totalSalons: allSalonsResponse.totalElements,
+          activeSalons: allSalons.filter(salon => salon.active).length,
+          inactiveSalons: allSalons.filter(salon => !salon.active).length,
+          totalRevenue: allSalons.reduce((sum, salon) => sum + salon.totalIncome, 0),
+          totalEmployees: allSalons.reduce((sum, salon) => sum + salon.totalEmployees, 0),
+          totalCustomers: allSalons.reduce((sum, salon) => sum + salon.totalCustomers, 0)
+        };
+        setStats(calculatedStats);
+        console.log('Calculated salon statistics:', calculatedStats);
+      } catch (fallbackError) {
+        console.error('Failed to calculate statistics:', fallbackError);
+        showError('Warning', 'Unable to load salon statistics.');
+      }
+    } finally {
+      setLoadingStats(false);
     }
   };
 
-  const downloadSalonReport = () => {
-    const reportData = filteredSalons.map(salon => 
-      `${salon.name},${salon.ownerName},${salon.ownerEmail},${salon.city},${salon.subscriptionPlan},${salon.subscriptionStatus},${salon.totalEmployees},${salon.totalCustomers},${salon.monthlyRevenue}`
-    ).join('\n');
-    
-    const blob = new Blob([
-      `Salon Name,Owner Name,Owner Email,City,Plan,Status,Employees,Customers,Monthly Revenue\n${reportData}`
-    ], { type: 'text/csv' });
-    
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `salon-report-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
+  const loadSalons = async () => {
+    try {
+      setLoading(true);
+      // Try server-side filtering first, fallback to client-side if backend doesn't support it
+      const response: PaginatedResponse<SalonResponse> = await apiService.getAllSalons(
+        currentPage, 
+        pageSize,
+        searchTerm || undefined,
+        filterStatus !== 'all' ? filterStatus : undefined
+      );
+      setSalons(response.content);
+      setTotalElements(response.totalElements);
+      setTotalPages(response.totalPages);
+      console.log('Loaded salons:', response);
+    } catch (error) {
+      console.error('Failed to load salons:', error);
+      showError('Error', 'Failed to load salon data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const viewSalonDetails = (salon: Salon) => {
+  // If server-side filtering is supported, we can use salons directly
+  // Otherwise, fallback to client-side filtering
+  const filteredSalons = salons; // Server-side filtering in getAllSalons API call
+  
+  // Fallback client-side filtering (if server doesn't support search/filter parameters)
+  // const filteredSalons = salons.filter(salon => {
+  //   const matchesSearch = !searchTerm || (
+  //     salon.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  //     salon.fullOwnerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  //     salon.ownerEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  //     salon.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  //     salon.mainBranchName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  //     salon.district.toLowerCase().includes(searchTerm.toLowerCase())
+  //   );
+  //   
+  //   const matchesStatus = 
+  //     filterStatus === 'all' || 
+  //     (filterStatus === 'active' && salon.status === 'ACTIVE' && salon.active) ||
+  //     (filterStatus === 'inactive' && (salon.status === 'INACTIVE' || !salon.active));
+  //
+  //   return matchesSearch && matchesStatus;
+  // });
+
+  const handleToggleStatus = async (salonId: number) => {
+    try {
+      // Here you would call an API to toggle salon status
+      // For now, just update locally
+      setSalons(salons.map(salon => 
+        salon.salonId === salonId 
+          ? { 
+              ...salon, 
+              active: !salon.active,
+              status: salon.active ? 'INACTIVE' : 'ACTIVE',
+              updatedAt: new Date().toISOString()
+            }
+          : salon
+      ));
+      showSuccess('Success', 'Salon status updated successfully!');
+      // Refresh statistics to reflect the change
+      loadStatistics();
+    } catch (error) {
+      showError('Error', 'Failed to update salon status. Please try again.');
+    }
+  };
+
+  const handleDeleteSalon = async (salonId: number) => {
+    if (window.confirm('Are you sure you want to delete this salon? This action cannot be undone.')) {
+      try {
+        // Here you would call an API to delete salon
+        // For now, just remove locally
+        setSalons(salons.filter(salon => salon.salonId !== salonId));
+        showSuccess('Success', 'Salon deleted successfully!');
+        // Refresh statistics to reflect the change
+        loadStatistics();
+      } catch (error) {
+        showError('Error', 'Failed to delete salon. Please try again.');
+      }
+    }
+  };
+
+  const downloadSalonReport = async () => {
+    try {
+      // Fetch all salons for the report (large page size)
+      const allSalonsResponse = await apiService.getAllSalons(0, 1000);
+      const allSalons = allSalonsResponse.content;
+      
+      const reportData = allSalons.map(salon => {
+        return `${salon.name},${salon.fullOwnerName},${salon.ownerEmail},${salon.email},${salon.mainBranchName},${salon.district},${salon.status},${salon.totalEmployees},${salon.totalCustomers},${salon.totalIncome}`;
+      }).join('\n');
+      
+      const blob = new Blob([
+        `Salon Name,Owner Name,Owner Email,Salon Email,Branch Name,District,Status,Employees,Customers,Total Income\n${reportData}`
+      ], { type: 'text/csv' });
+      
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `salon-report-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      
+      showSuccess('Success', 'Salon report downloaded successfully!');
+    } catch (error) {
+      console.error('Failed to download report:', error);
+      showError('Error', 'Failed to download salon report. Please try again.');
+    }
+  };
+
+  const viewSalonDetails = (salon: SalonResponse) => {
     setSelectedSalon(salon);
     setShowDetailModal(true);
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'inactive': return 'bg-red-100 text-red-800';
-      case 'trial': return 'bg-blue-100 text-blue-800';
-      case 'suspended': return 'bg-yellow-100 text-yellow-800';
+      case 'ACTIVE': return 'bg-green-100 text-green-800';
+      case 'INACTIVE': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const getSystemStatusColor = (status: string) => {
-    switch (status) {
-      case 'online': return 'text-green-600';
-      case 'offline': return 'text-red-600';
-      case 'maintenance': return 'text-yellow-600';
-      case 'error': return 'text-red-600';
-      default: return 'text-gray-600';
-    }
+  const handleAddSalon = () => {
+    setShowAddModal(true);
   };
 
-  const getPlanColor = (plan: string) => {
-    switch (plan) {
-      case 'basic': return 'bg-gray-100 text-gray-800';
-      case 'premium': return 'bg-purple-100 text-purple-800';
-      case 'enterprise': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+  const handleSalonAdded = () => {
+    setShowAddModal(false);
+    loadSalons(); // Reload salons after adding
+    loadStatistics(); // Refresh statistics as well
   };
+
+  // Pagination handlers
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    setCurrentPage(0); // Reset to first page when changing page size
+  };
+
+  const goToFirstPage = () => setCurrentPage(0);
+  const goToLastPage = () => setCurrentPage(totalPages - 1);
+  const goToPreviousPage = () => setCurrentPage(Math.max(0, currentPage - 1));
+  const goToNextPage = () => setCurrentPage(Math.min(totalPages - 1, currentPage + 1));
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex items-center space-x-2">
+          <Loader className="w-6 h-6 animate-spin text-blue-600" />
+          <span className="text-gray-600">Loading salons...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -112,227 +254,247 @@ const SalonManagement: React.FC = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Salon Management</h2>
-          <p className="text-gray-600">Manage all registered salons and their subscriptions</p>
+          <p className="text-gray-600">Manage and monitor all registered salons</p>
         </div>
-        <div className="flex space-x-3">
-          <button
-            onClick={downloadSalonReport}
-            className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors duration-200"
-          >
-            <Download className="w-4 h-4" />
-            <span>Export Report</span>
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 rounded-lg transition-all duration-200"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Register Salon</span>
-          </button>
-        </div>
+        <button
+          onClick={handleAddSalon}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add Salon</span>
+        </button>
       </div>
 
-      {/* Summary Cards */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Salons</p>
-              <p className="text-2xl font-bold text-gray-900">{salons.length}</p>
+              <p className="text-sm text-gray-600">Total Salons</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {loadingStats ? (
+                  <Loader className="w-6 h-6 animate-spin text-gray-400" />
+                ) : (
+                  stats.totalSalons
+                )}
+              </p>
+              <p className="text-xs text-gray-500">All registered</p>
             </div>
-            <Building className="w-8 h-8 text-blue-500" />
+            <Building className="w-8 h-8 text-blue-600" />
           </div>
         </div>
-        
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Active Salons</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {salons.filter(s => s.subscriptionStatus === 'active').length}
+              <p className="text-sm text-gray-600">Active Salons</p>
+              <p className="text-2xl font-bold text-green-600">
+                {loadingStats ? (
+                  <Loader className="w-6 h-6 animate-spin text-gray-400" />
+                ) : (
+                  stats.activeSalons
+                )}
               </p>
+              <p className="text-xs text-gray-500">Currently active</p>
             </div>
-            <CheckCircle className="w-8 h-8 text-green-500" />
+            <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
         </div>
-        
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-900">
-                ${salons.reduce((sum, s) => sum + s.monthlyRevenue, 0).toLocaleString()}
+              <p className="text-sm text-gray-600">Total Employees</p>
+              <p className="text-2xl font-bold text-purple-600">
+                {loadingStats ? (
+                  <Loader className="w-6 h-6 animate-spin text-gray-400" />
+                ) : (
+                  stats.totalEmployees
+                )}
               </p>
+              <p className="text-xs text-gray-500">Across all salons</p>
             </div>
-            <DollarSign className="w-8 h-8 text-emerald-500" />
+            <Users className="w-8 h-8 text-purple-600" />
           </div>
         </div>
-        
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Customers</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {salons.reduce((sum, s) => sum + s.totalCustomers, 0).toLocaleString()}
+              <p className="text-sm text-gray-600">Total Revenue</p>
+              <p className="text-2xl font-bold text-orange-600">
+                {loadingStats ? (
+                  <Loader className="w-6 h-6 animate-spin text-gray-400" />
+                ) : (
+                  `LKR ${stats.totalRevenue.toLocaleString()}`
+                )}
               </p>
+              <p className="text-xs text-gray-500">All-time earnings</p>
             </div>
-            <Users className="w-8 h-8 text-purple-500" />
+            <DollarSign className="w-8 h-8 text-orange-600" />
           </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex flex-col sm:flex-row gap-4">
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+        <div className="flex flex-col lg:flex-row gap-4">
           <div className="flex-1">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search salons by name, owner, email, or city..."
+                placeholder="Search salons, owners, or locations..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Filter className="w-4 h-4 text-gray-400" />
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as any)}
-                className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-red-500 focus:border-transparent"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="trial">Trial</option>
-              </select>
-            </div>
-            <div>
-              <select
-                value={filterPlan}
-                onChange={(e) => setFilterPlan(e.target.value as any)}
-                className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-red-500 focus:border-transparent"
-              >
-                <option value="all">All Plans</option>
-                <option value="basic">Basic</option>
-                <option value="premium">Premium</option>
-                <option value="enterprise">Enterprise</option>
-              </select>
-            </div>
-            <div className="text-sm text-gray-600">
-              {filteredSalons.length} of {salons.length} salons
-            </div>
+
+          <div className="flex gap-4">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as any)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+
+            <button
+              onClick={downloadSalonReport}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center space-x-2 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Salon Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredSalons.map((salon) => (
-          <div key={salon.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow duration-200">
-            {/* Header */}
-            <div className="p-6 border-b border-gray-100">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                    <Building className="w-6 h-6 text-red-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 text-lg">{salon.name}</h3>
-                    <p className="text-sm text-gray-600">{salon.businessName}</p>
-                  </div>
+      {/* Salons Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+        {filteredSalons.map(salon => (
+          <div key={salon.salonId} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow duration-200">
+            {/* Salon Image */}
+            <div className="h-48 bg-gradient-to-r from-blue-500 to-purple-600 relative overflow-hidden">
+              {salon.imageUrl ? (
+                <img 
+                  src={salon.imageUrl} 
+                  alt={salon.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Building className="w-16 h-16 text-white opacity-50" />
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Activity className={`w-4 h-4 ${getSystemStatusColor(salon.systemStatus)}`} />
-                  <span className={`text-xs font-medium ${getSystemStatusColor(salon.systemStatus)}`}>
-                    {salon.systemStatus.charAt(0).toUpperCase() + salon.systemStatus.slice(1)}
+              )}
+              <div className="absolute top-4 right-4">
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(salon.status)}`}>
+                  {salon.status}
+                </span>
+              </div>
+            </div>
+
+            {/* Salon Info */}
+            <div className="p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">{salon.name}</h3>
+                  <p className="text-sm text-gray-600">{salon.mainBranchName}</p>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <Activity className={`w-4 h-4 ${salon.active ? 'text-green-600' : 'text-red-600'}`} />
+                  <span className={`text-xs font-medium ${salon.active ? 'text-green-600' : 'text-red-600'}`}>
+                    {salon.active ? 'Online' : 'Offline'}
                   </span>
                 </div>
               </div>
-              
-              <div className="flex items-center space-x-2">
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPlanColor(salon.subscriptionPlan)}`}>
-                  {salon.subscriptionPlan.charAt(0).toUpperCase() + salon.subscriptionPlan.slice(1)}
-                </span>
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(salon.subscriptionStatus)}`}>
-                  {salon.subscriptionStatus.charAt(0).toUpperCase() + salon.subscriptionStatus.slice(1)}
-                </span>
-              </div>
-            </div>
 
-            {/* Content */}
-            <div className="p-6 space-y-4">
+              {/* Contact Info */}
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center text-sm text-gray-600">
+                  <Mail className="w-4 h-4 mr-2" />
+                  <span>{salon.email}</span>
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <Phone className="w-4 h-4 mr-2" />
+                  <span>{salon.phoneNumber}</span>
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <MapPin className="w-4 h-4 mr-2" />
+                  <span>{salon.address}, {salon.district}</span>
+                </div>
+              </div>
+
               {/* Owner Info */}
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <Mail className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-600">{salon.ownerName}</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Phone className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-600">{salon.ownerEmail}</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <MapPin className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-600">{salon.city}, {salon.state}</span>
-                </div>
-                {salon.latitude && salon.longitude && (
-                  <div className="flex items-center space-x-2">
-                    <Navigation className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm text-gray-600">
-                      {parseFloat(salon.latitude).toFixed(4)}, {parseFloat(salon.longitude).toFixed(4)}
-                    </span>
+              <div className="border-t pt-4 mb-4">
+                <h4 className="text-sm font-medium text-gray-900 mb-2">Owner Information</h4>
+                <div className="flex items-center space-x-3">
+                  {salon.ownerImgUrl ? (
+                    <img 
+                      src={salon.ownerImgUrl} 
+                      alt={salon.fullOwnerName}
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+                      <span className="text-sm font-medium text-gray-600">
+                        {salon.ownerFirstName[0]}{salon.ownerLastName[0]}
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{salon.fullOwnerName}</p>
+                    <p className="text-xs text-gray-600">{salon.ownerEmail}</p>
                   </div>
-                )}
-              </div>
-
-              {/* Performance Metrics */}
-              <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
-                <div className="text-center">
-                  <div className="text-lg font-semibold text-gray-900">{salon.totalEmployees}</div>
-                  <div className="text-xs text-gray-600">Employees</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-lg font-semibold text-gray-900">{salon.totalCustomers}</div>
-                  <div className="text-xs text-gray-600">Customers</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-lg font-semibold text-gray-900">${salon.monthlyRevenue.toLocaleString()}</div>
-                  <div className="text-xs text-gray-600">Revenue</div>
                 </div>
               </div>
-            </div>
 
-            {/* Actions */}
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="text-center">
+                  <p className="text-lg font-bold text-gray-900">{salon.totalEmployees}</p>
+                  <p className="text-xs text-gray-600">Employees</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-bold text-gray-900">{salon.totalCustomers}</p>
+                  <p className="text-xs text-gray-600">Customers</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-bold text-gray-900">LKR {salon.totalIncome.toLocaleString()}</p>
+                  <p className="text-xs text-gray-600">Revenue</p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
               <div className="flex space-x-2">
                 <button
                   onClick={() => viewSalonDetails(salon)}
-                  className="flex-1 px-3 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200 text-sm font-medium"
+                  className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors text-sm"
                 >
-                  <Eye className="w-4 h-4 inline mr-1" />
-                  View
+                  <Eye className="w-4 h-4" />
+                  <span>View Details</span>
                 </button>
+
                 <button
-                  onClick={() => handleToggleStatus(salon.id)}
-                  className={`flex-1 px-3 py-2 rounded-lg transition-colors duration-200 text-sm font-medium ${
-                    salon.isActive 
-                      ? 'text-amber-600 hover:bg-amber-50' 
-                      : 'text-green-600 hover:bg-green-50'
+                  onClick={() => handleToggleStatus(salon.salonId)}
+                  className={`px-3 py-2 rounded-lg flex items-center justify-center transition-colors text-sm ${
+                    salon.active 
+                      ? 'bg-red-50 hover:bg-red-100 text-red-700' 
+                      : 'bg-green-50 hover:bg-green-100 text-green-700'
                   }`}
                 >
-                  {salon.isActive ? <EyeOff className="w-4 h-4 inline mr-1" /> : <Eye className="w-4 h-4 inline mr-1" />}
-                  {salon.isActive ? 'Deactivate' : 'Activate'}
+                  {salon.active ? 'Deactivate' : 'Activate'}
                 </button>
+
                 <button
-                  onClick={() => handleDeleteSalon(salon.id)}
-                  className="flex-1 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200 text-sm font-medium"
+                  onClick={() => handleDeleteSalon(salon.salonId)}
+                  className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg flex items-center justify-center transition-colors text-sm"
                 >
-                  <Trash2 className="w-4 h-4 inline mr-1" />
-                  Delete
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -340,172 +502,264 @@ const SalonManagement: React.FC = () => {
         ))}
       </div>
 
-      {/* Salon Detail Modal */}
-      {showDetailModal && selectedSalon && (
-        <SalonDetailModal
-          salon={selectedSalon}
-          onClose={() => setShowDetailModal(false)}
-        />
+      {/* Pagination Controls */}
+      {!loading && totalElements > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+            {/* Pagination Info */}
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-gray-600">
+                Showing {currentPage * pageSize + 1} to {Math.min((currentPage + 1) * pageSize, totalElements)} of {totalElements} salons
+              </div>
+              
+              {/* Page Size Selector */}
+              <div className="flex items-center space-x-2">
+                <label className="text-sm text-gray-600">Per page:</label>
+                <select
+                  value={pageSize}
+                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                  className="border border-gray-300 rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Pagination Buttons */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={goToFirstPage}
+                disabled={currentPage === 0}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                First
+              </button>
+              
+              <button
+                onClick={goToPreviousPage}
+                disabled={currentPage === 0}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Previous</span>
+              </button>
+
+              {/* Page Numbers */}
+              <div className="flex items-center space-x-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  const pageNum = Math.max(0, Math.min(totalPages - 5, currentPage - 2)) + i;
+                  if (pageNum >= totalPages) return null;
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => handlePageChange(pageNum)}
+                      className={`px-3 py-2 text-sm rounded-lg transition-colors ${
+                        pageNum === currentPage
+                          ? 'bg-blue-600 text-white'
+                          : 'border border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {pageNum + 1}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={goToNextPage}
+                disabled={currentPage >= totalPages - 1}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
+              >
+                <span>Next</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              
+              <button
+                onClick={goToLastPage}
+                disabled={currentPage >= totalPages - 1}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Last
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {filteredSalons.length === 0 && !loading && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+          <Building className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600 mb-2">
+            {searchTerm || filterStatus !== 'all' ? 'No salons match your criteria' : 'No salons registered yet'}
+          </p>
+          <p className="text-sm text-gray-500">
+            {searchTerm || filterStatus !== 'all' ? 'Try adjusting your search or filters' : 'Add the first salon to get started'}
+          </p>
+        </div>
       )}
 
       {/* Add Salon Modal */}
       {showAddModal && (
         <AddSalonModal
           onClose={() => setShowAddModal(false)}
-          onAdd={(salonData) => {
-            const newSalon: Salon = {
-              ...salonData,
-              id: Date.now().toString(),
-              createdAt: new Date(),
-              updatedAt: new Date(),
-              createdBy: 'super-admin',
-            };
-            setSalons([...salons, newSalon]);
-            setShowAddModal(false);
-          }}
+          onSalonAdded={handleSalonAdded}
         />
       )}
-    </div>
-  );
-};
 
-// Salon Detail Modal Component
-interface SalonDetailModalProps {
-  salon: Salon;
-  onClose: () => void;
-}
-
-const SalonDetailModal: React.FC<SalonDetailModalProps> = ({ salon, onClose }) => {
-  const getPlanColor = (plan: string) => {
-    switch (plan) {
-      case 'basic': return 'bg-gray-100 text-gray-800';
-      case 'premium': return 'bg-purple-100 text-purple-800';
-      case 'enterprise': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getSystemStatusColor = (status: string) => {
-    switch (status) {
-      case 'online': return 'text-green-600';
-      case 'offline': return 'text-red-600';
-      case 'maintenance': return 'text-yellow-600';
-      case 'error': return 'text-red-600';
-      default: return 'text-gray-600';
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h3 className="text-xl font-semibold text-gray-900">Salon Details</h3>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-          >
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-        
-        <div className="p-6 space-y-6">
-          {/* Basic Information */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h4 className="font-medium text-gray-900 mb-3">Basic Information</h4>
-              <div className="space-y-3">
-                <div className="flex items-center space-x-3">
-                  <Building className="w-4 h-4 text-gray-400" />
+      {/* Salon Details Modal */}
+      {showDetailModal && selectedSalon && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  {selectedSalon.imageUrl ? (
+                    <img 
+                      src={selectedSalon.imageUrl} 
+                      alt={selectedSalon.name}
+                      className="w-16 h-16 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                      <Building className="w-8 h-8 text-white" />
+                    </div>
+                  )}
                   <div>
-                    <p className="font-medium text-gray-900">{salon.name}</p>
-                    <p className="text-sm text-gray-600">{salon.businessName}</p>
+                    <h3 className="text-xl font-bold text-gray-900">{selectedSalon.name}</h3>
+                    <p className="text-gray-600">{selectedSalon.mainBranchName}</p>
                   </div>
                 </div>
-                <div className="flex items-center space-x-3">
-                  <Mail className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-600">{salon.ownerEmail}</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <Phone className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-600">{salon.ownerPhone}</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <MapPin className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-600">
-                    {salon.address}, {salon.city}, {salon.state} {salon.zipCode}
-                  </span>
-                </div>
-                {salon.latitude && salon.longitude && (
-                  <div className="flex items-center space-x-3">
-                    <Navigation className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm text-gray-600">
-                      Lat: {parseFloat(salon.latitude).toFixed(6)}, Lng: {parseFloat(salon.longitude).toFixed(6)}
-                    </span>
-                  </div>
-                )}
+                <button
+                  onClick={() => setShowDetailModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
               </div>
             </div>
 
-            <div>
-              <h4 className="font-medium text-gray-900 mb-3">Subscription Details</h4>
-              <div className="space-y-3">
-                <div className="flex items-center space-x-3">
-                  <CreditCard className="w-4 h-4 text-gray-400" />
-                  <div>
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getPlanColor(salon.subscriptionPlan)}`}>
-                      {salon.subscriptionPlan.charAt(0).toUpperCase() + salon.subscriptionPlan.slice(1)}
-                    </span>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Basic Information */}
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Salon Name</p>
+                      <p className="text-gray-900">{selectedSalon.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Address</p>
+                      <p className="text-gray-900">{selectedSalon.address}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">District</p>
+                      <p className="text-gray-900">{selectedSalon.district}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Postal Code</p>
+                      <p className="text-gray-900">{selectedSalon.postalCode}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Phone</p>
+                      <p className="text-gray-900">{selectedSalon.phoneNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Email</p>
+                      <p className="text-gray-900">{selectedSalon.email}</p>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center space-x-3">
-                  <Calendar className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-600">
-                    {salon.subscriptionStartDate.toLocaleDateString()} - {salon.subscriptionEndDate.toLocaleDateString()}
-                  </span>
+
+                {/* Owner Information */}
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4">Owner Information</h4>
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-3 mb-4">
+                      {selectedSalon.ownerImgUrl ? (
+                        <img 
+                          src={selectedSalon.ownerImgUrl} 
+                          alt={selectedSalon.fullOwnerName}
+                          className="w-12 h-12 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
+                          <span className="text-sm font-medium text-gray-600">
+                            {selectedSalon.ownerFirstName[0]}{selectedSalon.ownerLastName[0]}
+                          </span>
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-medium text-gray-900">{selectedSalon.fullOwnerName}</p>
+                        <p className="text-sm text-gray-600">Salon Owner</p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Owner Email</p>
+                      <p className="text-gray-900">{selectedSalon.ownerEmail}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Owner Phone</p>
+                      <p className="text-gray-900">{selectedSalon.ownerPhone}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Business Registration</p>
+                      <p className="text-gray-900">{selectedSalon.brNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Tax ID</p>
+                      <p className="text-gray-900">{selectedSalon.taxId}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-3">
-                  <Activity className="w-4 h-4 text-gray-400" />
-                  <span className={`text-sm font-medium ${getSystemStatusColor(salon.systemStatus)}`}>
-                    {salon.systemStatus.charAt(0).toUpperCase() + salon.systemStatus.slice(1)}
-                  </span>
+
+                {/* Statistics */}
+                <div className="md:col-span-2">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4">Statistics</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-lg text-center">
+                      <p className="text-2xl font-bold text-gray-900">{selectedSalon.totalEmployees}</p>
+                      <p className="text-sm text-gray-600">Total Employees</p>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-lg text-center">
+                      <p className="text-2xl font-bold text-gray-900">{selectedSalon.totalCustomers}</p>
+                      <p className="text-sm text-gray-600">Total Customers</p>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-lg text-center">
+                      <p className="text-2xl font-bold text-gray-900">LKR {selectedSalon.totalIncome.toLocaleString()}</p>
+                      <p className="text-sm text-gray-600">Total Income</p>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-lg text-center">
+                      <p className="text-2xl font-bold text-gray-900">{selectedSalon.totalSalonCount}</p>
+                      <p className="text-sm text-gray-600">Total Branches</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Timestamps */}
+                <div className="md:col-span-2 border-t pt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="font-medium text-gray-700">Created</p>
+                      <p className="text-gray-600">{new Date(selectedSalon.createdAt).toLocaleString()}</p>
+                      <p className="text-xs text-gray-500">by {selectedSalon.createdBy}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-700">Last Updated</p>
+                      <p className="text-gray-600">{new Date(selectedSalon.updatedAt).toLocaleString()}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-
-          {/* Performance Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-blue-50 rounded-lg p-4">
-              <div className="text-2xl font-bold text-blue-900">{salon.totalEmployees}</div>
-              <div className="text-sm text-blue-700">Employees</div>
-            </div>
-            <div className="bg-green-50 rounded-lg p-4">
-              <div className="text-2xl font-bold text-green-900">{salon.totalCustomers}</div>
-              <div className="text-sm text-green-700">Customers</div>
-            </div>
-            <div className="bg-purple-50 rounded-lg p-4">
-              <div className="text-2xl font-bold text-purple-900">${salon.monthlyRevenue.toLocaleString()}</div>
-              <div className="text-sm text-purple-700">Monthly Revenue</div>
-            </div>
-            <div className="bg-amber-50 rounded-lg p-4">
-              <div className="text-2xl font-bold text-amber-900">{salon.branchCount}</div>
-              <div className="text-sm text-amber-700">Branches</div>
-            </div>
-          </div>
-
-          {/* Features */}
-          <div>
-            <h4 className="font-medium text-gray-900 mb-3">Enabled Features</h4>
-            <div className="flex flex-wrap gap-2">
-              {salon.features.map((feature, index) => (
-                <span key={index} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
-                  {feature.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                </span>
-              ))}
-            </div>
-          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

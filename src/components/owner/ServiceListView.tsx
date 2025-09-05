@@ -2,22 +2,32 @@ import React, { useState, useEffect } from 'react';
 import { Edit, Trash2, Eye, EyeOff, Users, Clock, DollarSign } from 'lucide-react';
 import { mockServices } from '../../data/mockData';
 import { Service } from '../../types';
+import { apiService } from '../../services/api';
+import { useToast } from '../../contexts/ToastProvider';
 
 interface ServiceListViewProps {
   services?: Service[];
   onEditService: (service: Service) => void;
   onUpdateService?: (service: Service) => void;
   onDeleteService?: (serviceId: string) => void;
+  refreshServices?: () => void;
 }
 
 const ServiceListView: React.FC<ServiceListViewProps> = ({ 
   services: propServices,
   onEditService, 
   onUpdateService,
-  onDeleteService 
+  onDeleteService,
+  refreshServices
 }) => {
+  const { showSuccess, showError } = useToast();
   const [services, setServices] = useState<Service[]>(propServices || mockServices);
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [loading, setLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ show: boolean; service: Service | null }>({
+    show: false,
+    service: null
+  });
 
   // Update local services when prop changes
   useEffect(() => {
@@ -26,30 +36,143 @@ const ServiceListView: React.FC<ServiceListViewProps> = ({
     }
   }, [propServices]);
 
-  const handleToggleActive = (serviceId: string) => {
-    const updatedServices = services.map(service => 
-      service.id === serviceId 
-        ? { ...service, isActive: !service.isActive, updatedAt: new Date() }
-        : service
-    );
-    setServices(updatedServices);
-    
-    // Call the parent update function if provided
-    const updatedService = updatedServices.find(s => s.id === serviceId);
-    if (updatedService && onUpdateService) {
-      onUpdateService(updatedService);
+  const handleToggleActive = async (serviceId: string) => {
+    try {
+      setLoading(true);
+      const service = services.find(s => s.id === serviceId);
+      
+      if (!service) {
+        showError('Service not found', 'Unable to find the service to update.');
+        return;
+      }
+
+      // Map internal category to API category
+      const mapToApiCategory = (category: string): string => {
+        switch (category) {
+          case 'hair': return 'HAIRCUT';
+          case 'beard': return 'BEARD_TRIM';
+          case 'styling': return 'HAIR_STYLING';
+          case 'treatment': return 'FACIAL';
+          case 'coloring': return 'HAIR_COLOR';
+          case 'spa': return 'MASSAGE';
+          default: return 'OTHER';
+        }
+      };
+
+      // Convert Service to API format for update
+      const updateData = {
+        name: service.name,
+        description: service.description || '',
+        duration_minutes: service.duration,
+        price: service.price,
+        discount_price: service.discountPrice || 0,
+        category: mapToApiCategory(service.category),
+        gender_availability: service.availableForGender === 'both' ? 'unisex' : service.availableForGender,
+        image_url: service.imageUrl,
+        status: !service.isActive ? 'ACTIVE' : 'INACTIVE',
+        is_active: !service.isActive,
+        is_popular: false
+      };
+
+      console.log('🔄 [SERVICE] Toggling service status:', serviceId, updateData);
+      
+      const response = await apiService.updateService(serviceId, updateData);
+      
+      console.log('📡 [SERVICE] Update response:', response);
+      
+      if (response.success !== false) {
+        // Update local state
+        const updatedServices = services.map(s => 
+          s.id === serviceId 
+            ? { ...s, isActive: !s.isActive, updatedAt: new Date() }
+            : s
+        );
+        setServices(updatedServices);
+        
+        // Show success toast
+        const action = !service.isActive ? 'activated' : 'deactivated';
+        showSuccess(
+          `Service ${action}`,
+          `"${service.name}" has been successfully ${action}.`
+        );
+        
+        // Call the parent update function if provided
+        const updatedService = updatedServices.find(s => s.id === serviceId);
+        if (updatedService && onUpdateService) {
+          onUpdateService(updatedService);
+        }
+        
+        // Refresh services list if function provided
+        if (refreshServices) {
+          refreshServices();
+        }
+      } else {
+        const errorMessage = response.message || 'Unknown error occurred';
+        showError('Update failed', `Failed to update service status: ${errorMessage}`);
+        console.error('❌ [SERVICE] API returned error:', response);
+      }
+    } catch (error) {
+      console.error('❌ [SERVICE] Error toggling service status:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      showError('Update failed', `Error updating service status: ${errorMessage}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDeleteService = (serviceId: string) => {
+  const handleDeleteService = async (serviceId: string) => {
     const service = services.find(s => s.id === serviceId);
-    if (window.confirm(`Are you sure you want to delete "${service?.name}"? This action cannot be undone.`)) {
-      setServices(services.filter(service => service.id !== serviceId));
+    if (!service) {
+      showError('Service not found', 'Unable to find the service to delete.');
+      return;
+    }
+    
+    setShowDeleteConfirm({ show: true, service });
+  };
+
+  const confirmDeleteService = async () => {
+    const service = showDeleteConfirm.service;
+    if (!service) return;
+
+    try {
+      setLoading(true);
+      console.log('🗑️ [SERVICE] Deleting service:', service.id);
       
-      // Call the parent delete function if provided
-      if (onDeleteService) {
-        onDeleteService(serviceId);
+      const response = await apiService.deleteService(service.id);
+      
+      console.log('📡 [SERVICE] Delete response:', response);
+      
+      if (response.success) {
+        // Update local state
+        setServices(services.filter(s => s.id !== service.id));
+        
+        // Show success toast
+        showSuccess(
+          'Service deleted',
+          `"${service.name}" has been permanently deleted.`
+        );
+        
+        // Call the parent delete function if provided
+        if (onDeleteService) {
+          onDeleteService(service.id);
+        }
+        
+        // Refresh services list if function provided
+        if (refreshServices) {
+          refreshServices();
+        }
+      } else {
+        const errorMessage = response.message || 'Unknown error occurred';
+        showError('Delete failed', `Failed to delete service: ${errorMessage}`);
+        console.error('❌ [SERVICE] API returned error:', response);
       }
+    } catch (error) {
+      console.error('❌ [SERVICE] Error deleting service:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      showError('Delete failed', `Error deleting service: ${errorMessage}`);
+    } finally {
+      setLoading(false);
+      setShowDeleteConfirm({ show: false, service: null });
     }
   };
 
@@ -225,6 +348,56 @@ const ServiceListView: React.FC<ServiceListViewProps> = ({
         <div className="text-center py-12">
           <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600">No services found matching your filters.</p>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm.show && showDeleteConfirm.service && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div className="ml-4">
+                <h3 className="text-lg font-medium text-gray-900">Delete Service</h3>
+                <p className="text-sm text-gray-500">This action cannot be undone</p>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-gray-700">
+                Are you sure you want to permanently delete <strong>"{showDeleteConfirm.service.name}"</strong>? 
+                This will remove the service from your salon's offerings and cannot be reversed.
+              </p>
+              
+              {showDeleteConfirm.service.isActive && (
+                <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-sm text-amber-800">
+                    ⚠️ This service is currently active and may be visible to customers. 
+                    Consider deactivating it first if you want to keep the service data.
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowDeleteConfirm({ show: false, service: null })}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteService}
+                className="flex-1 px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50"
+                disabled={loading}
+              >
+                {loading ? 'Deleting...' : 'Delete Service'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
