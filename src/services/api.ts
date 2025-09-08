@@ -69,6 +69,18 @@ const ENDPOINTS = {
 
 // API Service Class
 class ApiService {
+  // Fetch notification count for a salon
+  async getNotificationCount(salonId: number): Promise<number> {
+    try {
+      // Replace with your actual endpoint and logic
+      const endpoint = `/notifications/count?salonId=${salonId}`;
+      const response = await this.request<{ count: number }>(endpoint);
+      return response.count ?? 0;
+    } catch (error) {
+      envLog.error('❌ [API] Error fetching notification count:', error);
+      return 0;
+    }
+  }
   private baseURL: string;
   private authToken: string | null = null;
 

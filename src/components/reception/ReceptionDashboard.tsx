@@ -13,6 +13,20 @@ import BookingModal from '../appointments/BookingModal';
 import ProfileModal from '../shared/ProfileModal';
 
 const ReceptionDashboard: React.FC = () => {
+  // Notification count state
+  const [notificationCount, setNotificationCount] = useState(0);
+  // Load notification count from API (replace with your actual API logic)
+  const loadNotificationCount = async () => {
+    try {
+      // Example: Replace with your actual API call
+      const salonId = getSalonId();
+      if (!salonId) return;
+      const count = await apiService.getNotificationCount?.(parseInt(salonId.toString()));
+      if (typeof count === 'number') setNotificationCount(count);
+    } catch (error) {
+      console.error('❌ [NOTIFICATION] Error loading notification count:', error);
+    }
+  };
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([]);
   const [pendingPayments, setPendingPayments] = useState<Appointment[]>([]);
@@ -768,56 +782,63 @@ const ReceptionDashboard: React.FC = () => {
 
             // Show real-time notification and update data based on update type
             switch (update.type) {
-              case 'APPOINTMENT_CREATED':
-                console.log('🆕 [WEBSOCKET] New appointment created:', update);
-                const customerName = update.customerName || update.customer_name || update.name || 'customer';
-                const timeSlot = update.timeSlot || update.time_slot || update.appointmentTime || update.appointment_time || update.appointmentDate || update.appointment_date || update.scheduled_time || 'scheduled time';
-                
-                // Additional safety check for undefined values
+              case 'APPOINTMENT_CREATED': {
+                const appointment = update.appointment_data || {};
+                console.log('🆕 [WEBSOCKET] New appointment created:', appointment);
+                const customerName = appointment.customerName || appointment.customer_name || appointment.name || 'customer';
+                const timeSlot = appointment.timeSlot || appointment.time_slot || appointment.appointmentTime || appointment.appointment_time || appointment.appointmentDate || appointment.appointment_date || appointment.scheduled_time || 'scheduled time';
                 console.log('🔍 [WEBSOCKET] Customer name resolved to:', customerName);
                 console.log('🔍 [WEBSOCKET] Time slot resolved to:', timeSlot);
-                
                 showSuccessMessage(`🆕 New appointment booked for ${customerName} at ${timeSlot}!`);
-                // Show toast notification for immediate feedback
                 showSuccess('New Appointment!', `${customerName} booked for ${timeSlot}`);
                 triggerReceptionNotification('appointmentConfirmed', customerName, timeSlot);
-                // Use auto-refresh function instead of individual loads
                 console.log('🔄 [WEBSOCKET] Auto-refreshing data after appointment creation...');
                 fetchAppointments();
                 loadTodayAppointments();
+                loadTotalStatistics();
+                loadNotificationCount();
                 break;
-              case 'APPOINTMENT_UPDATED':
-                console.log('📝 [WEBSOCKET] Appointment updated:', update);
-                const updatedCustomer = update.customerName || update.customer_name || update.name || 'customer';
+              }
+              case 'APPOINTMENT_UPDATED': {
+                const appointment = update.appointment_data || {};
+                console.log('📝 [WEBSOCKET] Appointment updated:', appointment);
+                const updatedCustomer = appointment.customerName || appointment.customer_name || appointment.name || 'customer';
                 showSuccessMessage(`📝 Appointment updated for ${updatedCustomer}!`);
-                // Show toast notification
                 showInfo('Appointment Updated', `${updatedCustomer}'s appointment has been modified`);
-                // Use auto-refresh function instead of individual loads
                 console.log('🔄 [WEBSOCKET] Auto-refreshing data after appointment update...');
                 fetchAppointments();
                 loadTodayAppointments();
+                loadTotalStatistics();
+                loadNotificationCount();
                 break;
-              case 'APPOINTMENT_CANCELLED':
-                console.log('❌ [WEBSOCKET] Appointment cancelled:', update);
-                const cancelledCustomer = update.customerName || update.customer_name || update.name || 'customer';
+              }
+              case 'APPOINTMENT_CANCELLED': {
+                const appointment = update.appointment_data || {};
+                console.log('❌ [WEBSOCKET] Appointment cancelled:', appointment);
+                const cancelledCustomer = appointment.customerName || appointment.customer_name || appointment.name || 'customer';
                 showSuccessMessage(`❌ Appointment cancelled for ${cancelledCustomer}!`);
-                // Show toast notification
                 showWarning('Appointment Cancelled', `${cancelledCustomer}'s appointment has been cancelled`);
-                // Use auto-refresh function instead of individual loads
                 console.log('🔄 [WEBSOCKET] Auto-refreshing data after appointment cancellation...');
                 fetchAppointments();
                 loadTodayAppointments();
+                loadTotalStatistics();
+                loadNotificationCount();
                 break;
-              case 'PAYMENT_RECEIVED':
-                console.log('💰 [WEBSOCKET] Payment received:', update);
-                const paymentCustomer = update.customerName || update.customer_name || update.name || 'customer';
+              }
+              case 'PAYMENT_RECEIVED': {
+                const appointment = update.appointment_data || {};
+                console.log('💰 [WEBSOCKET] Payment received:', appointment);
+                const paymentCustomer = appointment.customerName || appointment.customer_name || appointment.name || 'customer';
                 showSuccessMessage(`💰 Payment received from ${paymentCustomer}!`);
-                // Show toast notification
                 showSuccess('Payment Received', `Received payment from ${paymentCustomer}`);
-                triggerReceptionNotification('paymentReceived', update.amount || 0, paymentCustomer);
-                // Use auto-refresh function instead of individual loads
+                triggerReceptionNotification('paymentReceived', appointment.amount || 0, paymentCustomer);
                 console.log('🔄 [WEBSOCKET] Auto-refreshing data after payment received...');
                 fetchAppointments();
+                loadTodayAppointments();
+                loadTotalStatistics();
+                loadNotificationCount();
+                break;
+              }
                 loadTodayAppointments();
                 loadPendingPayments();
                 break;
