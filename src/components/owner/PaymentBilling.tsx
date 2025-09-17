@@ -364,10 +364,17 @@ const PaymentBilling: React.FC = () => {
         paymentType: '1', // One-time payment
         billingAddressStreet: defaultCard.billingAddress.street,
         billingAddressCity: defaultCard.billingAddress.city,
+<<<<<<< HEAD
         billingAddressCountry: 'LKA',
         billingAddressStateProvince: defaultCard.billingAddress.state || 'Western',
         billingAddressPostcodeZip: defaultCard.billingAddress.zipCode || '00100',
         custom1: 'charges',
+=======
+        billingAddressCountry: defaultCard.billingAddress.country,
+        billingAddressStateProvince: defaultCard.billingAddress.state || 'Western',
+        billingAddressPostcodeZip: defaultCard.billingAddress.zipCode || '00100',
+        custom1: 'appointment_charges',
+>>>>>>> 804b2cc135593007e567ebfad89b61cf1df1f8d5
         custom2: pendingCharges.map(c => c.id).join(',')
       };
 

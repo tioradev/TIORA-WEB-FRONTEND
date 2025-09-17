@@ -137,10 +137,16 @@ export class PaymentService {
    * Generate invoice ID
    */
   public generateInvoiceId(): string {
+<<<<<<< HEAD
     // Generate a 20-character invoice ID using timestamp and random string
     const timestamp = Date.now().toString().slice(-8); // Last 8 digits of timestamp
     const random = Math.random().toString(36).substring(2, 9).toUpperCase(); // 7 chars
     return `INV${timestamp}${random}`.substring(0, 20); // Ensure max 20 chars
+=======
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    return `INV${timestamp}${random}`.toUpperCase();
+>>>>>>> 804b2cc135593007e567ebfad89b61cf1df1f8d5
   }
 
   /**
@@ -163,7 +169,11 @@ export class PaymentService {
       checkValue,
       orderDescription: request.orderDescription,
       invoiceId,
+<<<<<<< HEAD
       logoUrl: 'https://firebasestorage.googleapis.com/v0/b/tiora-firebase.firebasestorage.app/o/logo%2FTiora%20gold.png?alt=media&token=2814af13-f96a-40e9-a3a5-6ba02ae0c3e3',
+=======
+      logoUrl: `${window.location.origin}/src/assets/images/Tiora black png.png`,
+>>>>>>> 804b2cc135593007e567ebfad89b61cf1df1f8d5
       notifyUrl: `${window.location.origin}/api/webhook/payment`,
       returnUrl: `${window.location.origin}/payment/success`,
       merchantKey: payableConfig.merchantKey,
@@ -177,12 +187,20 @@ export class PaymentService {
       billingAddressStreet2: request.billingAddressStreet2 || '',
       billingAddressCity: request.billingAddressCity,
       billingAddressStateProvince: request.billingAddressStateProvince || '',
+<<<<<<< HEAD
       billingAddressCountry: 'LKA',
+=======
+      billingAddressCountry: request.billingAddressCountry,
+>>>>>>> 804b2cc135593007e567ebfad89b61cf1df1f8d5
       billingAddressPostcodeZip: request.billingAddressPostcodeZip || '',
       amount: request.amount,
       currencyCode: 'LKR',
       paymentType: '1', // One-time payment
+<<<<<<< HEAD
       custom1: request.custom1 || 'payment',
+=======
+      custom1: request.custom1 || '',
+>>>>>>> 804b2cc135593007e567ebfad89b61cf1df1f8d5
       custom2: request.custom2 || ''
     };
 
@@ -217,7 +235,11 @@ export class PaymentService {
       checkValue,
       orderDescription: request.orderDescription,
       invoiceId,
+<<<<<<< HEAD
       logoUrl: 'https://firebasestorage.googleapis.com/v0/b/tiora-firebase.firebasestorage.app/o/logo%2FTiora%20gold.png?alt=media&token=2814af13-f96a-40e9-a3a5-6ba02ae0c3e3',
+=======
+      logoUrl: `${window.location.origin}/src/assets/images/Tiora black png.png`,
+>>>>>>> 804b2cc135593007e567ebfad89b61cf1df1f8d5
       notifyUrl: `${window.location.origin}/api/webhook/payment`,
       returnUrl: `${window.location.origin}/payment/success`,
       merchantKey: payableConfig.merchantKey,
@@ -231,7 +253,11 @@ export class PaymentService {
       billingAddressStreet2: request.billingAddressStreet2 || '',
       billingAddressCity: request.billingAddressCity,
       billingAddressStateProvince: request.billingAddressStateProvince || '',
+<<<<<<< HEAD
       billingAddressCountry: 'LKA',
+=======
+      billingAddressCountry: request.billingAddressCountry,
+>>>>>>> 804b2cc135593007e567ebfad89b61cf1df1f8d5
       billingAddressPostcodeZip: request.billingAddressPostcodeZip || '',
       amount: request.amount,
       currencyCode: 'LKR',
@@ -239,7 +265,11 @@ export class PaymentService {
       isSaveCard: request.isSaveCard || '1',
       customerRefNo,
       doFirstPayment: request.doFirstPayment || '1',
+<<<<<<< HEAD
       custom1: request.custom1 || 'tokenize',
+=======
+      custom1: request.custom1 || '',
+>>>>>>> 804b2cc135593007e567ebfad89b61cf1df1f8d5
       custom2: request.custom2 || ''
     };
 
