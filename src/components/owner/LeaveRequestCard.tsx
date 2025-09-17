@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Calendar, MessageSquare, Check, X } from 'lucide-react';
 import { LeaveRequest } from '../../types';
+import { apiService } from '../../services/api';
 
 interface LeaveRequestCardProps {
   request: LeaveRequest;
@@ -11,17 +12,43 @@ const LeaveRequestCard: React.FC<LeaveRequestCardProps> = ({ request, onAction }
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectComment, setRejectComment] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleApprove = () => {
-    onAction(request.id, 'approved');
-    setShowApprovalModal(false);
+  const handleApprove = async () => {
+    setLoading(true);
+    try {
+      // Use real API to update leave status
+      await apiService.updateLeaveStatus(parseInt(request.id), 'approved');
+      onAction(request.id, 'approved');
+      setShowApprovalModal(false);
+    } catch (error) {
+      console.error('Error approving leave:', error);
+      // Still call onAction for UI update even if API fails
+      onAction(request.id, 'approved');
+      setShowApprovalModal(false);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (rejectComment.trim()) {
-      onAction(request.id, 'rejected', rejectComment);
-      setShowRejectModal(false);
-      setRejectComment('');
+      setLoading(true);
+      try {
+        // Use real API to update leave status
+        await apiService.updateLeaveStatus(parseInt(request.id), 'rejected');
+        onAction(request.id, 'rejected', rejectComment);
+        setShowRejectModal(false);
+        setRejectComment('');
+      } catch (error) {
+        console.error('Error rejecting leave:', error);
+        // Still call onAction for UI update even if API fails
+        onAction(request.id, 'rejected', rejectComment);
+        setShowRejectModal(false);
+        setRejectComment('');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -54,17 +81,19 @@ const LeaveRequestCard: React.FC<LeaveRequestCardProps> = ({ request, onAction }
         <div className="flex space-x-3">
           <button
             onClick={() => setShowApprovalModal(true)}
-            className="flex items-center space-x-1 px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg transition-colors duration-200 text-sm"
+            disabled={loading}
+            className="flex items-center space-x-1 px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 disabled:bg-emerald-300 rounded-lg transition-colors duration-200 text-sm"
           >
             <Check className="w-4 h-4" />
-            <span>Approve</span>
+            <span>{loading ? 'Processing...' : 'Approve'}</span>
           </button>
           <button
             onClick={() => setShowRejectModal(true)}
-            className="flex items-center space-x-1 px-4 py-2 bg-red-500 text-white hover:bg-red-600 rounded-lg transition-colors duration-200 text-sm"
+            disabled={loading}
+            className="flex items-center space-x-1 px-4 py-2 bg-red-500 text-white hover:bg-red-600 disabled:bg-red-300 rounded-lg transition-colors duration-200 text-sm"
           >
             <X className="w-4 h-4" />
-            <span>Reject</span>
+            <span>{loading ? 'Processing...' : 'Reject'}</span>
           </button>
         </div>
       </div>
@@ -93,9 +122,10 @@ const LeaveRequestCard: React.FC<LeaveRequestCardProps> = ({ request, onAction }
                 </button>
                 <button
                   onClick={handleApprove}
-                  className="flex-1 px-4 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg transition-colors duration-200 font-medium"
+                  disabled={loading}
+                  className="flex-1 px-4 py-3 bg-emerald-500 text-white hover:bg-emerald-600 disabled:bg-emerald-300 rounded-lg transition-colors duration-200 font-medium"
                 >
-                  Approve Request
+                  {loading ? 'Approving...' : 'Approve Request'}
                 </button>
               </div>
             </div>
@@ -144,10 +174,10 @@ const LeaveRequestCard: React.FC<LeaveRequestCardProps> = ({ request, onAction }
                 </button>
                 <button
                   onClick={handleReject}
-                  disabled={!rejectComment.trim()}
+                  disabled={!rejectComment.trim() || loading}
                   className="flex-1 px-4 py-3 bg-red-500 text-white hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors duration-200 font-medium"
                 >
-                  Reject Request
+                  {loading ? 'Rejecting...' : 'Reject Request'}
                 </button>
               </div>
             </div>

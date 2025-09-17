@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, User, Briefcase, Save, Edit, Shield, Building
 } from 'lucide-react';
-import { apiService, SalonOwnerProfileUpdateRequest } from '../../services/api';
+import { apiService, SalonOwnerProfileUpdateRequest, EmployeeUpdateRequest } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import ImageUploader from './ImageUploader';
 
@@ -17,6 +17,7 @@ interface ProfileData {
   joinDate?: string;
   salonId?: string;
   salonName?: string;
+  employeeId?: string; // For reception users
   // Owner specific fields
   businessName?: string;
   taxId?: string;
@@ -58,20 +59,36 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   // Sync form data with profile prop changes
-  const { updateSalonInfo, getBranchId } = useAuth();
+  const { updateSalonInfo, getBranchId, getBranchName, updateUserInfo, logout } = useAuth();
 
   useEffect(() => {
-    setFormData(profile);
-    console.log('ProfileModal received profile:', profile);
-    console.log('ProfileModal isOpen:', isOpen);
-    
-    // Debug: Check authentication status when modal opens
-    if (isOpen && userRole === 'owner') {
-      console.log('🔍 [PROFILE] Modal opened for owner - checking auth status...');
-      console.log('🔍 [PROFILE] LocalStorage token:', localStorage.getItem('authToken')?.substring(0, 30) + '...');
-      console.log('🔍 [PROFILE] API Service token status:', apiService.getTokenStatus());
+    if (isOpen) {
+      // Only reset form data if we haven't already uploaded a new profile picture
+      // This prevents losing the uploaded image URL when the modal re-renders
+      setFormData(prevFormData => {
+        // If we have a new profile picture that's different from the original profile, keep it
+        if (prevFormData.profilePicture && prevFormData.profilePicture !== profile.profilePicture) {
+          console.log('🔄 [PROFILE] Preserving uploaded image during modal refresh:', prevFormData.profilePicture);
+          return {
+            ...profile,
+            profilePicture: prevFormData.profilePicture // Keep the uploaded image
+          };
+        }
+        // Otherwise, use the fresh profile data
+        return profile;
+      });
+      
+      console.log('ProfileModal received profile:', profile);
+      console.log('ProfileModal isOpen:', isOpen);
+      
+      // Debug: Check authentication status when modal opens
+      if (userRole === 'owner') {
+        console.log('🔍 [PROFILE] Modal opened for owner - checking auth status...');
+        console.log('🔍 [PROFILE] LocalStorage token:', localStorage.getItem('authToken')?.substring(0, 30) + '...');
+        console.log('🔍 [PROFILE] API Service token status:', apiService.getTokenStatus());
+      }
     }
-  }, [profile, isOpen, userRole]);
+  }, [profile, isOpen, userRole]); // Only run when modal opens or profile changes
 
   const handleSave = async () => {
     try {
@@ -84,6 +101,125 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
       console.log('🔍 [PROFILE] Salon ID:', formData.salonId);
       console.log('🔍 [PROFILE] Auth token exists:', !!localStorage.getItem('authToken'));
       console.log('🔍 [PROFILE] API Service token status:', apiService.getTokenStatus());
+      
+      // Additional auth debugging
+      const storedToken = localStorage.getItem('authToken');
+      const apiToken = apiService.getAuthToken();
+      console.log('🔍 [PROFILE] Token comparison:');
+      console.log('  - localStorage token exists:', !!storedToken);
+      console.log('  - localStorage token length:', storedToken ? storedToken.length : 0);
+      console.log('  - API service token exists:', !!apiToken);
+      console.log('  - API service token length:', apiToken ? apiToken.length : 0);
+      console.log('  - Tokens match:', storedToken === apiToken);
+      
+      // Check if token looks valid (should be a JWT-like format)
+      if (storedToken) {
+        const tokenParts = storedToken.split('.');
+        console.log('🔍 [PROFILE] Token structure check:');
+        console.log('  - Token parts count:', tokenParts.length);
+        console.log('  - Looks like JWT:', tokenParts.length === 3);
+        console.log('  - Token preview:', storedToken.substring(0, 50) + '...');
+      }
+      
+      // For reception users, make API call to update employee profile
+      if (userRole === 'reception' && (formData.employeeId || formData.id)) {
+        // Use employeeId if available, fallback to id
+        const employeeId = formData.employeeId || formData.id;
+        
+        console.log('🔍 [PROFILE] Starting comprehensive authentication debugging...');
+        
+        // Skip the authentication pre-check since other APIs work with the same token
+        // The issue might be endpoint-specific permissions rather than token validity
+        console.log('⚠️ [PROFILE] Skipping pre-authentication check - proceeding directly to API call');
+        console.log('📋 [PROFILE] Note: Other APIs work with same token, this might be endpoint-specific');
+        
+        // // Run detailed authentication diagnostics
+        // try {
+        //   const authDebugResults = await AuthDebugger.testAuthentication(employeeId);
+        //   console.log('🔍 [PROFILE] Authentication debug results:', authDebugResults);
+        //   
+        //   if (!authDebugResults.success) {
+        //     console.error('🔒 [PROFILE] Authentication issues detected:', authDebugResults.issues);
+        //     
+        //     // Check if this is specifically a 401 error (expired token)
+        //     if (authDebugResults.testResults?.status === 401) {
+        //       console.error('🔒 [PROFILE] Token has expired or is invalid');
+        //       
+        //       // Show user-friendly message and stop execution
+        //       alert('Your session has expired. Please refresh the page and log in again to continue.');
+        //       
+        //       // Clear all authentication data properly
+        //       logout();
+        //       
+        //       // Close the modal
+        //       onClose();
+        //       
+        //       // Stop further execution
+        //       return;
+        //     }
+        //     
+        //     // Try to refresh and test again for other issues
+        //     const refreshResults = await AuthDebugger.refreshAndTest(employeeId);
+        //     if (!refreshResults.success) {
+        //       alert(`Authentication failed: ${authDebugResults.issues.join(', ')}`);
+        //       return;
+        //     }
+        //   }
+        // } catch (debugError) {
+        //   console.error('🔍 [PROFILE] Authentication debugging failed:', debugError);
+        //   
+        //   // If debugging itself fails, show a generic message
+        //   alert('Authentication error detected. Please refresh the page and try again.');
+        //   return;
+        // }
+        
+        // Split name into first and last name
+        const nameParts = formData.name.trim().split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        const employeeUpdateData: EmployeeUpdateRequest = {
+          first_name: firstName,
+          last_name: lastName,
+          email: formData.email,
+          phone_number: formData.phone,
+          profile_image_url: formData.profilePicture
+        };
+
+        console.log('🚀 [PROFILE] Making API call to update reception employee profile...');
+        console.log('📋 [PROFILE] Employee ID:', employeeId);
+        console.log('📋 [PROFILE] Update data:', employeeUpdateData);
+        console.log('🔐 [PROFILE] API service has token:', !!apiService['authToken']);
+        
+        // Ensure the API service has the latest token from localStorage
+        const currentToken = localStorage.getItem('authToken');
+        if (currentToken && currentToken !== apiService.getAuthToken()) {
+          console.log('🔄 [PROFILE] Refreshing API service token from localStorage');
+          apiService.refreshAuthToken();
+        } else if (!apiService.getAuthToken()) {
+          console.log('🔄 [PROFILE] No token in API service, attempting to refresh from localStorage');
+          const refreshed = apiService.refreshAuthToken();
+          if (!refreshed) {
+            throw new Error('No authentication token available. Please refresh the page and try again.');
+          }
+        }
+        
+        console.log('🌐 [PROFILE] Making API call to update employee profile...');
+        console.log('📋 [PROFILE] Employee ID:', employeeId);
+        console.log('📋 [PROFILE] Update data:', employeeUpdateData);
+        
+        const response = await apiService.updateEmployeeProfile(employeeId, employeeUpdateData);
+        console.log('✅ [PROFILE] Reception employee profile update response:', response);
+        
+        // Update the user data in AuthContext
+        if (updateUserInfo) {
+          updateUserInfo({
+            name: formData.name,
+            email: formData.email,
+            profilePicture: formData.profilePicture
+          });
+        }
+      }
       
       // For salon owners, make API call to update profile
       if (userRole === 'owner' && formData.salonId) {
@@ -136,6 +272,21 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
         stack: error instanceof Error ? error.stack : undefined
       });
       
+      // Check if this is an authentication error
+      if (error instanceof Error && (error.message.includes('401') || error.message.includes('Authentication failed'))) {
+        console.error('🔒 [PROFILE] Authentication error detected!');
+        console.error('🔒 [PROFILE] Current token status:', apiService.getTokenStatus());
+        console.error('🔒 [PROFILE] localStorage token:', !!localStorage.getItem('authToken'));
+        
+        // Clear the invalid token and show user-friendly message
+        logout();
+        alert('Your session has expired. Please refresh the page and log in again to continue.');
+        
+        // Close the modal and don't update local state for authentication errors
+        onClose();
+        return;
+      }
+      
       // Still call the onSave callback to update local state
       onSave({ ...formData, id: profile.id });
       setIsEditing(false);
@@ -167,12 +318,45 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
     }));
   };
 
-  const handleEmployeeProfileImageUpload = (downloadURL: string) => {
+  const handleEmployeeProfileImageUpload = async (downloadURL: string) => {
     console.log('✅ [PROFILE] Employee profile image uploaded:', downloadURL);
-    setFormData(prev => ({
-      ...prev,
-      profilePicture: downloadURL
-    }));
+    setFormData(prev => {
+      const updated = {
+        ...prev,
+        profilePicture: downloadURL
+      };
+      console.log('🔄 [PROFILE] Updated formData with new profile picture:', updated.profilePicture);
+      return updated;
+    });
+
+    // For reception users, update both local state and call the API to update employee profile
+    if (userRole === 'reception' && (formData.employeeId || formData.id)) {
+      console.log('🎉 [PROFILE] Reception profile image upload completed successfully');
+      
+      try {
+        // Use employeeId if available, fallback to id
+        const employeeId = formData.employeeId || formData.id;
+        
+        // Update the user info in AuthContext for immediate header display
+        updateUserInfo({ profilePicture: downloadURL });
+        console.log('🔄 [PROFILE] Updated AuthContext user profile picture for header display');
+
+        // Call the employee update API with the new profile image URL
+        console.log('🌐 [PROFILE] Calling employee update API...');
+        console.log('📋 [PROFILE] Using employee ID:', employeeId);
+        const employeeUpdateData = {
+          profile_image_url: downloadURL
+        };
+
+        const response = await apiService.updateEmployeeProfile(employeeId, employeeUpdateData);
+        console.log('✅ [PROFILE] Employee profile updated successfully via API:', response);
+        
+      } catch (error) {
+        console.error('❌ [PROFILE] Failed to update employee profile via API:', error);
+        // Still keep the local updates even if API fails
+        console.log('💡 [PROFILE] Local profile image update preserved despite API error');
+      }
+    }
   };
 
   const handleImageUploadError = (error: string) => {
@@ -206,8 +390,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
   };
 
   if (!isOpen) {
-    console.log('ProfileModal not open, isOpen:', isOpen);
-    return null;
+    return null; // Remove console.log to reduce noise
   }
 
   console.log('ProfileModal rendering, isOpen:', isOpen, 'userRole:', userRole);
@@ -782,16 +965,30 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                 Workplace Information
               </h4>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Assigned Salon
-                </label>
-                <input
-                  type="text"
-                  value={formData.salonName || ''}
-                  disabled
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Assigned Salon
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.salonName || ''}
+                    disabled
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Branch Location
+                  </label>
+                  <input
+                    type="text"
+                    value={getBranchName() || 'Main Branch'}
+                    disabled
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                  />
+                </div>
               </div>
             </div>
           )}

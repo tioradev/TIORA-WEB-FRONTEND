@@ -14,11 +14,13 @@ interface AuthContextType {
   getSalonId: () => number | null;
   getSalonName: () => string | null;
   getBranchId: () => number | null;
+  getBranchName: () => string | null;
   getOwnerInfo: () => { firstName: string; lastName: string; fullName: string } | null;
   getEmployeeInfo: () => EmployeeInfo | null;
   isReceptionUser: () => boolean;
   isOwnerUser: () => boolean;
   updateSalonInfo: (updatedSalon: Partial<SalonInfo>) => void;
+  updateUserInfo: (updatedUser: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -132,14 +134,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const getSalonId = (): number | null => {
+    console.log('🔍 [DEBUG] Getting salon ID:', { 
+      salon: salon ? { salonId: salon.salonId, name: salon.name } : null,
+      employee: employee ? { salonId: employee.salonId, name: employee.firstName } : null 
+    });
+    
     // For salon owners, get from salon data
     if (salon?.salonId) {
+      console.log('✅ [AUTH] Salon ID from salon data:', salon.salonId);
       return salon.salonId;
     }
     // For reception staff, get from employee data
     if (employee?.salonId) {
+      console.log('✅ [AUTH] Salon ID from employee data:', employee.salonId);
       return employee.salonId;
     }
+    
+    console.warn('⚠️ [AUTH] No salon ID found in salon or employee data');
     return null;
   };
 
@@ -164,6 +175,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (salon?.defaultBranchId) {
       return salon.defaultBranchId;
     }
+    return null;
+  };
+
+  const getBranchName = (): string | null => {
+    // For salon owners, get from salon default branch name
+    if (salon?.defaultBranchName) {
+      return salon.defaultBranchName;
+    }
+    // For reception staff, we might not have branch name directly
+    // This could be enhanced later to fetch branch name by branchId if needed
     return null;
   };
 
@@ -214,24 +235,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const updateUserInfo = (updatedUser: Partial<User>) => {
+    if (user) {
+      const newUserInfo = { ...user, ...updatedUser };
+      setUser(newUserInfo);
+      
+      // Also update localStorage
+      const userData = localStorage.getItem('userData');
+      if (userData) {
+        const parsed = JSON.parse(userData);
+        parsed.user = newUserInfo;
+        localStorage.setItem('userData', JSON.stringify(parsed));
+      }
+      
+      console.log('User info updated in AuthContext:', newUserInfo);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ 
-      user, 
+    <AuthContext.Provider value={{
+      user,
       salon,
       employee,
-      login, 
-      logout, 
-      isProfileModalOpen, 
-      openProfileModal, 
+      login,
+      logout,
+      isProfileModalOpen,
+      openProfileModal,
       closeProfileModal,
       getSalonId,
       getSalonName,
       getBranchId,
+      getBranchName,
       getOwnerInfo,
       getEmployeeInfo,
       isReceptionUser,
       isOwnerUser,
-      updateSalonInfo
+      updateSalonInfo,
+      updateUserInfo
     }}>
       {children}
     </AuthContext.Provider>

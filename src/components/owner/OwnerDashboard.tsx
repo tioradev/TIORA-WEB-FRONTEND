@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { 
   Coins, Users, UserPlus, Clock, Building, Sparkles, AlertTriangle, Shield, Target, Star,
-  Search, Calendar, TrendingUp, BarChart3, CreditCard, Briefcase
+  Calendar, TrendingUp, BarChart3, CreditCard, Briefcase
 } from 'lucide-react';
 import { mockAppointments, mockEarnings, mockLeaveRequests, mockBarbers } from '../../data/mockData';
 import { LeaveRequest } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import LeaveRequestCard from './LeaveRequestCard';
+import LeaveSummaryTable from './LeaveSummaryTable';
+import PendingLeaveRequests from './PendingLeaveRequests';
 import ServiceManagement from './ServiceManagement';
 import ExpenseManagement from '../super-admin/ExpenseManagement';
 import BranchManagement from '../super-admin/BranchManagement';
@@ -17,11 +18,15 @@ import PaymentBilling from './PaymentBilling';
 import ProfileModal from '../shared/ProfileModal';
 
 const OwnerDashboard: React.FC = () => {
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(mockLeaveRequests);
+  // Note: Using mock data for pending leave requests until we have a dedicated API endpoint
+  // The leave summary table fetches real data from the API for processed leaves
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(
+    mockLeaveRequests.filter(request => request.status === 'pending')
+  );
   const [activeTab, setActiveTab] = useState<'overview' | 'staff' | 'analytics' | 'payments' | 'services' | 'leaves' | 'expenses' | 'branches'>('overview');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [addStaffModalOpen, setAddStaffModalOpen] = useState(false);
-  const [leaveRequestsSearch, setLeaveRequestsSearch] = useState<string>('');
+  const [leaveView, setLeaveView] = useState<'pending' | 'summary'>('pending');
   const { isProfileModalOpen, closeProfileModal, user, salon } = useAuth();
 
   // Create user profile from real salon data instead of mock data
@@ -70,14 +75,6 @@ const OwnerDashboard: React.FC = () => {
     acc[earning.barberName] = (acc[earning.barberName] || 0) + earning.finalAmount;
     return acc;
   }, {} as Record<string, number>);
-
-  const searchLeaveRequests = (requests: LeaveRequest[], searchTerm: string) => {
-    if (!searchTerm.trim()) return requests;
-    return requests.filter(request =>
-      request.barberName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      request.reason.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  };
 
   const handleLeaveAction = (requestId: string, action: 'approved' | 'rejected', comment?: string) => {
     const request = leaveRequests.find(req => req.id === requestId);
@@ -511,37 +508,45 @@ const OwnerDashboard: React.FC = () => {
       {/* Leave Requests Tab */}
       {activeTab === 'leaves' && (
         <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Leave Requests</h3>
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by barber name or reason..."
-                value={leaveRequestsSearch}
-                onChange={(e) => setLeaveRequestsSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
+          {/* Tab Navigation */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Leave Management</h3>
+              
+              {/* View Toggle */}
+              <div className="flex bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setLeaveView('pending')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
+                    leaveView === 'pending'
+                      ? 'bg-white text-purple-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Pending Requests ({pendingLeaves.length})
+                </button>
+                <button
+                  onClick={() => setLeaveView('summary')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
+                    leaveView === 'summary'
+                      ? 'bg-white text-purple-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Leave Summary
+                </button>
+              </div>
             </div>
           </div>
-          
-          {searchLeaveRequests(pendingLeaves, leaveRequestsSearch).length === 0 ? (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-              <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">
-                {leaveRequestsSearch ? 'No leave requests match your search.' : 'No pending leave requests'}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {searchLeaveRequests(pendingLeaves, leaveRequestsSearch).map(request => (
-                <LeaveRequestCard
-                  key={request.id}
-                  request={request}
-                  onAction={handleLeaveAction}
-                />
-              ))}
-            </div>
+
+          {/* Pending Requests View */}
+          {leaveView === 'pending' && (
+            <PendingLeaveRequests onAction={handleLeaveAction} />
+          )}
+
+          {/* Summary View */}
+          {leaveView === 'summary' && (
+            <LeaveSummaryTable />
           )}
         </div>
       )}

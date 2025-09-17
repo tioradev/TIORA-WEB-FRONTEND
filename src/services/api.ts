@@ -2,7 +2,8 @@ import { getCurrentConfig, envLog } from '../config/environment';
 import type { 
   PaginatedResponse, 
   PromotionResponse, 
-  PromotionRequest 
+  PromotionRequest,
+  LeaveDetailsPaginatedResponse 
 } from '../types';
 
 // API Endpoints
@@ -26,6 +27,7 @@ const ENDPOINTS = {
     CREATE_SALON: '/employees/salon',
     LIST: '/employees',
     UPDATE_SALON: '/employees/salon',
+    UPDATE: '/employees', // Individual employee update endpoint
     DELETE: '/employees',
     BY_SALON: '/employees/salon',
     PAGINATED: '/employees/salon', // /employees/salon/{salonId}/paginated
@@ -64,6 +66,10 @@ const ENDPOINTS = {
     GET_ALL: '/promotions', // GET /promotions?page=0&size=20
     UPDATE: '/promotions', // PUT /promotions/{id}
     DELETE: '/promotions', // DELETE /promotions/{id}
+  },
+  LEAVES: {
+    BY_SALON: '/employee-leave-details/by-salon', // GET /employee-leave-details/by-salon?salonId={salonId}&page={page}&size={size}&search={search}
+    UPDATE_STATUS: '/employee-leave', // PUT /employee-leave/{id}/status?status={status}
   },
 };
 
@@ -120,6 +126,19 @@ class ApiService {
   // Get stored auth token
   getAuthToken(): string | null {
     return this.authToken;
+  }
+
+  // Refresh auth token from localStorage
+  refreshAuthToken(): boolean {
+    const storedToken = localStorage.getItem('authToken');
+    if (storedToken) {
+      this.authToken = storedToken;
+      envLog.info('🔄 [API] Auth token refreshed from localStorage');
+      return true;
+    } else {
+      envLog.warn('⚠️ [API] No token found in localStorage to refresh');
+      return false;
+    }
   }
 
   // Generic request method
@@ -415,10 +434,27 @@ class ApiService {
   // Update employee by ID
   async updateEmployee(employeeId: string | number, employeeData: EmployeeUpdateRequest): Promise<EmployeeUpdateResponse> {
     const endpoint = `${ENDPOINTS.EMPLOYEES.UPDATE_SALON}/${employeeId}`;
-    envLog.info('✏️ [API] Updating employee...');
+    envLog.info('✏️ [API] Updating employee (salon context)...');
     envLog.info('🌐 [API] Endpoint:', endpoint);
     envLog.info('👤 [API] Employee ID:', employeeId);
     envLog.info('📋 [API] Employee update data:', employeeData);
+    
+    return this.request<EmployeeUpdateResponse>(
+      endpoint,
+      {
+        method: 'PUT',
+        body: JSON.stringify(employeeData),
+      }
+    );
+  }
+
+  // Update individual employee profile (for profile updates by the employee themselves)
+  async updateEmployeeProfile(employeeId: string | number, employeeData: EmployeeUpdateRequest): Promise<EmployeeUpdateResponse> {
+    const endpoint = `${ENDPOINTS.EMPLOYEES.UPDATE}/${employeeId}`;
+    envLog.info('✏️ [API] Updating employee profile...');
+    envLog.info('🌐 [API] Endpoint:', endpoint);
+    envLog.info('👤 [API] Employee ID:', employeeId);
+    envLog.info('📋 [API] Employee profile data:', employeeData);
     
     return this.request<EmployeeUpdateResponse>(
       endpoint,
@@ -1232,6 +1268,62 @@ class ApiService {
       return [];
     } catch (error) {
       envLog.error('❌ [API] Error getting pending payment appointments for dashboard:', error);
+      throw error;
+    }
+  }
+
+  // Leave Management Methods
+  async getEmployeeLeaveDetails(
+    salonId: number, 
+    page: number = 0, 
+    size: number = 10, 
+    search?: string,
+    status?: 'PENDING' | 'APPROVED' | 'REJECTED'
+  ): Promise<LeaveDetailsPaginatedResponse> {
+    try {
+      const params = new URLSearchParams({
+        salonId: salonId.toString(),
+        page: page.toString(),
+        size: size.toString()
+      });
+      
+      if (search && search.trim()) {
+        params.append('search', search.trim());
+      }
+
+      if (status) {
+        params.append('status', status);
+      }
+
+      const url = `${ENDPOINTS.LEAVES.BY_SALON}?${params.toString()}`;
+      const response = await this.request<LeaveDetailsPaginatedResponse>(url);
+      
+      envLog.info('✅ [LEAVES] Employee leave details fetched successfully', { 
+        salonId, 
+        page, 
+        size, 
+        search,
+        status,
+        totalElements: response.totalElements 
+      });
+      return response;
+    } catch (error) {
+      envLog.error('❌ [LEAVES] Error fetching employee leave details:', error);
+      throw error;
+    }
+  }
+
+  async updateLeaveStatus(leaveId: number, status: 'approved' | 'rejected'): Promise<any> {
+    try {
+      const url = `${ENDPOINTS.LEAVES.UPDATE_STATUS}/${leaveId}/status?status=${status}`;
+      const response = await this.request<any>(url, {
+        method: 'PUT'
+      });
+      
+      envLog.info('✅ [LEAVES] Leave status updated successfully', { leaveId, status });
+      return response;
+    } catch (error) {
+      envLog.error('❌ [LEAVES] Error updating leave status:', error);
       throw error;
     }
   }

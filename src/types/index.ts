@@ -201,6 +201,46 @@ export interface LeaveRequest {
   updatedAt?: Date;
 }
 
+// API Response types for Leave Management
+export interface LeaveDetailApiResponse {
+  employeeId: number;
+  employeeName: string;
+  duration: number;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  status?: 'PENDING' | 'APPROVED' | 'REJECTED'; // Added status field
+}
+
+export interface LeaveDetailsPaginatedResponse {
+  content: LeaveDetailApiResponse[];
+  pageable: {
+    pageNumber: number;
+    pageSize: number;
+    sort: {
+      empty: boolean;
+      sorted: boolean;
+      unsorted: boolean;
+    };
+    offset: number;
+    paged: boolean;
+    unpaged: boolean;
+  };
+  totalPages: number;
+  totalElements: number;
+  last: boolean;
+  size: number;
+  number: number;
+  sort: {
+    empty: boolean;
+    sorted: boolean;
+    unsorted: boolean;
+  };
+  numberOfElements: number;
+  first: boolean;
+  empty: boolean;
+}
+
 export interface Earning {
   salonId: string;
   date: string;
