@@ -1,6 +1,7 @@
 import CryptoJS from 'crypto-js';
 import { payablePayment } from 'payable-ipg-js';
 import { payableConfig, validatePayableConfig, payableUrls } from './payableConfig';
+import { webhookHandler } from './webhookHandler';
 
 export interface PaymentRequest {
   amount: string;
@@ -100,6 +101,24 @@ export class PaymentService {
     if (!validation.isValid) {
       throw new Error(`Payable configuration incomplete. Missing: ${validation.missingFields.join(', ')}`);
     }
+  }
+
+  /**
+   * Get the correct merchant ID for API calls
+   * Prioritizes: stored merchantId from webhook > configured merchantId > merchantKey
+   */
+  private getMerchantIdForApi(): string {
+    // First try to get merchant ID from webhook response (stored in localStorage)
+    const storedMerchantId = webhookHandler.getStoredMerchantId();
+    if (storedMerchantId) {
+      console.log('📍 [PAYMENT] Using stored merchant ID from webhook:', storedMerchantId);
+      return storedMerchantId;
+    }
+    
+    // Fall back to configured merchant ID or merchant key
+    const fallbackId = payableConfig.merchantId || payableConfig.merchantKey;
+    console.log('📍 [PAYMENT] Using fallback merchant ID:', fallbackId);
+    return fallbackId;
   }
 
   /**
@@ -310,17 +329,22 @@ export class PaymentService {
         payableUrls.api.live;
 
       // Debug logging
+      const merchantIdToUse = this.getMerchantIdForApi();
       console.log('🔍 [PAYMENT] getSavedCards debug info:', {
-        merchantId: payableConfig.merchantKey,
+        merchantKey: payableConfig.merchantKey,
+        merchantIdConfigured: payableConfig.merchantId,
+        storedMerchantId: webhookHandler.getStoredMerchantId(),
+        merchantIdUsed: merchantIdToUse,
         customerId,
         checkValue,
         rootUrl,
         apiUrl: `${rootUrl}/ipg/v2/tokenize/listCard`,
-        testMode: payableConfig.testMode
+        testMode: payableConfig.testMode,
+        note: 'Using merchant ID from webhook response if available, otherwise fallback to config'
       });
       
       const requestBody = {
-        merchantId: payableConfig.merchantKey,
+        merchantId: merchantIdToUse,
         customerId,
         checkValue
       };
@@ -390,7 +414,7 @@ export class PaymentService {
           'Authorization': `Bearer ${accessToken}`
         },
         body: JSON.stringify({
-          merchantId: payableConfig.merchantKey,
+          merchantId: this.getMerchantIdForApi(),
           invoiceId,
           amount,
           currencyCode: 'LKR',
@@ -447,7 +471,7 @@ export class PaymentService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          merchantId: payableConfig.merchantKey,
+          merchantId: this.getMerchantIdForApi(),
           customerId,
           tokenId,
           checkValue
@@ -494,7 +518,7 @@ export class PaymentService {
           'Authorization': `Bearer ${accessToken}`
         },
         body: JSON.stringify({
-          merchantId: payableConfig.merchantKey,
+          merchantId: this.getMerchantIdForApi(),
           customerId,
           tokenId,
           nickName: nickName || '',

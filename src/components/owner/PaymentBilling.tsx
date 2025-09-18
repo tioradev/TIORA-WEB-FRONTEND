@@ -12,6 +12,8 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { paymentService, PaymentRequest, SavedCard } from '../../services/paymentService';
+import { backendPaymentService, BackendSavedCard } from '../../services/backendPaymentService';
+import { webhookHandler } from '../../services/webhookHandler';
 import Toast from '../shared/Toast';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -34,8 +36,11 @@ const PaymentBilling: React.FC = () => {
   
   // Payable IPG Integration States
   const [payableConfig] = useState(paymentService.getConfigStatus());
-  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
+  const [savedCards, setSavedCards] = useState<BackendSavedCard[]>([]);
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [loadingCards, setLoadingCards] = useState(false);
+  const [loadingPayment, setLoadingPayment] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<string>(''); // Will be set based on salon data
   
   // Toast states
@@ -66,6 +71,38 @@ const PaymentBilling: React.FC = () => {
     if (payableConfig.isConfigured && selectedCustomer) {
       loadSavedCards();
     }
+    
+    // Listen for webhook events to refresh cards automatically
+    const handleTokenizationSuccess = () => {
+      console.log('🔔 [PAYMENT] Tokenization successful, refreshing cards...');
+      setTimeout(() => loadSavedCards(), 2000); // Small delay to ensure backend processing
+    };
+    
+    const handlePaymentSuccess = () => {
+      console.log('🔔 [PAYMENT] Payment successful, refreshing data...');
+      // Refresh both cards and pending charges
+      setTimeout(() => {
+        loadSavedCards();
+        // In a real app, you'd also refresh the pending charges data
+      }, 2000);
+    };
+    
+    const handlePaymentFailure = (event: CustomEvent) => {
+      console.log('🔔 [PAYMENT] Payment failed:', event.detail);
+      showToast('error', 'Payment Failed', 'Your payment could not be processed. Please try again.');
+    };
+    
+    // Add event listeners
+    window.addEventListener('payable-tokenization-success', handleTokenizationSuccess);
+    window.addEventListener('payable-payment-success', handlePaymentSuccess);
+    window.addEventListener('payable-payment-failure', handlePaymentFailure as EventListener);
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('payable-tokenization-success', handleTokenizationSuccess);
+      window.removeEventListener('payable-payment-success', handlePaymentSuccess);
+      window.removeEventListener('payable-payment-failure', handlePaymentFailure as EventListener);
+    };
   }, [selectedCustomer, payableConfig.isConfigured]);
 
   const showToast = (type: 'success' | 'error' | 'warning' | 'info', title: string, message?: string) => {
@@ -78,14 +115,26 @@ const PaymentBilling: React.FC = () => {
   };
 
   const loadSavedCards = async () => {
-    if (!selectedCustomer) return;
+    if (!selectedCustomer || !salon?.salonId) return;
+    
+    setLoadingCards(true);
+    setError(null);
     
     try {
-      const cards = await paymentService.getSavedCards(selectedCustomer);
-      setSavedCards(cards);
+      console.log('🔄 [PAYMENT] Loading saved cards from backend for salon:', salon.salonId);
+      
+      // Generate a numeric customer ID based on salon (for backend API)
+      const numericCustomerId = parseInt(salon.salonId.toString()) || 1;
+      
+      const response = await backendPaymentService.getSavedTokens(numericCustomerId, salon.salonId);
+      setSavedCards(response.tokens);
+      console.log('✅ [PAYMENT] Successfully loaded', response.tokens.length, 'saved cards from backend');
     } catch (error) {
       console.error('Failed to load saved cards:', error);
-      showToast('error', 'Failed to load saved cards', 'Please try again later.');
+      setError('Failed to load saved cards. Please try again.');
+      showToast('error', 'Failed to load saved cards', 'Please check the console for debugging information.');
+    } finally {
+      setLoadingCards(false);
     }
   };
 
@@ -195,11 +244,29 @@ const PaymentBilling: React.FC = () => {
 
     try {
       setProcessingPayment(true);
+      setError(null);
+      
+      // Generate invoice ID for tracking
+      const invoiceId = paymentService.generateInvoiceId();
+      
+      // Initialize transaction in backend for tracking
+      if (salon?.salonId) {
+        const numericCustomerId = parseInt(salon.salonId.toString()) || 1;
+        await backendPaymentService.initializeTransaction({
+          invoiceId,
+          customerId: numericCustomerId,
+          salonId: salon.salonId,
+          amount: 0.00,
+          paymentType: 'TOKENIZATION',
+          orderDescription: 'Add Payment Card - Tokenization Only'
+        });
+        console.log('✅ [BACKEND] Transaction initialized for tokenization');
+      }
       
       // Create tokenization payment request (zero amount to save card only)
       const paymentRequest: PaymentRequest = {
         amount: '0.00', // Zero amount for card tokenization only
-        invoiceId: paymentService.generateInvoiceId(),
+        invoiceId,
         orderDescription: 'Add Payment Card - Tokenization Only',
         customerFirstName: salon?.ownerFirstName || 'Salon',
         customerLastName: salon?.ownerLastName || 'Owner',
@@ -225,6 +292,7 @@ const PaymentBilling: React.FC = () => {
       
     } catch (error) {
       console.error('Add card error:', error);
+      setError('Failed to add card. Please try again.');
       showToast('error', 'Add Card Failed', 'Unable to add payment card. Please try again.');
     } finally {
       setProcessingPayment(false);
@@ -245,11 +313,32 @@ const PaymentBilling: React.FC = () => {
 
     try {
       setProcessingPayment(true);
+      setLoadingPayment(true);
+      setError(null);
+      
+      // Generate invoice ID for tracking
+      const invoiceId = paymentService.generateInvoiceId();
+      const appointmentChargeIds = pendingCharges.map(charge => parseInt(charge.id));
+      
+      // Initialize transaction in backend for tracking
+      if (salon?.salonId) {
+        const numericCustomerId = parseInt(salon.salonId.toString()) || 1;
+        await backendPaymentService.initializeTransaction({
+          invoiceId,
+          customerId: numericCustomerId,
+          salonId: salon.salonId,
+          amount: parseFloat(totalAmount),
+          paymentType: 'APPOINTMENT_CHARGES',
+          orderDescription: `Salon Appointment Charges - ${pendingCharges.length} charges`,
+          appointmentChargeIds
+        });
+        console.log('✅ [BACKEND] Transaction initialized for appointment charges');
+      }
       
       // Create payment request for Payable IPG
       const paymentRequest: PaymentRequest = {
         amount: totalAmount,
-        invoiceId: paymentService.generateInvoiceId(),
+        invoiceId,
         orderDescription: `Salon Appointment Charges - ${pendingCharges.length} charges`,
         customerFirstName: salon?.ownerFirstName || 'Salon',
         customerLastName: salon?.ownerLastName || 'Owner',
@@ -269,9 +358,11 @@ const PaymentBilling: React.FC = () => {
       
     } catch (error) {
       console.error('Payment error:', error);
+      setError('Failed to process payment. Please try again.');
       showToast('error', 'Payment Failed', 'Unable to process payment. Please try again.');
     } finally {
       setProcessingPayment(false);
+      setLoadingPayment(false);
     }
   };  // Function to pay with saved card
   const handlePayWithSavedCard = async (customerId: string, tokenId: string) => {
@@ -444,6 +535,10 @@ const PaymentBilling: React.FC = () => {
                   : `Missing configuration: ${payableConfig.missingFields.join(', ')}`
                 }
               </p>
+              <div className="mt-2 text-xs text-gray-600">
+                <div>Merchant Key: 42F77B3164786C34</div>
+                <div>Stored Merchant ID: {webhookHandler.getStoredMerchantId() || 'Not available (will be set after first tokenization)'}</div>
+              </div>
             </div>
           </div>
           {!payableConfig.isConfigured && (
@@ -475,15 +570,47 @@ const PaymentBilling: React.FC = () => {
               </div>
               <button
                 onClick={loadSavedCards}
-                disabled={!selectedCustomer}
+                disabled={!selectedCustomer || loadingCards}
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 transition-colors duration-200 self-end"
               >
-                Refresh Cards
+                {loadingCards ? 'Loading...' : 'Refresh Cards'}
               </button>
             </div>
           </div>
           
-          {savedCards.length > 0 ? (
+          {/* Error State */}
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="w-5 h-5 text-red-600" />
+                <p className="text-red-800">{error}</p>
+              </div>
+            </div>
+          )}
+          
+          {/* Loading State */}
+          {loadingCards && (
+            <div className="mb-4 p-8 text-center">
+              <div className="inline-flex items-center space-x-2 text-gray-600">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-600"></div>
+                <span>Loading saved cards...</span>
+              </div>
+            </div>
+          )}
+          
+          {/* Payment Processing State */}
+          {(processingPayment || loadingPayment) && (
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                <p className="text-blue-800">
+                  {processingPayment ? 'Processing payment...' : 'Preparing payment...'}
+                </p>
+              </div>
+            </div>
+          )}
+          
+          {!loadingCards && savedCards.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {savedCards.map((card) => (
                 <div key={card.tokenId} className="border border-gray-200 rounded-lg p-4">
@@ -492,7 +619,7 @@ const PaymentBilling: React.FC = () => {
                       <CreditCard className="w-5 h-5 text-gray-600" />
                       <span className="font-medium text-gray-900">{card.maskedCardNo}</span>
                     </div>
-                    {card.defaultCard === 1 && (
+                    {card.isDefaultCard && (
                       <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">
                         Default
                       </span>
@@ -502,7 +629,11 @@ const PaymentBilling: React.FC = () => {
                   <div className="space-y-2 text-sm text-gray-600">
                     <div className="flex justify-between">
                       <span>Expires:</span>
-                      <span>{card.exp}</span>
+                      <span>{card.cardExpiry}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Scheme:</span>
+                      <span>{card.cardScheme}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Status:</span>
@@ -533,12 +664,12 @@ const PaymentBilling: React.FC = () => {
                   {/* Card Management Buttons */}
                   <div className="flex space-x-2 mt-3">
                     <button
-                      onClick={() => handleEditSavedCard(selectedCustomer, card.tokenId, card.nickname, card.defaultCard !== 1)}
+                      onClick={() => handleEditSavedCard(selectedCustomer, card.tokenId, card.nickname, !card.isDefaultCard)}
                       disabled={processingPayment}
                       className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors duration-200 text-sm flex items-center justify-center space-x-1"
                     >
                       <Edit className="w-3 h-3" />
-                      <span>{card.defaultCard === 1 ? 'Remove Default' : 'Set Default'}</span>
+                      <span>{card.isDefaultCard ? 'Remove Default' : 'Set Default'}</span>
                     </button>
                     <button
                       onClick={() => handleDeleteSavedCard(selectedCustomer, card.tokenId)}
@@ -552,16 +683,16 @@ const PaymentBilling: React.FC = () => {
                 </div>
               ))}
             </div>
-          ) : selectedCustomer ? (
+          ) : !loadingCards && selectedCustomer ? (
             <div className="text-center py-8 text-gray-500">
               <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-2" />
               <p>No saved cards found for this customer</p>
             </div>
-          ) : (
+          ) : !loadingCards ? (
             <div className="text-center py-8 text-gray-500">
               <p>Customer ID will be automatically generated based on your salon profile. Click "Refresh Cards" to check for saved cards.</p>
             </div>
-          )}
+          ) : null}
         </div>
       )}
 
@@ -641,113 +772,8 @@ const PaymentBilling: React.FC = () => {
           </div>
         </div>
 
-        {/* Saved Cards Section */}
-        {payableConfig.isConfigured && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Payable IPG Saved Cards</h3>
-              <div className="flex space-x-3">
-                <div className="flex flex-col">
-                  <label className="text-xs text-gray-500 mb-1">Customer ID (Alphanumeric)</label>
-                  <input
-                    type="text"
-                    placeholder="Alphanumeric Customer ID"
-                    value={selectedCustomer}
-                    readOnly
-                    className="px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  />
-                </div>
-                <button
-                  onClick={loadSavedCards}
-                  disabled={!selectedCustomer}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 transition-colors duration-200 self-end"
-                >
-                  Refresh Cards
-                </button>
-              </div>
-            </div>
-
-          {savedCards.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {savedCards.map((card) => (
-                <div key={card.tokenId} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-2">
-                      <CreditCard className="w-5 h-5 text-gray-600" />
-                      <span className="font-medium text-gray-900">{card.maskedCardNo}</span>
-                    </div>
-                    {card.defaultCard === 1 && (
-                      <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">
-                        Default
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2 text-sm text-gray-600">
-                    <div className="flex justify-between">
-                      <span>Expires:</span>
-                      <span>{card.exp}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Status:</span>
-                      <span className={`font-medium ${
-                        card.tokenStatus === 'ACTIVE' ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        {card.tokenStatus}
-                      </span>
-                    </div>
-                    {card.nickname && (
-                      <div className="flex justify-between">
-                        <span>Nickname:</span>
-                        <span>{card.nickname}</span>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {card.tokenStatus === 'ACTIVE' && pendingCharges.length > 0 && (
-                    <button
-                      onClick={() => handlePayWithSavedCard(selectedCustomer, card.tokenId)}
-                      disabled={processingPayment}
-                      className="w-full mt-3 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors duration-200 text-sm"
-                    >
-                      {processingPayment ? 'Processing...' : `Pay Rs. ${totalPendingAmount.toFixed(2)}`}
-                    </button>
-                  )}
-                  
-                  {/* Card Management Buttons */}
-                  <div className="flex space-x-2 mt-3">
-                    <button
-                      onClick={() => handleEditSavedCard(selectedCustomer, card.tokenId, card.nickname, card.defaultCard !== 1)}
-                      disabled={processingPayment}
-                      className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors duration-200 text-sm flex items-center justify-center space-x-1"
-                    >
-                      <Edit className="w-3 h-3" />
-                      <span>{card.defaultCard === 1 ? 'Remove Default' : 'Set Default'}</span>
-                    </button>
-                    <button
-                      onClick={() => handleDeleteSavedCard(selectedCustomer, card.tokenId)}
-                      disabled={processingPayment}
-                      className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 transition-colors duration-200 text-sm flex items-center justify-center space-x-1"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>Delete</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No saved cards found</h3>
-              <p className="text-gray-600">Enter a Customer ID and click Load Cards, or add your first payment card using the Add Payment Card button.</p>
-            </div>
-          )}
-        </div>
-      )}
-
-    </div>
-    {/* End main container */}
+      </div>
+      {/* End Overview Content */}
 
       {/* Toast Notifications */}
       <div className="fixed top-4 right-4 z-50 space-y-4">
