@@ -128,7 +128,7 @@ class BackendPaymentService {
    */
   async getPaymentConfig(): Promise<PaymentConfigResponse> {
     console.log('🔄 [BACKEND API] Getting payment config');
-    return this.makeRequest<PaymentConfigResponse>('/api/payments/config');
+    return this.makeRequest<PaymentConfigResponse>('/payments/config');
   }
 
   /**
@@ -136,7 +136,7 @@ class BackendPaymentService {
    */
   async savePaymentToken(tokenData: SaveTokenRequest): Promise<{ success: boolean; tokenId: string }> {
     console.log('🔄 [BACKEND API] Saving payment token:', tokenData);
-    return this.makeRequest('/api/payments/tokens/save', {
+    return this.makeRequest('/payments/tokens/save', {
       method: 'POST',
       body: JSON.stringify(tokenData),
     });
@@ -148,7 +148,7 @@ class BackendPaymentService {
   async getSavedTokens(customerId: number, salonId: number): Promise<{ tokens: SavedTokenResponse[]; total: number }> {
     console.log('🔄 [BACKEND API] Getting saved tokens for customer:', customerId, 'salon:', salonId);
     return this.makeRequest(
-      `/api/payments/tokens?customerId=${customerId}&salonId=${salonId}`
+      `/payments/tokens?customerId=${customerId}&salonId=${salonId}`
     );
   }
 
@@ -157,7 +157,7 @@ class BackendPaymentService {
    */
   async savePaymentTransaction(transactionData: SaveTransactionRequest): Promise<{ success: boolean; transactionId: string }> {
     console.log('🔄 [BACKEND API] Saving payment transaction:', transactionData);
-    return this.makeRequest('/api/payments/transactions/save', {
+    return this.makeRequest('/payments/transactions/save', {
       method: 'POST',
       body: JSON.stringify(transactionData),
     });
@@ -172,7 +172,7 @@ class BackendPaymentService {
     if (salonId) params.append('salonId', salonId.toString());
     
     const queryString = params.toString();
-    const endpoint = `/api/payments/transactions${queryString ? `?${queryString}` : ''}`;
+    const endpoint = `/payments/transactions${queryString ? `?${queryString}` : ''}`;
     
     console.log('🔄 [BACKEND API] Getting payment transactions:', endpoint);
     return this.makeRequest(endpoint);
@@ -227,7 +227,7 @@ class BackendPaymentService {
       maskedCardNo?: string;
     }
   ): Promise<{ success: boolean }> {
-    const endpoint = '/api/payments/transactions/update';
+    const endpoint = '/payments/transactions/update';
     
     const data = {
       invoiceId,

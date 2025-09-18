@@ -11,7 +11,7 @@ import {
   Clock,
   AlertCircle,
 } from 'lucide-react';
-import { paymentService, PaymentRequest, SavedCard } from '../../services/paymentService';
+import { paymentService, PaymentRequest } from '../../services/paymentService';
 import { backendPaymentService, BackendSavedCard } from '../../services/backendPaymentService';
 import { webhookHandler } from '../../services/webhookHandler';
 import Toast from '../shared/Toast';
