@@ -23,23 +23,10 @@ const PayableIPGTest: React.FC = () => {
         paymentType: '1', // One-time payment
         billingAddressStreet: '123 Galle Road',
         billingAddressCity: 'Colombo',
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 7dfce271069c719765ed7baffd35e7b1752d94d6
-        billingAddressCountry: 'LKA',
-        billingAddressStateProvince: 'Western',
-        billingAddressPostcodeZip: '00300',
-        custom1: 'payment',
-<<<<<<< HEAD
-=======
-=======
-        billingAddressCountry: 'LK',
-        billingAddressStateProvince: 'Western',
-        billingAddressPostcodeZip: '00300',
-        custom1: 'test_payment',
->>>>>>> 804b2cc135593007e567ebfad89b61cf1df1f8d5
->>>>>>> 7dfce271069c719765ed7baffd35e7b1752d94d6
+  billingAddressCountry: 'LKA',
+  billingAddressStateProvince: 'Western',
+  billingAddressPostcodeZip: '00300',
+  custom1: 'payment',
         custom2: 'salon_services'
       };
 
@@ -73,23 +60,10 @@ const PayableIPGTest: React.FC = () => {
         doFirstPayment: '1',
         billingAddressStreet: '456 Kandy Road',
         billingAddressCity: 'Kandy',
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 7dfce271069c719765ed7baffd35e7b1752d94d6
-        billingAddressCountry: 'LKA',
-        billingAddressStateProvince: 'Central',
-        billingAddressPostcodeZip: '20000',
-        custom1: 'tokenize',
-<<<<<<< HEAD
-=======
-=======
-        billingAddressCountry: 'LK',
-        billingAddressStateProvince: 'Central',
-        billingAddressPostcodeZip: '20000',
-        custom1: 'tokenize_test',
->>>>>>> 804b2cc135593007e567ebfad89b61cf1df1f8d5
->>>>>>> 7dfce271069c719765ed7baffd35e7b1752d94d6
+  billingAddressCountry: 'LKA',
+  billingAddressStateProvince: 'Central',
+  billingAddressPostcodeZip: '20000',
+  custom1: 'tokenize',
         custom2: 'card_saving'
       };
 
@@ -122,23 +96,10 @@ const PayableIPGTest: React.FC = () => {
         doFirstPayment: '0', // No initial payment
         billingAddressStreet: '789 Colombo Road',
         billingAddressCity: 'Gampaha',
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 7dfce271069c719765ed7baffd35e7b1752d94d6
-        billingAddressCountry: 'LKA',
-        billingAddressStateProvince: 'Western',
-        billingAddressPostcodeZip: '11000',
-        custom1: 'zero_tokenize',
-<<<<<<< HEAD
-=======
-=======
-        billingAddressCountry: 'LK',
-        billingAddressStateProvince: 'Western',
-        billingAddressPostcodeZip: '11000',
-        custom1: 'zero_amount_test',
->>>>>>> 804b2cc135593007e567ebfad89b61cf1df1f8d5
->>>>>>> 7dfce271069c719765ed7baffd35e7b1752d94d6
+  billingAddressCountry: 'LKA',
+  billingAddressStateProvince: 'Western',
+  billingAddressPostcodeZip: '11000',
+  custom1: 'zero_tokenize',
         custom2: 'tokenize_only'
       };
 
