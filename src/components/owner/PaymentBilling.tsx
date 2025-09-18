@@ -189,9 +189,7 @@ const PaymentBilling: React.FC = () => {
         billingAddressCity: 'Colombo',
         billingAddressCountry: 'LKA',
         billingAddressStateProvince: 'Western',
-        billingAddressPostcodeZip: '00100',
-        custom1: 'add_payment_card',
-        custom2: 'tokenize_only'
+        billingAddressPostcodeZip: '00100'
       };
 
       // Process tokenization payment - this will redirect to IPG
@@ -237,9 +235,7 @@ const PaymentBilling: React.FC = () => {
         billingAddressCity: 'Colombo',
         billingAddressCountry: 'LKA',
         billingAddressStateProvince: 'Western',
-        billingAddressPostcodeZip: '00100',
-        custom1: 'appointment_charges',
-        custom2: pendingCharges.map(c => c.id).join(',')
+        billingAddressPostcodeZip: '00100'
       };
 
       // Process payment through Payable IPG - this will redirect immediately
