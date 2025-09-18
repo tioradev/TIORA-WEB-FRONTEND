@@ -243,7 +243,17 @@ export class PaymentService {
       custom2: request.custom2 || ''
     };
 
-    console.log('🔄 [PAYMENT] Processing tokenize payment:', { 
+    console.log('� [PAYMENT] Tokenization debug info:', { 
+      invoiceId, 
+      customerRefNo, 
+      merchantKey: payableConfig.merchantKey,
+      amount: request.amount,
+      testMode: payableConfig.testMode,
+      customerEmail: request.customerEmail,
+      paymentType: payment.paymentType
+    });
+    
+    console.log('�🔄 [PAYMENT] Processing tokenize payment:', { 
       invoiceId, 
       customerRefNo, 
       amount: request.amount,
@@ -266,18 +276,39 @@ export class PaymentService {
       const rootUrl = payableConfig.testMode ? 
         payableUrls.api.sandbox : 
         payableUrls.api.live;
+
+      // Debug logging
+      console.log('🔍 [PAYMENT] getSavedCards debug info:', {
+        merchantId: payableConfig.merchantKey,
+        customerId,
+        checkValue,
+        rootUrl,
+        apiUrl: `${rootUrl}/ipg/v2/tokenize/listCard`,
+        testMode: payableConfig.testMode
+      });
+      
+      const requestBody = {
+        merchantId: payableConfig.merchantKey,
+        customerId,
+        checkValue
+      };
+
+      console.log('📤 [PAYMENT] List cards request:', requestBody);
       
       const response = await fetch(`${rootUrl}/ipg/v2/tokenize/listCard`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          merchantId: payableConfig.merchantKey,
-          customerId,
-          checkValue
-        })
+        body: JSON.stringify(requestBody)
       });
+
+      console.log('📥 [PAYMENT] List cards response status:', response.status);
+      
+      if (!response.ok) {
+        console.error('❌ [PAYMENT] HTTP Error:', response.status, response.statusText);
+        throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+      }
 
       const data = await response.json();
       

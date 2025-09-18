@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { paymentService, PaymentRequest, SavedCard } from '../../services/paymentService';
 import Toast from '../shared/Toast';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface AppointmentCharge {
   id: string;
@@ -28,11 +29,14 @@ interface AppointmentCharge {
 }
 
 const PaymentBilling: React.FC = () => {
+  // Get salon owner data from auth context
+  const { salon } = useAuth();
+  
   // Payable IPG Integration States
   const [payableConfig] = useState(paymentService.getConfigStatus());
   const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
   const [processingPayment, setProcessingPayment] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<string>('SALON_CUSTOMER_001'); // Default customer ID for salon
+  const [selectedCustomer, setSelectedCustomer] = useState<string>(''); // Will be set based on salon data
   
   // Toast states
   const [toasts, setToasts] = useState<Array<{
@@ -43,6 +47,21 @@ const PaymentBilling: React.FC = () => {
   }>>([]);
 
   // Load saved cards on component mount
+  useEffect(() => {
+    // Set consistent customer ID based on salon data
+    if (salon?.salonId) {
+      const customerId = `SALON_${salon.salonId}`;
+      setSelectedCustomer(customerId);
+    } else if (salon?.ownerEmail) {
+      // Fallback to email-based ID if salon ID not available
+      const customerId = `SALON_${salon.ownerEmail.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`;
+      setSelectedCustomer(customerId);
+    } else {
+      // Final fallback
+      setSelectedCustomer('SALON_CUSTOMER_001');
+    }
+  }, [salon]);
+
   useEffect(() => {
     if (payableConfig.isConfigured && selectedCustomer) {
       loadSavedCards();
@@ -169,6 +188,11 @@ const PaymentBilling: React.FC = () => {
       return;
     }
 
+    if (!selectedCustomer) {
+      showToast('error', 'Customer ID Missing', 'Unable to determine customer ID. Please try again.');
+      return;
+    }
+
     try {
       setProcessingPayment(true);
       
@@ -177,20 +201,22 @@ const PaymentBilling: React.FC = () => {
         amount: '0.00', // Zero amount for card tokenization only
         invoiceId: paymentService.generateInvoiceId(),
         orderDescription: 'Add Payment Card - Tokenization Only',
-        customerFirstName: 'Salon',
-        customerLastName: 'Owner',
-        customerEmail: 'owner@salon.com',
-        customerMobilePhone: '+94771234567',
-        customerRefNo: `CARD_${Date.now()}`,
+        customerFirstName: salon?.ownerFirstName || 'Salon',
+        customerLastName: salon?.ownerLastName || 'Owner',
+        customerEmail: salon?.ownerEmail || 'owner@salon.com',
+        customerMobilePhone: salon?.ownerPhone?.startsWith('+') ? salon.ownerPhone : `+94${salon?.ownerPhone?.replace(/^0/, '') || '771234567'}`,
+        customerRefNo: selectedCustomer, // Use the same customer ID for consistency
         paymentType: '3', // Tokenize payment
         isSaveCard: '1', // Save card for future use
         doFirstPayment: '0', // No initial payment
-        billingAddressStreet: '123 Main Street',
-        billingAddressCity: 'Colombo',
+        billingAddressStreet: 'N/A',
+        billingAddressCity: salon?.district || 'Colombo',
         billingAddressCountry: 'LKA',
-        billingAddressStateProvince: 'Western',
-        billingAddressPostcodeZip: '00100'
+        billingAddressStateProvince: 'N/A',
+        billingAddressPostcodeZip: salon?.postalCode || '00100'
       };
+
+      console.log('🔍 [PAYMENT] Add card with customer ID:', selectedCustomer);
 
       // Process tokenization payment - this will redirect to IPG
       await paymentService.processTokenizePayment(paymentRequest);
@@ -225,17 +251,17 @@ const PaymentBilling: React.FC = () => {
         amount: totalAmount,
         invoiceId: paymentService.generateInvoiceId(),
         orderDescription: `Salon Appointment Charges - ${pendingCharges.length} charges`,
-        customerFirstName: 'Salon',
-        customerLastName: 'Owner',
-        customerEmail: 'owner@salon.com', // You can get this from auth context
-        customerMobilePhone: '+94771234567', // You can get this from user profile
-        customerRefNo: `SALON_${Date.now()}`,
+        customerFirstName: salon?.ownerFirstName || 'Salon',
+        customerLastName: salon?.ownerLastName || 'Owner',
+        customerEmail: salon?.ownerEmail || 'owner@salon.com',
+        customerMobilePhone: salon?.ownerPhone?.startsWith('+') ? salon.ownerPhone : `+94${salon?.ownerPhone?.replace(/^0/, '') || '771234567'}`,
+        customerRefNo: selectedCustomer || `SALON_${Date.now()}`, // Use consistent customer ID
         paymentType: '1', // One-time payment
-        billingAddressStreet: '123 Main Street',
-        billingAddressCity: 'Colombo',
+        billingAddressStreet: 'N/A',
+        billingAddressCity: salon?.district || 'Colombo',
         billingAddressCountry: 'LKA',
-        billingAddressStateProvince: 'Western',
-        billingAddressPostcodeZip: '00100'
+        billingAddressStateProvince: 'N/A',
+        billingAddressPostcodeZip: salon?.postalCode || '00100'
       };
 
       // Process payment through Payable IPG - this will redirect immediately
@@ -437,19 +463,22 @@ const PaymentBilling: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Payable IPG Saved Cards</h3>
             <div className="flex space-x-3">
-              <input
-                type="text"
-                placeholder="Customer ID"
-                value={selectedCustomer}
-                onChange={(e) => setSelectedCustomer(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
+              <div className="flex flex-col">
+                <label className="text-xs text-gray-500 mb-1">Customer ID (Auto-generated)</label>
+                <input
+                  type="text"
+                  placeholder="Customer ID will be auto-generated"
+                  value={selectedCustomer}
+                  readOnly
+                  className="px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
               <button
                 onClick={loadSavedCards}
                 disabled={!selectedCustomer}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 transition-colors duration-200"
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 transition-colors duration-200 self-end"
               >
-                Load Cards
+                Refresh Cards
               </button>
             </div>
           </div>
@@ -530,7 +559,7 @@ const PaymentBilling: React.FC = () => {
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
-              <p>Enter a customer ID to view saved cards</p>
+              <p>Customer ID will be automatically generated based on your salon profile. Click "Refresh Cards" to check for saved cards.</p>
             </div>
           )}
         </div>
@@ -618,19 +647,22 @@ const PaymentBilling: React.FC = () => {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Payable IPG Saved Cards</h3>
               <div className="flex space-x-3">
-                <input
-                  type="text"
-                  placeholder="Customer ID"
-                  value={selectedCustomer}
-                  onChange={(e) => setSelectedCustomer(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
+                <div className="flex flex-col">
+                  <label className="text-xs text-gray-500 mb-1">Customer ID (Auto-generated)</label>
+                  <input
+                    type="text"
+                    placeholder="Customer ID will be auto-generated"
+                    value={selectedCustomer}
+                    readOnly
+                    className="px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
                 <button
                   onClick={loadSavedCards}
                   disabled={!selectedCustomer}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 transition-colors duration-200"
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 transition-colors duration-200 self-end"
                 >
-                  Load Cards
+                  Refresh Cards
                 </button>
               </div>
             </div>
