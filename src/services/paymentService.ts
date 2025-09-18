@@ -281,6 +281,8 @@ export class PaymentService {
 
       const data = await response.json();
       
+      console.log('🔄 [PAYMENT] Get saved cards response:', data);
+      
       if (data.success) {
         return data.cards || [];
       } else {
@@ -341,10 +343,16 @@ export class PaymentService {
 
       const data = await response.json();
       
+      console.log('🔄 [PAYMENT] Pay with saved card response:', data);
+      
       if (data.success) {
         console.log('✅ [PAYMENT] Payment with saved card successful:', data);
         // Handle success - redirect or update UI
-        window.location.href = `/payment/success?transaction=${data.payableTransactionId}`;
+        if (data.redirectUrl) {
+          window.location.href = data.redirectUrl;
+        } else {
+          window.location.href = `/payment/success?transaction=${data.payableTransactionId}`;
+        }
       } else {
         throw new Error(data.error || 'Payment failed');
       }
@@ -384,6 +392,9 @@ export class PaymentService {
       });
 
       const data = await response.json();
+      
+      console.log('🔄 [PAYMENT] Delete saved card response:', data);
+      
       return data.success || false;
     } catch (error) {
       console.error('❌ [PAYMENT] Error deleting saved card:', error);
@@ -430,6 +441,9 @@ export class PaymentService {
       });
 
       const data = await response.json();
+      
+      console.log('🔄 [PAYMENT] Edit saved card response:', data);
+      
       return data.success || false;
     } catch (error) {
       console.error('❌ [PAYMENT] Error editing saved card:', error);
