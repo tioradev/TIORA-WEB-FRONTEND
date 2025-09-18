@@ -212,7 +212,7 @@ const PaymentBilling: React.FC = () => {
         billingAddressStreet: 'N/A',
         billingAddressCity: salon?.district || 'Colombo',
         billingAddressCountry: 'LKA',
-        billingAddressStateProvince: 'N/A',
+        billingAddressStateProvince: 'Western',
         billingAddressPostcodeZip: salon?.postalCode || '00100'
       };
 
