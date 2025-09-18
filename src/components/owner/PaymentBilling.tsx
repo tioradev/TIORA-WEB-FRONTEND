@@ -48,17 +48,17 @@ const PaymentBilling: React.FC = () => {
 
   // Load saved cards on component mount
   useEffect(() => {
-    // Set consistent customer ID based on salon data
+    // Set consistent customer ID based on salon data (alphanumeric only)
     if (salon?.salonId) {
-      const customerId = `SALON_${salon.salonId}`;
+      const customerId = `SALON${salon.salonId}`;
       setSelectedCustomer(customerId);
     } else if (salon?.ownerEmail) {
-      // Fallback to email-based ID if salon ID not available
-      const customerId = `SALON_${salon.ownerEmail.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`;
+      // Fallback to email-based ID if salon ID not available (alphanumeric only)
+      const customerId = `SALON${salon.ownerEmail.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`;
       setSelectedCustomer(customerId);
     } else {
-      // Final fallback
-      setSelectedCustomer('SALON_CUSTOMER_001');
+      // Final fallback (alphanumeric only)
+      setSelectedCustomer('SALONCUSTOMER001');
     }
   }, [salon]);
 
@@ -216,7 +216,7 @@ const PaymentBilling: React.FC = () => {
         billingAddressPostcodeZip: salon?.postalCode || '00100'
       };
 
-      console.log('🔍 [PAYMENT] Add card with customer ID:', selectedCustomer);
+      console.log('🔍 [PAYMENT] Add card with alphanumeric customer ID:', selectedCustomer);
 
       // Process tokenization payment - this will redirect to IPG
       await paymentService.processTokenizePayment(paymentRequest);
@@ -255,7 +255,7 @@ const PaymentBilling: React.FC = () => {
         customerLastName: salon?.ownerLastName || 'Owner',
         customerEmail: salon?.ownerEmail || 'owner@salon.com',
         customerMobilePhone: salon?.ownerPhone?.startsWith('+') ? salon.ownerPhone : `+94${salon?.ownerPhone?.replace(/^0/, '') || '771234567'}`,
-        customerRefNo: selectedCustomer || `SALON_${Date.now()}`, // Use consistent customer ID
+        customerRefNo: selectedCustomer || `SALON${Date.now()}`, // Use consistent customer ID (alphanumeric only)
         paymentType: '1', // One-time payment
         billingAddressStreet: 'N/A',
         billingAddressCity: salon?.district || 'Colombo',
@@ -464,10 +464,10 @@ const PaymentBilling: React.FC = () => {
             <h3 className="text-lg font-semibold text-gray-900">Payable IPG Saved Cards</h3>
             <div className="flex space-x-3">
               <div className="flex flex-col">
-                <label className="text-xs text-gray-500 mb-1">Customer ID (Auto-generated)</label>
+                <label className="text-xs text-gray-500 mb-1">Customer ID (Alphanumeric)</label>
                 <input
                   type="text"
-                  placeholder="Customer ID will be auto-generated"
+                  placeholder="Alphanumeric Customer ID"
                   value={selectedCustomer}
                   readOnly
                   className="px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
@@ -648,10 +648,10 @@ const PaymentBilling: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900">Payable IPG Saved Cards</h3>
               <div className="flex space-x-3">
                 <div className="flex flex-col">
-                  <label className="text-xs text-gray-500 mb-1">Customer ID (Auto-generated)</label>
+                  <label className="text-xs text-gray-500 mb-1">Customer ID (Alphanumeric)</label>
                   <input
                     type="text"
-                    placeholder="Customer ID will be auto-generated"
+                    placeholder="Alphanumeric Customer ID"
                     value={selectedCustomer}
                     readOnly
                     className="px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent"

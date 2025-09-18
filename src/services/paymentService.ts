@@ -114,7 +114,19 @@ export class PaymentService {
   ): string {
     const mToken = CryptoJS.SHA512(merchantToken).toString().toUpperCase();
     const txt = `${merchantKey}|${invoiceId}|${amount}|${currency}|${mToken}`;
-    return CryptoJS.SHA512(txt).toString().toUpperCase();
+    const checkValue = CryptoJS.SHA512(txt).toString().toUpperCase();
+    
+    // Debug logging for checkValue generation
+    console.log('🔍 [PAYMENT] One-time payment checkValue generation:', {
+      merchantKey,
+      invoiceId,
+      amount,
+      currency,
+      inputString: `${merchantKey}|${invoiceId}|${amount}|${currency}|[HASHED_TOKEN]`,
+      checkValue
+    });
+    
+    return checkValue;
   }
 
   /**
@@ -130,7 +142,20 @@ export class PaymentService {
   ): string {
     const mToken = CryptoJS.SHA512(merchantToken).toString().toUpperCase();
     const txt = `${merchantKey}|${invoiceId}|${amount}|${currency}|${customerRefNo}|${mToken}`;
-    return CryptoJS.SHA512(txt).toString().toUpperCase();
+    const checkValue = CryptoJS.SHA512(txt).toString().toUpperCase();
+    
+    // Debug logging for tokenization checkValue generation
+    console.log('🔍 [PAYMENT] Tokenization checkValue generation:', {
+      merchantKey,
+      invoiceId,
+      amount,
+      currency,
+      customerRefNo,
+      inputString: `${merchantKey}|${invoiceId}|${amount}|${currency}|${customerRefNo}|[HASHED_TOKEN]`,
+      checkValue
+    });
+    
+    return checkValue;
   }
 
   /**
@@ -181,9 +206,7 @@ export class PaymentService {
       billingAddressPostcodeZip: request.billingAddressPostcodeZip || '',
       amount: request.amount,
       currencyCode: 'LKR',
-      paymentType: '1', // One-time payment
-  custom1: request.custom1 || 'payment',
-      custom2: request.custom2 || ''
+      paymentType: '1' // One-time payment
     };
 
     console.log('🔄 [PAYMENT] Processing one-time payment:', { 
@@ -202,7 +225,7 @@ export class PaymentService {
     this.validateConfig();
     
     const invoiceId = request.invoiceId || this.generateInvoiceId();
-    const customerRefNo = request.customerRefNo || `CUST_${Date.now()}`;
+    const customerRefNo = request.customerRefNo || `CUST${Date.now()}`;
     
     const checkValue = this.getCheckValueToken(
       payableConfig.merchantKey,
@@ -212,6 +235,17 @@ export class PaymentService {
       customerRefNo,
       payableConfig.merchantToken
     );
+
+    // Debug the checkValue generation
+    console.log('🔍 [PAYMENT] CheckValue generation for tokenization:', {
+      merchantKey: payableConfig.merchantKey,
+      invoiceId,
+      amount: request.amount,
+      currency: 'LKR',
+      customerRefNo,
+      merchantToken: 'HIDDEN',
+      generatedCheckValue: checkValue
+    });
 
     const payment = {
       checkValue,
@@ -238,9 +272,7 @@ export class PaymentService {
       paymentType: '3', // Tokenize payment
       isSaveCard: request.isSaveCard || '1',
       customerRefNo,
-      doFirstPayment: request.doFirstPayment || '1',
-  custom1: request.custom1 || 'tokenize',
-      custom2: request.custom2 || ''
+      doFirstPayment: request.doFirstPayment || '1'
     };
 
     console.log('� [PAYMENT] Tokenization debug info:', { 

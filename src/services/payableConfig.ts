@@ -9,8 +9,8 @@ export interface PayableConfig {
 export const payableConfig: PayableConfig = {
   merchantKey: import.meta.env.VITE_PAYABLE_MERCHANT_KEY || "42F77B3164786C34",
   merchantToken: import.meta.env.VITE_PAYABLE_MERCHANT_TOKEN || "1106D897CA1BB439EB3359E2DAB59392",
-  businessKey: import.meta.env.VITE_PAYABLE_BUSINESS_KEY || "YOUR_BUSINESS_KEY",
-  businessToken: import.meta.env.VITE_PAYABLE_BUSINESS_TOKEN || "YOUR_BUSINESS_TOKEN",
+  businessKey: import.meta.env.VITE_PAYABLE_BUSINESS_KEY || "9A182A64D0AE4FFB",
+  businessToken: import.meta.env.VITE_PAYABLE_BUSINESS_TOKEN || "609E056B5E9EF21F32F8904C86C5F29D",
   testMode: true // Set to test mode
 };
 
