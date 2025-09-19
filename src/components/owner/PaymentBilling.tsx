@@ -14,6 +14,8 @@ import {
 import { paymentService, PaymentRequest } from '../../services/paymentService';
 import { backendPaymentService, BackendSavedCard } from '../../services/backendPaymentService';
 import { webhookHandler } from '../../services/webhookHandler';
+import { webSocketPaymentService, PaymentStatusEvent, TokenSavedEvent } from '../../services/webSocketPaymentService';
+import { testEnvironmentVariables } from '../../utils/environmentTest';
 import Toast from '../shared/Toast';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -72,7 +74,25 @@ const PaymentBilling: React.FC = () => {
       loadSavedCards();
     }
     
-    // Listen for webhook events to refresh cards automatically
+    // Initialize WebSocket connection
+    const initializeWebSocket = async () => {
+      try {
+        await webSocketPaymentService.connect();
+        console.log('✅ [PAYMENT] WebSocket connected for real-time notifications');
+        
+        // Subscribe to token saved events for automatic card refresh
+        webSocketPaymentService.subscribeToTokenEvents((event: TokenSavedEvent) => {
+          console.log('🔔 [PAYMENT] Token saved via WebSocket, refreshing cards...');
+          setTimeout(() => loadSavedCards(), 1000);
+        });
+        
+      } catch (error) {
+        console.error('❌ [PAYMENT] Failed to connect WebSocket:', error);
+        showToast('warning', 'Real-time notifications unavailable', 'You may need to refresh manually');
+      }
+    };
+    
+    // Listen for webhook events (fallback for direct Payable events)
     const handleTokenizationSuccess = () => {
       console.log('🔔 [PAYMENT] Tokenization successful, refreshing cards...');
       setTimeout(() => loadSavedCards(), 2000); // Small delay to ensure backend processing
@@ -92,6 +112,9 @@ const PaymentBilling: React.FC = () => {
       showToast('error', 'Payment Failed', 'Your payment could not be processed. Please try again.');
     };
     
+    // Initialize WebSocket
+    initializeWebSocket();
+    
     // Add event listeners
     window.addEventListener('payable-tokenization-success', handleTokenizationSuccess);
     window.addEventListener('payable-payment-success', handlePaymentSuccess);
@@ -102,6 +125,9 @@ const PaymentBilling: React.FC = () => {
       window.removeEventListener('payable-tokenization-success', handleTokenizationSuccess);
       window.removeEventListener('payable-payment-success', handlePaymentSuccess);
       window.removeEventListener('payable-payment-failure', handlePaymentFailure as EventListener);
+      
+      // Disconnect WebSocket
+      webSocketPaymentService.disconnect();
     };
   }, [selectedCustomer, payableConfig.isConfigured]);
 
@@ -112,6 +138,21 @@ const PaymentBilling: React.FC = () => {
 
   const removeToast = (id: string) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
+  };
+
+  // Test environment configuration
+  const handleTestEnvironment = () => {
+    try {
+      const result = testEnvironmentVariables();
+      showToast(
+        result.isValid ? 'success' : 'warning', 
+        'Environment Test', 
+        `Environment: ${result.environment}, WebSocket: ${result.wsUrl}`
+      );
+    } catch (error) {
+      console.error('Environment test error:', error);
+      showToast('error', 'Environment Test Failed', 'Check console for details');
+    }
   };
 
   const loadSavedCards = async () => {
@@ -274,7 +315,20 @@ const PaymentBilling: React.FC = () => {
       // Process tokenization payment - this will redirect to IPG
       await paymentService.processTokenizePayment(paymentRequest);
       
-      showToast('success', 'Redirecting to Payment Gateway', 'You will be redirected to add your payment card.');
+      // Subscribe to payment status via WebSocket since webhooks are server-side only
+      webSocketPaymentService.subscribeToPayment(invoiceId, (status: PaymentStatusEvent) => {
+        console.log('🔔 [PAYMENT] Payment status update via WebSocket:', status);
+        
+        if (status.status === 'SUCCESS') {
+          showToast('success', 'Card Added Successfully', 'Your payment card has been saved for future use.');
+          loadSavedCards(); // Refresh the cards list
+        } else if (status.status === 'FAILED') {
+          showToast('error', 'Card Addition Failed', 'Unable to save your payment card. Please try again.');
+        }
+        // For PENDING status, we don't show notification yet
+      });
+      
+      showToast('info', 'Redirecting to Payment Gateway', 'You will be redirected to add your payment card. The page will automatically update when complete.');
       
     } catch (error) {
       console.error('Add card error:', error);
@@ -325,6 +379,21 @@ const PaymentBilling: React.FC = () => {
 
       // Process payment through Payable IPG - this will redirect immediately
       await paymentService.processOneTimePayment(paymentRequest);
+      
+      // Subscribe to payment status via WebSocket since webhooks are server-side only
+      webSocketPaymentService.subscribeToPayment(invoiceId, (status: PaymentStatusEvent) => {
+        console.log('🔔 [PAYMENT] Payment status update via WebSocket:', status);
+        
+        if (status.status === 'SUCCESS') {
+          showToast('success', 'Payment Successful', `Successfully paid Rs. ${totalAmount} for appointment charges.`);
+          // In a real app, you'd refresh the pending charges data here
+        } else if (status.status === 'FAILED') {
+          showToast('error', 'Payment Failed', 'Unable to process payment. Please try again.');
+        }
+        // For PENDING status, we don't show notification yet
+      });
+      
+      showToast('info', 'Processing Payment', 'You will be redirected to complete payment. The page will automatically update when complete.');
       
     } catch (error) {
       console.error('Payment error:', error);
@@ -544,6 +613,13 @@ const PaymentBilling: React.FC = () => {
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 transition-colors duration-200 self-end"
               >
                 {loadingCards ? 'Loading...' : 'Refresh Cards'}
+              </button>
+              <button
+                onClick={handleTestEnvironment}
+                className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors duration-200 self-end text-sm"
+                title="Test WebSocket and API URLs"
+              >
+                Test URLs
               </button>
             </div>
           </div>
