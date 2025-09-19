@@ -179,6 +179,7 @@ class BackendPaymentService {
   }
 
   /**
+   * @deprecated - No longer used. Frontend calls Payable directly, webhook saves transaction data.
    * Create transaction record before payment (for tracking)
    */
   async initializeTransaction(data: {
@@ -212,6 +213,7 @@ class BackendPaymentService {
   }
 
   /**
+   * @deprecated - No longer used. Webhook saves complete transaction data directly.
    * Update transaction status (typically called by webhook)
    */
   async updateTransactionStatus(

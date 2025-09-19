@@ -249,20 +249,6 @@ const PaymentBilling: React.FC = () => {
       // Generate invoice ID for tracking
       const invoiceId = paymentService.generateInvoiceId();
       
-      // Initialize transaction in backend for tracking
-      if (salon?.salonId) {
-        const numericCustomerId = parseInt(salon.salonId.toString()) || 1;
-        await backendPaymentService.initializeTransaction({
-          invoiceId,
-          customerId: numericCustomerId,
-          salonId: salon.salonId,
-          amount: 0.00,
-          paymentType: 'TOKENIZATION',
-          orderDescription: 'Add Payment Card - Tokenization Only'
-        });
-        console.log('✅ [BACKEND] Transaction initialized for tokenization');
-      }
-      
       // Create tokenization payment request (zero amount to save card only)
       const paymentRequest: PaymentRequest = {
         amount: '0.00', // Zero amount for card tokenization only
@@ -318,22 +304,6 @@ const PaymentBilling: React.FC = () => {
       
       // Generate invoice ID for tracking
       const invoiceId = paymentService.generateInvoiceId();
-      const appointmentChargeIds = pendingCharges.map(charge => parseInt(charge.id));
-      
-      // Initialize transaction in backend for tracking
-      if (salon?.salonId) {
-        const numericCustomerId = parseInt(salon.salonId.toString()) || 1;
-        await backendPaymentService.initializeTransaction({
-          invoiceId,
-          customerId: numericCustomerId,
-          salonId: salon.salonId,
-          amount: parseFloat(totalAmount),
-          paymentType: 'APPOINTMENT_CHARGES',
-          orderDescription: `Salon Appointment Charges - ${pendingCharges.length} charges`,
-          appointmentChargeIds
-        });
-        console.log('✅ [BACKEND] Transaction initialized for appointment charges');
-      }
       
       // Create payment request for Payable IPG
       const paymentRequest: PaymentRequest = {

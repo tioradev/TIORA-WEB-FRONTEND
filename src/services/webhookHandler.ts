@@ -139,20 +139,30 @@ class WebhookHandler {
         console.log('✅ [WEBHOOK] Token saved to backend database');
       }
       
-      // Update transaction status in backend
-      await backendPaymentService.updateTransactionStatus(
-        webhookData.invoiceNo,
-        'SUCCESS',
-        {
-          payableOrderId: webhookData.payableOrderId,
-          payableTransactionId: webhookData.payableTransactionId,
-          statusCode: webhookData.statusCode,
-          statusMessage: webhookData.statusMessage,
-          paymentScheme: webhookData.paymentScheme,
-          cardHolderName: webhookData.cardHolderName,
-          maskedCardNo: webhookData.token?.maskedCardNo
-        }
-      );
+      // Save transaction details to backend database
+      const salonId = this.extractSalonIdFromCustomerRefNo(webhookData.customerRefNo || '');
+      await backendPaymentService.savePaymentTransaction({
+        invoiceId: webhookData.invoiceNo,
+        payableOrderId: webhookData.payableOrderId,
+        payableTransactionId: webhookData.payableTransactionId,
+        customerId: parseInt(webhookData.customerId || '1'),
+        salonId: salonId,
+        amount: parseFloat(webhookData.payableAmount),
+        currencyCode: webhookData.payableCurrency,
+        paymentType: 'TOKENIZATION',
+        paymentMethod: 'CARD',
+        paymentScheme: webhookData.paymentScheme,
+        cardHolderName: webhookData.cardHolderName,
+        maskedCardNo: webhookData.token?.maskedCardNo,
+        status: 'SUCCESS',
+        statusCode: webhookData.statusCode,
+        statusMessage: webhookData.statusMessage,
+        checkValue: webhookData.checkValue,
+        custom1: webhookData.custom1,
+        custom2: webhookData.custom2
+      });
+      
+      console.log('✅ [WEBHOOK] Transaction saved to backend database');
       
       // Trigger a refresh of saved cards if the payment page is open
       window.dispatchEvent(new CustomEvent('payable-tokenization-success', {
@@ -174,22 +184,30 @@ class WebhookHandler {
     });
     
     try {
-      // Update transaction status in backend
-      await backendPaymentService.updateTransactionStatus(
-        webhookData.invoiceNo,
-        'SUCCESS',
-        {
-          payableOrderId: webhookData.payableOrderId,
-          payableTransactionId: webhookData.payableTransactionId,
-          statusCode: webhookData.statusCode,
-          statusMessage: webhookData.statusMessage,
-          paymentScheme: webhookData.paymentScheme,
-          cardHolderName: webhookData.cardHolderName,
-          maskedCardNo: webhookData.cardNumber
-        }
-      );
+      // Save transaction details to backend database
+      const salonId = this.extractSalonIdFromCustomerRefNo(webhookData.customerRefNo || '');
+      await backendPaymentService.savePaymentTransaction({
+        invoiceId: webhookData.invoiceNo,
+        payableOrderId: webhookData.payableOrderId,
+        payableTransactionId: webhookData.payableTransactionId,
+        customerId: parseInt(webhookData.customerId || '1'),
+        salonId: salonId,
+        amount: parseFloat(webhookData.payableAmount),
+        currencyCode: webhookData.payableCurrency,
+        paymentType: 'ONE_TIME_PAYMENT',
+        paymentMethod: 'CARD',
+        paymentScheme: webhookData.paymentScheme,
+        cardHolderName: webhookData.cardHolderName,
+        maskedCardNo: webhookData.cardNumber,
+        status: 'SUCCESS',
+        statusCode: webhookData.statusCode,
+        statusMessage: webhookData.statusMessage,
+        checkValue: webhookData.checkValue,
+        custom1: webhookData.custom1,
+        custom2: webhookData.custom2
+      });
       
-      console.log('✅ [WEBHOOK] Payment transaction updated in backend');
+      console.log('✅ [WEBHOOK] Payment transaction saved to backend database');
       
       // Trigger payment success event
       window.dispatchEvent(new CustomEvent('payable-payment-success', {
@@ -211,19 +229,30 @@ class WebhookHandler {
     });
     
     try {
-      // Update transaction status in backend
-      await backendPaymentService.updateTransactionStatus(
-        webhookData.invoiceNo,
-        'FAILED',
-        {
-          payableOrderId: webhookData.payableOrderId,
-          payableTransactionId: webhookData.payableTransactionId,
-          statusCode: webhookData.statusCode,
-          statusMessage: webhookData.statusMessage
-        }
-      );
+      // Save failed transaction details to backend database
+      const salonId = this.extractSalonIdFromCustomerRefNo(webhookData.customerRefNo || '');
+      await backendPaymentService.savePaymentTransaction({
+        invoiceId: webhookData.invoiceNo,
+        payableOrderId: webhookData.payableOrderId,
+        payableTransactionId: webhookData.payableTransactionId,
+        customerId: parseInt(webhookData.customerId || '1'),
+        salonId: salonId,
+        amount: parseFloat(webhookData.payableAmount || '0'),
+        currencyCode: webhookData.payableCurrency || 'LKR',
+        paymentType: webhookData.paymentType === 3 ? 'TOKENIZATION' : 'ONE_TIME_PAYMENT',
+        paymentMethod: 'CARD',
+        paymentScheme: webhookData.paymentScheme,
+        cardHolderName: webhookData.cardHolderName,
+        maskedCardNo: webhookData.cardNumber,
+        status: 'FAILED',
+        statusCode: webhookData.statusCode,
+        statusMessage: webhookData.statusMessage,
+        checkValue: webhookData.checkValue,
+        custom1: webhookData.custom1,
+        custom2: webhookData.custom2
+      });
       
-      console.log('✅ [WEBHOOK] Failed payment transaction updated in backend');
+      console.log('✅ [WEBHOOK] Failed payment transaction saved to backend database');
       
       // Trigger payment failure event
       window.dispatchEvent(new CustomEvent('payable-payment-failure', {
