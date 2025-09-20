@@ -1,8 +1,7 @@
 import CryptoJS from 'crypto-js';
-import { payablePayment } from 'payable-ipg-js';
-import { payableConfig, validatePayableConfig, payableUrls } from './payableConfig';
+import { payableConfig, validatePayableConfig } from './payableConfig';
 import { webhookHandler } from './webhookHandler';
-import { getCurrentConfig } from '../config/environment';
+import { apiService } from './api';
 
 export interface PaymentRequest {
   amount: string;
@@ -84,42 +83,12 @@ export interface PayableTransaction {
 
 export class PaymentService {
   private static instance: PaymentService;
-  private accessToken: string | null = null;
-  private tokenExpiry: Date | null = null;
   
   public static getInstance(): PaymentService {
     if (!PaymentService.instance) {
       PaymentService.instance = new PaymentService();
     }
     return PaymentService.instance;
-  }
-
-  /**
-   * Validate configuration before any operations
-   */
-  private validateConfig(): void {
-    const validation = validatePayableConfig();
-    if (!validation.isValid) {
-      throw new Error(`Payable configuration incomplete. Missing: ${validation.missingFields.join(', ')}`);
-    }
-  }
-
-  /**
-   * Get the correct merchant ID for API calls
-   * Prioritizes: stored merchantId from webhook > configured merchantId > merchantKey
-   */
-  private getMerchantIdForApi(): string {
-    // First try to get merchant ID from webhook response (stored in localStorage)
-    const storedMerchantId = webhookHandler.getStoredMerchantId();
-    if (storedMerchantId) {
-      console.log('📍 [PAYMENT] Using stored merchant ID from webhook:', storedMerchantId);
-      return storedMerchantId;
-    }
-    
-    // Fall back to configured merchant ID or merchant key
-    const fallbackId = payableConfig.merchantId || payableConfig.merchantKey;
-    console.log('📍 [PAYMENT] Using fallback merchant ID:', fallbackId);
-    return fallbackId;
   }
 
   /**
@@ -189,201 +158,112 @@ export class PaymentService {
   }
 
   /**
-   * Process one-time payment (paymentType = '1')
+   * Process one-time payment (paymentType = '1') - Now uses backend API
    */
   public async processOneTimePayment(request: PaymentRequest): Promise<void> {
-    this.validateConfig();
-    
-    const invoiceId = request.invoiceId || this.generateInvoiceId();
-    
-    const checkValue = this.getCheckValue(
-      payableConfig.merchantKey,
-      invoiceId,
-      request.amount,
-      'LKR',
-      payableConfig.merchantToken
-    );
-
-    const payment = {
-      checkValue,
-      orderDescription: request.orderDescription,
-      invoiceId,
-  logoUrl: 'https://firebasestorage.googleapis.com/v0/b/tiora-firebase.firebasestorage.app/o/logo%2FTiora%20gold.png?alt=media&token=2814af13-f96a-40e9-a3a5-6ba02ae0c3e3',
-      notifyUrl: `${getCurrentConfig().API_BASE_URL.replace('/api/v1', '')}/api/webhook/payment`,
-      returnUrl: `${window.location.origin}/payment/success`,
-      merchantKey: payableConfig.merchantKey,
-      customerFirstName: request.customerFirstName,
-      customerLastName: request.customerLastName,
-      customerMobilePhone: request.customerMobilePhone,
-      customerPhone: request.customerPhone || '',
-      customerEmail: request.customerEmail,
-      billingCompanyName: request.billingCompanyName || '',
-      billingAddressStreet: request.billingAddressStreet,
-      billingAddressStreet2: request.billingAddressStreet2 || '',
-      billingAddressCity: request.billingAddressCity,
-      billingAddressStateProvince: request.billingAddressStateProvince || '',
-  billingAddressCountry: 'LKA',
-      billingAddressPostcodeZip: request.billingAddressPostcodeZip || '',
-      amount: request.amount,
-      currencyCode: 'LKR',
-      paymentType: '1' // One-time payment
-    };
-
-    console.log('🔄 [PAYMENT] Processing one-time payment:', { 
-      invoiceId, 
-      amount: request.amount, 
-      testMode: payableConfig.testMode 
-    });
-    
-    payablePayment(payment, payableConfig.testMode);
-  }
-
-  /**
-   * Process payment with card tokenization (paymentType = '3')
-   */
-  public async processTokenizePayment(request: PaymentRequest): Promise<void> {
-    this.validateConfig();
-    
-    const invoiceId = request.invoiceId || this.generateInvoiceId();
-    const customerRefNo = request.customerRefNo || `CUST${Date.now()}`;
-    
-    const checkValue = this.getCheckValueToken(
-      payableConfig.merchantKey,
-      invoiceId,
-      request.amount,
-      'LKR',
-      customerRefNo,
-      payableConfig.merchantToken
-    );
-
-    // Debug the checkValue generation
-    console.log('🔍 [PAYMENT] CheckValue generation for tokenization:', {
-      merchantKey: payableConfig.merchantKey,
-      invoiceId,
-      amount: request.amount,
-      currency: 'LKR',
-      customerRefNo,
-      merchantToken: 'HIDDEN',
-      generatedCheckValue: checkValue
-    });
-
-    const payment = {
-      checkValue,
-      orderDescription: request.orderDescription,
-      invoiceId,
-  logoUrl: 'https://firebasestorage.googleapis.com/v0/b/tiora-firebase.firebasestorage.app/o/logo%2FTiora%20gold.png?alt=media&token=2814af13-f96a-40e9-a3a5-6ba02ae0c3e3',
-      notifyUrl: `${getCurrentConfig().API_BASE_URL.replace('/api/v1', '')}/api/webhook/payment`,
-      returnUrl: `${window.location.origin}/payment/success`,
-      merchantKey: payableConfig.merchantKey,
-      customerFirstName: request.customerFirstName,
-      customerLastName: request.customerLastName,
-      customerMobilePhone: request.customerMobilePhone,
-      customerPhone: request.customerPhone || '',
-      customerEmail: request.customerEmail,
-      billingCompanyName: request.billingCompanyName || '',
-      billingAddressStreet: request.billingAddressStreet,
-      billingAddressStreet2: request.billingAddressStreet2 || '',
-      billingAddressCity: request.billingAddressCity,
-      billingAddressStateProvince: request.billingAddressStateProvince || '',
-  billingAddressCountry: 'LKA',
-      billingAddressPostcodeZip: request.billingAddressPostcodeZip || '',
-      amount: request.amount,
-      currencyCode: 'LKR',
-      paymentType: '3', // Tokenize payment
-      isSaveCard: request.isSaveCard || '1',
-      customerRefNo,
-      doFirstPayment: request.doFirstPayment || '1'
-    };
-
-    console.log('� [PAYMENT] Tokenization debug info:', { 
-      invoiceId, 
-      customerRefNo, 
-      merchantKey: payableConfig.merchantKey,
-      amount: request.amount,
-      testMode: payableConfig.testMode,
-      customerEmail: request.customerEmail,
-      paymentType: payment.paymentType
-    });
-    
-    console.log('�🔄 [PAYMENT] Processing tokenize payment:', { 
-      invoiceId, 
-      customerRefNo, 
-      amount: request.amount,
-      testMode: payableConfig.testMode 
-    });
-    
-    payablePayment(payment, payableConfig.testMode);
-  }
-
-  /**
-   * Get saved cards for a customer
-   */
-  public async getSavedCards(customerId: string): Promise<SavedCard[]> {
-    this.validateConfig();
-    
     try {
-      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
-      const checkValue = CryptoJS.SHA512(`${payableConfig.merchantKey}|${customerId}|${merchantToken}`).toString().toUpperCase();
+      console.log('💳 [PAYMENT] Initiating regular payment via backend API');
       
-      const rootUrl = payableConfig.testMode ? 
-        payableUrls.api.sandbox : 
-        payableUrls.api.live;
-
-      // Debug logging
-      const merchantIdToUse = this.getMerchantIdForApi();
-      console.log('🔍 [PAYMENT] getSavedCards debug info:', {
-        merchantKey: payableConfig.merchantKey,
-        merchantIdConfigured: payableConfig.merchantId,
-        storedMerchantId: webhookHandler.getStoredMerchantId(),
-        merchantIdUsed: merchantIdToUse,
-        customerId,
-        checkValue,
-        rootUrl,
-        apiUrl: `${rootUrl}/ipg/v2/tokenize/listCard`,
-        testMode: payableConfig.testMode,
-        note: 'Using merchant ID from webhook response if available, otherwise fallback to config'
-      });
-      
-      const requestBody = {
-        merchantId: merchantIdToUse,
-        customerId,
-        checkValue
-      };
-
-      console.log('📤 [PAYMENT] List cards request:', requestBody);
-      
-      const response = await fetch(`${rootUrl}/ipg/v2/tokenize/listCard`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
+      const response = await apiService.initiateRegularPayment({
+        amount: request.amount,
+        invoiceId: request.invoiceId || this.generateInvoiceId(),
+        orderDescription: request.orderDescription,
+        customerFirstName: request.customerFirstName,
+        customerLastName: request.customerLastName,
+        customerEmail: request.customerEmail,
+        customerMobilePhone: request.customerMobilePhone,
+        customerPhone: request.customerPhone || '',
+        billingAddressStreet: request.billingAddressStreet,
+        billingAddressCity: request.billingAddressCity,
+        billingAddressCountry: request.billingAddressCountry,
+        billingCompanyName: request.billingCompanyName || '',
+        billingAddressStreet2: request.billingAddressStreet2 || '',
+        billingAddressPostcodeZip: request.billingAddressPostcodeZip || '',
+        billingAddressStateProvince: request.billingAddressStateProvince || ''
       });
 
-      console.log('📥 [PAYMENT] List cards response status:', response.status);
-      
-      if (!response.ok) {
-        console.error('❌ [PAYMENT] HTTP Error:', response.status, response.statusText);
-        throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      console.log('🔄 [PAYMENT] Get saved cards response:', data);
-      
-      if (data.success) {
-        return data.cards || [];
+      // Backend handles checkValue generation and Payable API call
+      // Response should contain the payment URL to redirect to
+      if (response.paymentUrl) {
+        console.log('✅ [PAYMENT] Backend initiated payment, redirecting to:', response.paymentUrl);
+        window.location.href = response.paymentUrl;
       } else {
-        throw new Error(data.error || 'Failed to fetch saved cards');
+        throw new Error('Backend did not return payment URL');
       }
     } catch (error) {
-      console.error('❌ [PAYMENT] Error fetching saved cards:', error);
-      return [];
+      console.error('❌ [PAYMENT] Failed to initiate regular payment:', error);
+      throw error;
     }
   }
 
   /**
-   * Pay with saved card using JWT authentication
+   * Process payment with card tokenization (paymentType = '3') - Now uses backend API
+   */
+  public async processTokenizePayment(request: PaymentRequest): Promise<void> {
+    try {
+      console.log('💳 [PAYMENT] Initiating tokenize payment via backend API');
+      
+      const customerRefNo = request.customerRefNo || `CUST${Date.now()}`;
+      
+      const response = await apiService.initiateTokenizePayment({
+        amount: request.amount,
+        invoiceId: request.invoiceId || this.generateInvoiceId(),
+        orderDescription: request.orderDescription,
+        customerFirstName: request.customerFirstName,
+        customerLastName: request.customerLastName,
+        customerEmail: request.customerEmail,
+        customerMobilePhone: request.customerMobilePhone,
+        customerPhone: request.customerPhone || '',
+        billingAddressStreet: request.billingAddressStreet,
+        billingAddressCity: request.billingAddressCity,
+        billingAddressCountry: request.billingAddressCountry,
+        billingCompanyName: request.billingCompanyName || '',
+        billingAddressStreet2: request.billingAddressStreet2 || '',
+        billingAddressPostcodeZip: request.billingAddressPostcodeZip || '',
+        billingAddressStateProvince: request.billingAddressStateProvince || '',
+        customerRefNo,
+        isSaveCard: request.isSaveCard || '1',
+        doFirstPayment: request.doFirstPayment || '1'
+      });
+
+      // Backend handles checkValue generation and Payable API call
+      // Response should contain the payment URL to redirect to
+      if (response.paymentUrl) {
+        console.log('✅ [PAYMENT] Backend initiated tokenize payment, redirecting to:', response.paymentUrl);
+        window.location.href = response.paymentUrl;
+      } else {
+        throw new Error('Backend did not return payment URL');
+      }
+    } catch (error) {
+      console.error('❌ [PAYMENT] Failed to initiate tokenize payment:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get saved cards for a salon - Now uses backend API
+   */
+  public async getSavedCards(salonId: number): Promise<SavedCard[]> {
+    try {
+      console.log('💳 [PAYMENT] Getting saved cards via backend API');
+      
+      const response = await apiService.getPaymentTokens(salonId);
+      
+      if (response.success && response.tokens) {
+        console.log('✅ [PAYMENT] Retrieved saved cards:', response.tokens.length);
+        return response.tokens;
+      } else {
+        console.log('ℹ️ [PAYMENT] No saved cards found');
+        return [];
+      }
+    } catch (error) {
+      console.error('❌ [PAYMENT] Failed to get saved cards:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Pay with saved card using JWT authentication - Now uses backend API
    */
   public async payWithSavedCard(
     customerId: string,
@@ -395,54 +275,30 @@ export class PaymentService {
     custom1?: string,
     custom2?: string
   ): Promise<void> {
-    this.validateConfig();
-    
     try {
-      const accessToken = await this.getAccessToken();
-      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
-      const checkValue = CryptoJS.SHA512(
-        `${payableConfig.merchantKey}|${invoiceId}|${amount}|LKR|${customerId}|${tokenId}|${merchantToken}`
-      ).toString().toUpperCase();
+      console.log('💳 [PAYMENT] Paying with saved card via backend API');
       
-      const rootUrl = payableConfig.testMode ? 
-        payableUrls.api.sandbox : 
-        payableUrls.api.live;
-      
-      const response = await fetch(`${rootUrl}/ipg/v2/tokenize/pay`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
-          merchantId: this.getMerchantIdForApi(),
-          invoiceId,
-          amount,
-          currencyCode: 'LKR',
-          customerId,
-          tokenId,
-          orderDescription,
-          checkValue,
-          webhookUrl: webhookUrl || `${getCurrentConfig().API_BASE_URL.replace('/api/v1', '')}/api/webhook/payment`,
-          custom1: custom1 || '',
-          custom2: custom2 || ''
-        })
+      const response = await apiService.payWithToken({
+        customerId,
+        tokenId,
+        amount,
+        invoiceId,
+        orderDescription,
+        webhookUrl,
+        custom1,
+        custom2
       });
 
-      const data = await response.json();
-      
-      console.log('🔄 [PAYMENT] Pay with saved card response:', data);
-      
-      if (data.success) {
-        console.log('✅ [PAYMENT] Payment with saved card successful:', data);
-        // Handle success - redirect or update UI
-        if (data.redirectUrl) {
-          window.location.href = data.redirectUrl;
-        } else {
-          window.location.href = `/payment/success?transaction=${data.payableTransactionId}`;
+      // Backend handles checkValue generation and Payable API call
+      if (response.success) {
+        console.log('✅ [PAYMENT] Payment with saved card successful');
+        if (response.redirectUrl) {
+          window.location.href = response.redirectUrl;
+        } else if (response.payableTransactionId) {
+          window.location.href = `/payment/success?transaction=${response.payableTransactionId}`;
         }
       } else {
-        throw new Error(data.error || 'Payment failed');
+        throw new Error(response.error || 'Payment failed');
       }
     } catch (error) {
       console.error('❌ [PAYMENT] Error paying with saved card:', error);
@@ -451,39 +307,21 @@ export class PaymentService {
   }
 
   /**
-   * Delete a saved card
+   * Delete a saved card - Now uses backend API
    */
-  public async deleteSavedCard(customerId: string, tokenId: string): Promise<boolean> {
-    this.validateConfig();
-    
+  public async deleteSavedCard(tokenId: string): Promise<boolean> {
     try {
-      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
-      const checkValue = CryptoJS.SHA512(
-        `${payableConfig.merchantKey}|${customerId}|${tokenId}|${merchantToken}`
-      ).toString().toUpperCase();
+      console.log('🗑️ [PAYMENT] Deleting saved card via backend API');
       
-      const rootUrl = payableConfig.testMode ? 
-        payableUrls.api.sandbox : 
-        payableUrls.api.live;
+      const response = await apiService.deletePaymentToken(tokenId);
       
-      const response = await fetch(`${rootUrl}/ipg/v2/tokenize/deleteCard`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          merchantId: this.getMerchantIdForApi(),
-          customerId,
-          tokenId,
-          checkValue
-        })
-      });
-
-      const data = await response.json();
-      
-      console.log('🔄 [PAYMENT] Delete saved card response:', data);
-      
-      return data.success || false;
+      if (response.success) {
+        console.log('✅ [PAYMENT] Card deleted successfully');
+        return true;
+      } else {
+        console.error('❌ [PAYMENT] Failed to delete card:', response.error);
+        return false;
+      }
     } catch (error) {
       console.error('❌ [PAYMENT] Error deleting saved card:', error);
       return false;
@@ -491,48 +329,28 @@ export class PaymentService {
   }
 
   /**
-   * Edit saved card (nickname, default status)
+   * Edit saved card (nickname, default status) - Now uses backend API
    */
   public async editSavedCard(
-    customerId: string, 
     tokenId: string, 
     nickName?: string, 
     isDefaultCard?: number
   ): Promise<boolean> {
-    this.validateConfig();
-    
     try {
-      const accessToken = await this.getAccessToken();
-      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
-      const checkValue = CryptoJS.SHA512(
-        `${payableConfig.merchantKey}|${customerId}|${tokenId}|${merchantToken}`
-      ).toString().toUpperCase();
+      console.log('✏️ [PAYMENT] Editing saved card via backend API');
       
-      const rootUrl = payableConfig.testMode ? 
-        payableUrls.api.sandbox : 
-        payableUrls.api.live;
-      
-      const response = await fetch(`${rootUrl}/ipg/v2/tokenize/editCard`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
-          merchantId: this.getMerchantIdForApi(),
-          customerId,
-          tokenId,
-          nickName: nickName || '',
-          isDefaultCard: isDefaultCard || 0,
-          checkValue
-        })
+      const response = await apiService.updatePaymentToken(tokenId, {
+        nickName: nickName || '',
+        isDefaultCard: isDefaultCard || 0
       });
-
-      const data = await response.json();
       
-      console.log('🔄 [PAYMENT] Edit saved card response:', data);
-      
-      return data.success || false;
+      if (response.success) {
+        console.log('✅ [PAYMENT] Card updated successfully');
+        return true;
+      } else {
+        console.error('❌ [PAYMENT] Failed to update card:', response.error);
+        return false;
+      }
     } catch (error) {
       console.error('❌ [PAYMENT] Error editing saved card:', error);
       return false;
@@ -569,48 +387,46 @@ export class PaymentService {
   }
 
   /**
-   * Generate JWT access token for advanced features
+   * Get payment status for an appointment - Now uses backend API
    */
-  private async getAccessToken(): Promise<string> {
-    // Check if we have a valid token
-    if (this.accessToken && this.tokenExpiry && this.tokenExpiry > new Date()) {
-      return this.accessToken;
-    }
-
-    this.validateConfig();
-    
+  public async getPaymentStatus(appointmentId: string): Promise<any> {
     try {
-      // Create Basic Auth token: base64(businessKey:businessToken)
-      const basicAuthToken = btoa(`${payableConfig.businessKey}:${payableConfig.businessToken}`);
+      console.log('💳 [PAYMENT] Getting payment status via backend API');
       
-      const rootUrl = payableConfig.testMode ? 
-        payableUrls.api.sandbox : 
-        payableUrls.api.live;
+      const response = await apiService.getPaymentStatus(appointmentId);
       
-      const response = await fetch(`${rootUrl}/ipg/v2/auth/tokenize`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': basicAuthToken
-        },
-        body: JSON.stringify({
-          grant_type: 'client_credentials'
-        })
-      });
-
-      const data = await response.json();
-      
-      if (data.accessToken) {
-        this.accessToken = data.accessToken;
-        // Set expiry to 50 minutes from now (tokens usually expire in 1 hour)
-        this.tokenExpiry = new Date(Date.now() + 50 * 60 * 1000);
-        return data.accessToken;
+      if (response.success) {
+        console.log('✅ [PAYMENT] Retrieved payment status:', response.status);
+        return response;
       } else {
-        throw new Error(data.error || 'Failed to get access token');
+        console.error('❌ [PAYMENT] Failed to get payment status:', response.error);
+        return null;
       }
     } catch (error) {
-      console.error('❌ [PAYMENT] Error getting access token:', error);
-      throw new Error('Failed to authenticate with payment gateway');
+      console.error('❌ [PAYMENT] Error getting payment status:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get default payment token for a salon - Now uses backend API
+   */
+  public async getDefaultPaymentToken(salonId: number): Promise<any> {
+    try {
+      console.log('💳 [PAYMENT] Getting default payment token via backend API');
+      
+      const response = await apiService.getDefaultPaymentToken(salonId);
+      
+      if (response.success && response.token) {
+        console.log('✅ [PAYMENT] Retrieved default payment token');
+        return response.token;
+      } else {
+        console.log('ℹ️ [PAYMENT] No default payment token found');
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ [PAYMENT] Error getting default payment token:', error);
+      return null;
     }
   }
 }

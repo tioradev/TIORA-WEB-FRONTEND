@@ -71,6 +71,18 @@ const ENDPOINTS = {
     BY_SALON: '/employee-leave-details/by-salon', // GET /employee-leave-details/by-salon?salonId={salonId}&page={page}&size={size}&search={search}
     UPDATE_STATUS: '/employee-leave', // PUT /employee-leave/{id}/status?status={status}
   },
+  PAYMENTS: {
+    INITIATE_REGULAR: '/payments/initiate/regular',
+    INITIATE_TOKENIZE: '/payments/initiate/tokenize',
+    PAY_WITH_TOKEN: '/payments/initiate/pay-with-token',
+    UPDATE_STATUS: '/payments/initiate/update-payment-status',
+    GET_STATUS: '/payments/initiate/payment-status',
+    TOKENS_BY_SALON: '/payments/tokens/salon',
+    TOKENS_LIST_PAYABLE: '/payments/tokens/payable/list',
+    DELETE_TOKEN: '/payments/tokens',
+    UPDATE_TOKEN: '/payments/tokens',
+    DEFAULT_TOKEN: '/payments/tokens/default/salon',
+  },
 };
 
 // API Service Class
@@ -1324,6 +1336,118 @@ class ApiService {
       return response;
     } catch (error) {
       envLog.error('❌ [LEAVES] Error updating leave status:', error);
+      throw error;
+    }
+  }
+
+  // Payment API methods
+  async initiateRegularPayment(paymentData: any): Promise<any> {
+    try {
+      envLog.info('💳 [PAYMENT] Initiating regular payment', { invoiceId: paymentData.invoiceId });
+      const response = await this.request<any>(ENDPOINTS.PAYMENTS.INITIATE_REGULAR, {
+        method: 'POST',
+        body: JSON.stringify(paymentData)
+      });
+      envLog.info('✅ [PAYMENT] Regular payment initiated successfully');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [PAYMENT] Error initiating regular payment:', error);
+      throw error;
+    }
+  }
+
+  async initiateTokenizePayment(paymentData: any): Promise<any> {
+    try {
+      envLog.info('💳 [PAYMENT] Initiating tokenize payment', { invoiceId: paymentData.invoiceId });
+      const response = await this.request<any>(ENDPOINTS.PAYMENTS.INITIATE_TOKENIZE, {
+        method: 'POST',
+        body: JSON.stringify(paymentData)
+      });
+      envLog.info('✅ [PAYMENT] Tokenize payment initiated successfully');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [PAYMENT] Error initiating tokenize payment:', error);
+      throw error;
+    }
+  }
+
+  async payWithToken(paymentData: any): Promise<any> {
+    try {
+      envLog.info('💳 [PAYMENT] Paying with saved token', { tokenId: paymentData.tokenId });
+      const response = await this.request<any>(ENDPOINTS.PAYMENTS.PAY_WITH_TOKEN, {
+        method: 'POST',
+        body: JSON.stringify(paymentData)
+      });
+      envLog.info('✅ [PAYMENT] Payment with token completed successfully');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [PAYMENT] Error paying with token:', error);
+      throw error;
+    }
+  }
+
+  async getPaymentTokens(salonId: number): Promise<any> {
+    try {
+      const response = await this.request<any>(`${ENDPOINTS.PAYMENTS.TOKENS_BY_SALON}/${salonId}`, {
+        method: 'GET'
+      });
+      envLog.info('✅ [PAYMENT] Retrieved payment tokens');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [PAYMENT] Error retrieving payment tokens:', error);
+      throw error;
+    }
+  }
+
+  async deletePaymentToken(tokenId: string): Promise<any> {
+    try {
+      const response = await this.request<any>(`${ENDPOINTS.PAYMENTS.DELETE_TOKEN}/${tokenId}`, {
+        method: 'DELETE'
+      });
+      envLog.info('✅ [PAYMENT] Payment token deleted successfully');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [PAYMENT] Error deleting payment token:', error);
+      throw error;
+    }
+  }
+
+  async updatePaymentToken(tokenId: string, tokenData: any): Promise<any> {
+    try {
+      const response = await this.request<any>(`${ENDPOINTS.PAYMENTS.UPDATE_TOKEN}/${tokenId}`, {
+        method: 'PUT',
+        body: JSON.stringify(tokenData)
+      });
+      envLog.info('✅ [PAYMENT] Payment token updated successfully');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [PAYMENT] Error updating payment token:', error);
+      throw error;
+    }
+  }
+
+  async getDefaultPaymentToken(salonId: number): Promise<any> {
+    try {
+      const response = await this.request<any>(`${ENDPOINTS.PAYMENTS.DEFAULT_TOKEN}/${salonId}`, {
+        method: 'GET'
+      });
+      envLog.info('✅ [PAYMENT] Retrieved default payment token');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [PAYMENT] Error retrieving default payment token:', error);
+      throw error;
+    }
+  }
+
+  async getPaymentStatus(appointmentId: string): Promise<any> {
+    try {
+      const response = await this.request<any>(`${ENDPOINTS.PAYMENTS.GET_STATUS}/${appointmentId}`, {
+        method: 'GET'
+      });
+      envLog.info('✅ [PAYMENT] Retrieved payment status');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [PAYMENT] Error retrieving payment status:', error);
       throw error;
     }
   }
