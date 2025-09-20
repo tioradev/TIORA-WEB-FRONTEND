@@ -344,52 +344,26 @@ export class PaymentService {
       console.log('🔑 [PAYMENT] Authorization Header:', `Basic ${basicAuth}`);
       console.log('🔑 [PAYMENT] API Base URL:', apiBaseUrl);
       
-      // Call the correct tokenize auth endpoint
+      // Call the correct tokenize auth endpoint with direct base64 (no "Basic" prefix)
       console.log('📡 [PAYMENT] Making auth request to:', `${apiBaseUrl}/ipg/v2/auth/tokenize`);
-      console.log('📡 [PAYMENT] Request headers (Basic Auth format):', {
-        'Content-Type': 'application/json',
-        'Authorization': `Basic ${basicAuth.substring(0, 20)}...`
-      });
       console.log('📡 [PAYMENT] Request headers (Direct base64 format):', {
         'Content-Type': 'application/json',
         'Authorization': basicAuth.substring(0, 20) + '...'
       });
       console.log('📡 [PAYMENT] Request body:', JSON.stringify({ grant_type: 'client_credentials' }, null, 2));
       
-      // Try both Basic Auth formats
-      let authResponse;
-      
-      // First try with "Basic" prefix
-      console.log('🔍 [PAYMENT] Trying with Basic prefix...');
-      authResponse = await fetch(`${apiBaseUrl}/ipg/v2/auth/tokenize`, {
+      const authResponse = await fetch(`${apiBaseUrl}/ipg/v2/auth/tokenize`, {
         method: 'POST',
         mode: 'cors',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Basic ${basicAuth}`,
+          'Authorization': basicAuth, // Direct base64, no "Basic" prefix
           'Accept': 'application/json'
         },
         body: JSON.stringify({
           grant_type: 'client_credentials'
         })
       });
-      
-      // If that fails, try without "Basic" prefix
-      if (!authResponse.ok) {
-        console.log('🔍 [PAYMENT] Basic prefix failed, trying direct base64...');
-        authResponse = await fetch(`${apiBaseUrl}/ipg/v2/auth/tokenize`, {
-          method: 'POST',
-          mode: 'cors',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': basicAuth,
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            grant_type: 'client_credentials'
-          })
-        });
-      }
 
       console.log('📥 [PAYMENT] Auth response status:', authResponse.status, authResponse.statusText);
       console.log('📥 [PAYMENT] Auth response headers:', Object.fromEntries(authResponse.headers.entries()));
@@ -410,14 +384,19 @@ export class PaymentService {
       const authData = await authResponse.json();
       console.log('✅ [PAYMENT] Auth response data:', authData);
       
-      // Extract access token - try multiple possible field names
+      // Extract access token and additional info
       const accessToken = authData.accessToken || authData.access_token || authData.token;
+      const tokenType = authData.tokenType || 'Bearer';
+      const expiresIn = authData.expiresIn || '300';
       
       if (!accessToken) {
         throw new Error('Failed to obtain access token from response: ' + JSON.stringify(authData));
       }
 
       console.log('✅ [PAYMENT] JWT access token obtained:', accessToken.substring(0, 20) + '...');
+      console.log('✅ [PAYMENT] Token type:', tokenType);
+      console.log('✅ [PAYMENT] Token expires in:', expiresIn, 'seconds');
+      console.log('✅ [PAYMENT] Token environment:', authData.environment);
 
       // Step 2: Generate checkValue using the correct format
       // UPPERCASE(SHA512[merchantId|invoiceId|amount|currencyCode|customerId|tokenId|UPPERCASE(SHA512[merchantToken])])
@@ -426,6 +405,7 @@ export class PaymentService {
       const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();
 
       console.log('🔐 [PAYMENT] CheckValue generation:');
+      console.log('🔐 [PAYMENT] Merchant Key:', payableConfig.merchantKey);
       console.log('🔐 [PAYMENT] Merchant Token (SHA512):', merchantToken.substring(0, 20) + '...');
       console.log('🔐 [PAYMENT] CheckValue string:', checkValueString);
       console.log('🔐 [PAYMENT] CheckValue (SHA512):', checkValue.substring(0, 20) + '...');
@@ -464,23 +444,51 @@ export class PaymentService {
         custom2: paymentData.custom2
       });
 
+      // Use the tokenType from the response for proper authorization header
+      const authorizationHeader = `${tokenType} ${accessToken}`;
+      console.log('🔑 [PAYMENT] Authorization header format:', authorizationHeader.substring(0, 30) + '...');
+
       const paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
         method: 'POST',
+        mode: 'cors',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
+          'Authorization': authorizationHeader,
+          'Accept': 'application/json'
         },
         body: JSON.stringify(paymentData)
       });
 
       console.log('📤 [PAYMENT] Request sent to:', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
+      console.log('📤 [PAYMENT] Request headers:', {
+        'Content-Type': 'application/json',
+        'Authorization': authorizationHeader.substring(0, 30) + '...',
+        'Accept': 'application/json'
+      });
       console.log('📤 [PAYMENT] Full request payload:', JSON.stringify(paymentData, null, 2));
+      
+      console.log('📥 [PAYMENT] Payment response status:', paymentResponse.status, paymentResponse.statusText);
+      console.log('📥 [PAYMENT] Payment response headers:', Object.fromEntries(paymentResponse.headers.entries()));
 
       if (!paymentResponse.ok) {
-        const errorData = await paymentResponse.json().catch(async () => {
-          return { error: await paymentResponse.text() };
+        let errorData;
+        try {
+          errorData = await paymentResponse.json();
+          console.error('❌ [PAYMENT] Payment response error (JSON):', errorData);
+        } catch (e) {
+          const errorText = await paymentResponse.text();
+          errorData = { error: errorText };
+          console.error('❌ [PAYMENT] Payment response error (Text):', errorText);
+        }
+        
+        // Enhanced error logging for debugging
+        console.error('❌ [PAYMENT] Full error details:', {
+          status: paymentResponse.status,
+          statusText: paymentResponse.statusText,
+          url: paymentResponse.url,
+          headers: Object.fromEntries(paymentResponse.headers.entries()),
+          errorData: errorData
         });
-        console.error('❌ [PAYMENT] Payment response error:', errorData);
         throw new Error(`Payment failed: ${paymentResponse.status} ${paymentResponse.statusText} - ${JSON.stringify(errorData)}`);
       }
 
