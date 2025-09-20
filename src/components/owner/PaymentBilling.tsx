@@ -298,6 +298,7 @@ const PaymentBilling: React.FC = () => {
       // Create tokenization payment request (zero amount to save card only)
       const paymentRequest: PaymentRequest = {
         amount: '0.00', // Zero amount for card tokenization only
+        currencyCode: 'LKR', // Added missing currency code
         invoiceId,
         orderDescription: 'Add Payment Card - Tokenization Only',
         customerFirstName: salon?.ownerFirstName || 'Salon',
@@ -367,6 +368,7 @@ const PaymentBilling: React.FC = () => {
       // Create payment request for Payable IPG
       const paymentRequest: PaymentRequest = {
         amount: totalAmount,
+        currencyCode: 'LKR', // Added missing currency code
         invoiceId,
         orderDescription: `Salon Appointment Charges - ${pendingCharges.length} charges`,
         customerFirstName: salon?.ownerFirstName || 'Salon',

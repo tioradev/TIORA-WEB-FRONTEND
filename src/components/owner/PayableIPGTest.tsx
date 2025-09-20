@@ -13,6 +13,7 @@ const PayableIPGTest: React.FC = () => {
     try {
       const paymentRequest: PaymentRequest = {
         amount: '100.00',
+        currencyCode: 'LKR', // Added missing currency code
         invoiceId: paymentService.generateInvoiceId(),
         orderDescription: 'Test One-Time Payment - Salon Services',
         customerFirstName: 'John',
@@ -47,6 +48,7 @@ const PayableIPGTest: React.FC = () => {
     try {
       const paymentRequest: PaymentRequest = {
         amount: '50.00',
+        currencyCode: 'LKR', // Added missing currency code
         invoiceId: paymentService.generateInvoiceId(),
         orderDescription: 'Test Tokenize Payment - Save Card for Future',
         customerFirstName: 'Jane',
@@ -84,6 +86,7 @@ const PayableIPGTest: React.FC = () => {
     try {
       const paymentRequest: PaymentRequest = {
         amount: '0.00',
+        currencyCode: 'LKR', // Added missing currency code
         invoiceId: paymentService.generateInvoiceId(),
         orderDescription: 'Test Zero Amount - Card Tokenization Only',
         customerFirstName: 'Mike',
