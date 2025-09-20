@@ -448,7 +448,10 @@ export class PaymentService {
       const authorizationHeader = `${tokenType} ${accessToken}`;
       console.log('🔑 [PAYMENT] Authorization header format:', authorizationHeader.substring(0, 30) + '...');
 
-      const paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
+      // For tokenize/pay endpoint, try both JWT and checkValue-based authentication
+      console.log('🔍 [PAYMENT] Attempting payment with JWT Bearer token first...');
+      
+      let paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -459,10 +462,41 @@ export class PaymentService {
         body: JSON.stringify(paymentData)
       });
 
+      let authMethod = 'JWT Bearer Token';
+
+      // If JWT fails with 404, try without Authorization header (checkValue-only authentication)
+      if (!paymentResponse.ok && paymentResponse.status === 404) {
+        console.log('🔍 [PAYMENT] JWT authentication failed, trying checkValue-only authentication...');
+        
+        paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
+          method: 'POST',
+          mode: 'cors',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+            // No Authorization header - relying on checkValue for authentication
+          },
+          body: JSON.stringify(paymentData)
+        });
+        authMethod = 'CheckValue Only';
+      }
+
+      console.log('📤 [PAYMENT] Request sent to:', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
+      console.log('📤 [PAYMENT] Authentication method used:', authMethod);
+      console.log('📤 [PAYMENT] Request headers:', authMethod === 'JWT Bearer Token' ? {
+        'Content-Type': 'application/json',
+        'Authorization': authorizationHeader.substring(0, 30) + '...',
+        'Accept': 'application/json'
+      } : {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      });
+      console.log('📤 [PAYMENT] Full request payload:', JSON.stringify(paymentData, null, 2));
+
       console.log('📤 [PAYMENT] Request sent to:', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
       console.log('📤 [PAYMENT] Request headers:', {
         'Content-Type': 'application/json',
-        'Authorization': authorizationHeader.substring(0, 30) + '...',
+        'Authorization': paymentResponse.url.includes('Authorization') ? authorizationHeader.substring(0, 30) + '...' : 'None (checkValue-only)',
         'Accept': 'application/json'
       });
       console.log('📤 [PAYMENT] Full request payload:', JSON.stringify(paymentData, null, 2));
