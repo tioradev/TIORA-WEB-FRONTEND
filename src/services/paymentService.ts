@@ -501,6 +501,66 @@ export class PaymentService {
   }
 
   /**
+   * Process payment with card tokenization (for adding new cards)
+   * This is separate from salon billing and used for individual card management
+   */
+  public async processTokenizePayment(request: PaymentRequest): Promise<void> {
+    try {
+      console.log('💳 [CARD MANAGEMENT] Processing tokenize payment to add new card');
+      console.log('🔍 [PAYMENT] Add card with alphanumeric customer ID:', request.customerRefNo);
+      
+      // Generate payment data for tokenization
+      const billingRequest: SalonBillingRequest = {
+        salonId: parseInt(request.customerRefNo?.replace('SALON_', '') || '0'),
+        billingDate: this.getTodayDateString(),
+        totalAmount: request.amount,
+        currency: 'LKR',
+        appointmentCount: 1,
+        description: 'Card tokenization payment'
+      };
+
+      const paymentDataResponse = await this.generateSalonBillingPaymentData(billingRequest);
+      
+      if (!paymentDataResponse.success || !paymentDataResponse.paymentData) {
+        throw new Error('Failed to generate payment data for tokenization');
+      }
+
+      const paymentData = paymentDataResponse.paymentData;
+
+      // Override with tokenization-specific settings
+      const tokenizePayment = {
+        ...paymentData,
+        paymentType: '3', // Tokenize payment
+        isSaveCard: '1',
+        doFirstPayment: request.doFirstPayment || '1',
+        customerFirstName: request.customerFirstName,
+        customerLastName: request.customerLastName,
+        customerEmail: request.customerEmail,
+        customerMobilePhone: request.customerMobilePhone,
+        customerPhone: request.customerPhone || '',
+        billingAddressStreet: request.billingAddressStreet,
+        billingAddressCity: request.billingAddressCity,
+        billingAddressCountry: request.billingAddressCountry || 'LKA',
+        billingCompanyName: request.billingCompanyName || '',
+        billingAddressStreet2: request.billingAddressStreet2 || '',
+        billingAddressPostcodeZip: request.billingAddressPostcodeZip || '',
+        billingAddressStateProvince: request.billingAddressStateProvince || ''
+      };
+
+      console.log('💳 [CARD MANAGEMENT] Calling PAYable SDK for card tokenization');
+      console.log('💳 [CARD MANAGEMENT] Customer ID:', tokenizePayment.customerId);
+      console.log('💳 [CARD MANAGEMENT] Payment Type:', tokenizePayment.paymentType);
+
+      // Call PAYable SDK for tokenization
+      payablePayment(tokenizePayment, tokenizePayment.testMode);
+      
+    } catch (error) {
+      console.error('❌ [CARD MANAGEMENT] Failed to process tokenize payment:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Calculate daily charges for salon billing
    */
   public calculateDailyCharges(appointments: any[], serviceChargePerAppointment: number): number {
