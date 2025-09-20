@@ -305,8 +305,9 @@ export class PaymentService {
   }
 
   /**
-   * Pay with saved card using PAYable API directly
-   * Follows PAYable documentation for tokenize payment
+   * Pay with saved card using Payable API directly
+   * Step 1: Get access token using Basic Auth
+   * Step 2: Use access token to process payment with saved card token
    */
   public async payWithSavedCard(
     customerId: string,
@@ -319,9 +320,9 @@ export class PaymentService {
     custom2?: string
   ): Promise<void> {
     try {
-      console.log('💳 [PAYMENT] Paying with saved card via PAYable API');
+      console.log('💳 [PAYMENT] Paying with saved card via Payable API');
       
-      // Step 1: Generate JWT Access Token
+      // Step 1: Generate Basic Auth token and get JWT Access Token
       const basicAuth = btoa(`${payableConfig.businessKey}:${payableConfig.businessToken}`);
       const apiBaseUrl = payableConfig.testMode 
         ? 'https://sandboxipgpayment.payable.lk' 
@@ -330,62 +331,37 @@ export class PaymentService {
       console.log('🔑 [PAYMENT] Generating JWT access token...');
       console.log('🔑 [PAYMENT] Business Key:', payableConfig.businessKey);
       console.log('🔑 [PAYMENT] Business Token:', payableConfig.businessToken?.substring(0, 8) + '...');
-      console.log('🔑 [PAYMENT] Basic Auth:', basicAuth.substring(0, 20) + '...');
+      console.log('🔑 [PAYMENT] Basic Auth:', 'Basic ' + basicAuth.substring(0, 20) + '...');
       console.log('🔑 [PAYMENT] API Base URL:', apiBaseUrl);
       
-      // Try different possible endpoints
-      const possibleEndpoints = [
-        `${apiBaseUrl}/ipg/v2/auth/token`,
-        `${apiBaseUrl}/ipg/v2/auth/tokenize`,
-        `${apiBaseUrl}/auth/token`,
-        `${apiBaseUrl}/auth/tokenize`
-      ];
-      
-      let authResponse;
-      let lastError;
-      
-      for (const endpoint of possibleEndpoints) {
-        console.log('🔍 [PAYMENT] Trying endpoint:', endpoint);
-        try {
-          authResponse = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Basic ${basicAuth}`
-            },
-            body: JSON.stringify({
-              grant_type: 'client_credentials'
-            })
-          });
-          
-          if (authResponse.ok) {
-            console.log('✅ [PAYMENT] Successful auth endpoint:', endpoint);
-            break;
-          } else {
-            console.log(`❌ [PAYMENT] Failed endpoint ${endpoint}:`, authResponse.status, authResponse.statusText);
-            lastError = `${endpoint}: ${authResponse.status} ${authResponse.statusText}`;
-          }
-        } catch (error) {
-          console.log(`❌ [PAYMENT] Error with endpoint ${endpoint}:`, error);
-          lastError = `${endpoint}: ${error}`;
-        }
-      }
+      // Call the correct tokenize auth endpoint
+      const authResponse = await fetch(`${apiBaseUrl}/ipg/v2/auth/tokenize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${basicAuth}`
+        },
+        body: JSON.stringify({
+          grant_type: 'client_credentials'
+        })
+      });
 
-      if (!authResponse || !authResponse.ok) {
-        const errorMsg = authResponse 
-          ? `Auth failed: ${authResponse.status} ${authResponse.statusText}` 
-          : `All auth endpoints failed. Last error: ${lastError}`;
-        throw new Error(errorMsg);
+      if (!authResponse.ok) {
+        const errorText = await authResponse.text();
+        console.error('❌ [PAYMENT] Auth response error:', errorText);
+        throw new Error(`Auth failed: ${authResponse.status} ${authResponse.statusText} - ${errorText}`);
       }
 
       const authData = await authResponse.json();
-      const accessToken = authData.accessToken;
+      console.log('✅ [PAYMENT] Auth response:', authData);
+      
+      const accessToken = authData.access_token || authData.accessToken;
       
       if (!accessToken) {
-        throw new Error('Failed to obtain access token');
+        throw new Error('Failed to obtain access token from response: ' + JSON.stringify(authData));
       }
 
-      console.log('✅ [PAYMENT] JWT access token obtained');
+      console.log('✅ [PAYMENT] JWT access token obtained:', accessToken.substring(0, 20) + '...');
 
       // Step 2: Generate checkValue for saved card payment
       const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
@@ -393,7 +369,7 @@ export class PaymentService {
         `${payableConfig.merchantKey}|${invoiceId}|${amount}|LKR|${customerId}|${tokenId}|${merchantToken}`
       ).toString().toUpperCase();
 
-      // Step 3: Make payment with saved card
+      // Step 3: Process payment with saved card token
       const paymentData = {
         merchantId: payableConfig.merchantKey,
         customerId,
@@ -408,10 +384,15 @@ export class PaymentService {
       };
 
       console.log('💳 [PAYMENT] Processing payment with saved card...');
-      console.log('💳 [PAYMENT] Merchant ID:', paymentData.merchantId);
-      console.log('💳 [PAYMENT] Customer ID:', paymentData.customerId);
-      console.log('💳 [PAYMENT] Token ID:', paymentData.tokenId);
-      console.log('💳 [PAYMENT] Amount:', paymentData.amount);
+      console.log('💳 [PAYMENT] Payment data:', {
+        merchantId: paymentData.merchantId,
+        customerId: paymentData.customerId,
+        tokenId: paymentData.tokenId,
+        invoiceId: paymentData.invoiceId,
+        amount: paymentData.amount,
+        currencyCode: paymentData.currencyCode,
+        checkValue: paymentData.checkValue?.substring(0, 20) + '...'
+      });
 
       const paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
         method: 'POST',
@@ -423,20 +404,25 @@ export class PaymentService {
       });
 
       if (!paymentResponse.ok) {
-        const errorData = await paymentResponse.json().catch(() => ({}));
+        const errorData = await paymentResponse.json().catch(async () => {
+          return { error: await paymentResponse.text() };
+        });
+        console.error('❌ [PAYMENT] Payment response error:', errorData);
         throw new Error(`Payment failed: ${paymentResponse.status} ${paymentResponse.statusText} - ${JSON.stringify(errorData)}`);
       }
 
       const paymentResult = await paymentResponse.json();
       console.log('✅ [PAYMENT] Payment with saved card successful:', paymentResult);
 
-      // Handle the response - typically PAYable will redirect or provide status
+      // Handle the response based on Payable API specification
       if (paymentResult.redirectUrl) {
+        // Redirect user to complete payment if needed
         window.location.href = paymentResult.redirectUrl;
-      } else if (paymentResult.success) {
+      } else if (paymentResult.success || paymentResult.status === 'SUCCESS') {
         console.log('✅ [PAYMENT] Payment processed successfully');
+        // Payment completed successfully
       } else {
-        throw new Error(paymentResult.error || 'Payment failed');
+        throw new Error(paymentResult.error || paymentResult.message || 'Payment failed');
       }
       
     } catch (error) {
