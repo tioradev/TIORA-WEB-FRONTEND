@@ -21,6 +21,9 @@ class WebSocketPaymentService {
   private isConnected = false;
   private paymentCallbacks: Map<string, (status: PaymentStatusEvent) => void> = new Map();
   private tokenCallbacks: Array<(event: TokenSavedEvent) => void> = [];
+  
+  // Payment WebSocket endpoint is now implemented - use it directly
+  private usePaymentEndpoint = true;
 
   /**
    * Initialize WebSocket connection using native WebSocket (same as appointments)
@@ -32,15 +35,21 @@ class WebSocketPaymentService {
     }
 
     // Use the same pattern as appointments WebSocket but for payments
+    // TEMPORARY: Use appointments endpoint until backend adds payment WebSocket support
     const WS_BASE = import.meta.env.PROD 
       ? 'wss://salon.run.place' 
       : 'ws://localhost:8090';
     
-    const wsUrl = `${WS_BASE}/ws/payments/salon/${salonId}`;
+    // Use payment endpoint if enabled, otherwise use appointments endpoint temporarily  
+    const endpoint = this.usePaymentEndpoint 
+      ? `/ws/payments/salon/${salonId}`
+      : `/ws/appointments/${salonId}`;
+    const wsUrl = `${WS_BASE}${endpoint}`;
     
     console.log('🔌 [WEBSOCKET] Connecting to:', wsUrl, 'Environment:', import.meta.env.PROD ? 'production' : 'development');
     console.log('🔌 [WEBSOCKET] WS_BASE:', WS_BASE);
     console.log('🔌 [WEBSOCKET] Salon ID:', salonId);
+    console.log('🔌 [WEBSOCKET] Using dedicated payment WebSocket endpoint');
     console.log('🔌 [WEBSOCKET] Full URL will be:', wsUrl);
     
     return new Promise((resolve, reject) => {
@@ -48,7 +57,7 @@ class WebSocketPaymentService {
         this.socket = new WebSocket(wsUrl);
 
         this.socket.onopen = () => {
-          console.log('✅ [WEBSOCKET] Successfully connected to payment updates!');
+          console.log('✅ [WEBSOCKET] Successfully connected to payment WebSocket!');
           this.isConnected = true;
           this.setupEventListeners();
           resolve();
@@ -69,7 +78,8 @@ class WebSocketPaymentService {
 
         this.socket.onerror = (error) => {
           console.error('❌ [WEBSOCKET] Payment connection error:', error);
-          console.error('❌ [WEBSOCKET] Make sure your backend WebSocket server supports /ws/payments/salon/{salonId}');
+          console.error('❌ [WEBSOCKET] Using appointments WebSocket temporarily for payment notifications');
+          console.error('❌ [WEBSOCKET] Backend will need to add dedicated payment WebSocket support later');
           this.isConnected = false;
           reject(error);
         };
@@ -88,9 +98,9 @@ class WebSocketPaymentService {
   private handleWebSocketMessage(event: MessageEvent): void {
     try {
       const data = JSON.parse(event.data);
-      console.log('📡 [WEBSOCKET] Received payment message:', data);
+      console.log('📡 [WEBSOCKET] Received message:', data);
 
-      // Handle different types of payment events
+      // Handle payment-specific events from dedicated payment WebSocket
       switch (data.type) {
         case 'payment:status-update':
         case 'payment:completed':
@@ -102,10 +112,11 @@ class WebSocketPaymentService {
           break;
           
         default:
-          console.log('📡 [WEBSOCKET] Unknown payment message type:', data.type);
+          console.log('📡 [WEBSOCKET] Unhandled payment event type:', data.type);
       }
     } catch (error) {
-      console.error('❌ [WEBSOCKET] Error parsing payment message:', error);
+      console.error('❌ [WEBSOCKET] Error parsing message:', error);
+      console.log('📡 [WEBSOCKET] Raw message:', event.data);
     }
   }
 

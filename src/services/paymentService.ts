@@ -2,6 +2,7 @@ import CryptoJS from 'crypto-js';
 import { payablePayment } from 'payable-ipg-js';
 import { payableConfig, validatePayableConfig, payableUrls } from './payableConfig';
 import { webhookHandler } from './webhookHandler';
+import { getCurrentConfig } from '../config/environment';
 
 export interface PaymentRequest {
   amount: string;
@@ -208,7 +209,7 @@ export class PaymentService {
       orderDescription: request.orderDescription,
       invoiceId,
   logoUrl: 'https://firebasestorage.googleapis.com/v0/b/tiora-firebase.firebasestorage.app/o/logo%2FTiora%20gold.png?alt=media&token=2814af13-f96a-40e9-a3a5-6ba02ae0c3e3',
-      notifyUrl: `${window.location.origin}/api/webhook/payment`,
+      notifyUrl: `${getCurrentConfig().API_BASE_URL.replace('/api/v1', '')}/api/webhook/payment`,
       returnUrl: `${window.location.origin}/payment/success`,
       merchantKey: payableConfig.merchantKey,
       customerFirstName: request.customerFirstName,
@@ -271,7 +272,7 @@ export class PaymentService {
       orderDescription: request.orderDescription,
       invoiceId,
   logoUrl: 'https://firebasestorage.googleapis.com/v0/b/tiora-firebase.firebasestorage.app/o/logo%2FTiora%20gold.png?alt=media&token=2814af13-f96a-40e9-a3a5-6ba02ae0c3e3',
-      notifyUrl: `${window.location.origin}/api/webhook/payment`,
+      notifyUrl: `${getCurrentConfig().API_BASE_URL.replace('/api/v1', '')}/api/webhook/payment`,
       returnUrl: `${window.location.origin}/payment/success`,
       merchantKey: payableConfig.merchantKey,
       customerFirstName: request.customerFirstName,
@@ -422,7 +423,7 @@ export class PaymentService {
           tokenId,
           orderDescription,
           checkValue,
-          webhookUrl: webhookUrl || `${window.location.origin}/api/webhook/payment`,
+          webhookUrl: webhookUrl || `${getCurrentConfig().API_BASE_URL.replace('/api/v1', '')}/api/webhook/payment`,
           custom1: custom1 || '',
           custom2: custom2 || ''
         })
