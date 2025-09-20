@@ -431,26 +431,29 @@ export class PaymentService {
       console.log('📋 [PAYMENT] - Custom1:', paymentData.custom1);
       console.log('📋 [PAYMENT] - Custom2:', paymentData.custom2);
 
-      // Use the provided JWT token for authorization
-      const authorizationHeader = `Bearer ${jwtToken}`;
-      console.log('🔑 [PAYMENT] Authorization header format:', authorizationHeader.substring(0, 30) + '...');
+      // For saved card payments, use traditional merchant token authentication instead of JWT
+      // The /tokenize/pay endpoint appears to require merchant token auth, not JWT Bearer
+      const merchantTokenAuth = CryptoJS.SHA512(payableConfig.merchantToken).toString();
+      const authorizationHeader = merchantTokenAuth; // Use merchant token directly
+      console.log('🔑 [PAYMENT] Using merchant token authentication for /tokenize/pay endpoint');
+      console.log('🔑 [PAYMENT] Merchant token (SHA512):', authorizationHeader.substring(0, 30) + '...');
 
-      // For saved card payments, use /tokenize/pay endpoint with JWT Bearer authentication
-      console.log('🔍 [PAYMENT] Making saved card payment with provided JWT token (USING EXISTING TOKEN)...');
+      // For saved card payments, use /tokenize/pay endpoint with merchant token authentication
+      console.log('🔍 [PAYMENT] Making saved card payment with merchant token auth (TRADITIONAL METHOD)...');
       
       let paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
         method: 'POST',
         mode: 'cors',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authorizationHeader,
+          'Authorization': authorizationHeader, // Use merchant token, not JWT Bearer
           'Accept': 'application/json'
         },
         body: JSON.stringify(paymentData)
       });
 
-      console.log('📤 [PAYMENT] Request sent to (USING EXISTING TOKEN):', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
-      console.log('📤 [PAYMENT] Authentication method used: JWT Bearer Token (PROVIDED)');
+      console.log('📤 [PAYMENT] Request sent to (MERCHANT TOKEN AUTH):', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
+      console.log('📤 [PAYMENT] Authentication method used: Merchant Token (TRADITIONAL)');
       console.log('📤 [PAYMENT] Request headers:', {
         'Content-Type': 'application/json',
         'Authorization': authorizationHeader.substring(0, 30) + '...',
