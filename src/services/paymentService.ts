@@ -448,55 +448,35 @@ export class PaymentService {
       const authorizationHeader = `${tokenType} ${accessToken}`;
       console.log('🔑 [PAYMENT] Authorization header format:', authorizationHeader.substring(0, 30) + '...');
 
-      // For saved card payments, use /pay endpoint with checkValue authentication
-      console.log('🔍 [PAYMENT] Making saved card payment with checkValue authentication...');
+      // For saved card payments, use /tokenize/pay endpoint with JWT Bearer authentication
+      console.log('🔍 [PAYMENT] Making saved card payment with JWT Bearer token authentication...');
       
-      let paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/pay`, {
+      let paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
         method: 'POST',
         mode: 'cors',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': authorizationHeader,
           'Accept': 'application/json'
-          // No Authorization header - relying on checkValue for authentication
         },
         body: JSON.stringify(paymentData)
       });
 
-      let authMethod = 'CheckValue Authentication';
+      let authMethod = 'JWT Bearer Token';
 
-      // If still fails, try with JWT Bearer token as fallback
-      if (!paymentResponse.ok && paymentResponse.status === 404) {
-        console.log('🔍 [PAYMENT] CheckValue authentication failed, trying JWT Bearer token as fallback...');
-        
-        paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/pay`, {
-          method: 'POST',
-          mode: 'cors',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': authorizationHeader,
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify(paymentData)
-        });
-        authMethod = 'JWT Bearer Token (Fallback)';
-      }
-
-      console.log('📤 [PAYMENT] Request sent to:', `${apiBaseUrl}/ipg/v2/pay`);
+      console.log('📤 [PAYMENT] Request sent to:', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
       console.log('📤 [PAYMENT] Authentication method used:', authMethod);
-      console.log('📤 [PAYMENT] Request headers:', authMethod === 'JWT Bearer Token (Fallback)' ? {
+      console.log('📤 [PAYMENT] Request headers:', {
         'Content-Type': 'application/json',
         'Authorization': authorizationHeader.substring(0, 30) + '...',
-        'Accept': 'application/json'
-      } : {
-        'Content-Type': 'application/json',
         'Accept': 'application/json'
       });
       console.log('📤 [PAYMENT] Full request payload:', JSON.stringify(paymentData, null, 2));
 
-      console.log('📤 [PAYMENT] Request sent to:', `${apiBaseUrl}/ipg/v2/pay`);
+      console.log('📤 [PAYMENT] Request sent to:', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
       console.log('📤 [PAYMENT] Request headers:', {
         'Content-Type': 'application/json',
-        'Authorization': authMethod.includes('JWT') ? authorizationHeader.substring(0, 30) + '...' : 'None (checkValue-only)',
+        'Authorization': authorizationHeader.substring(0, 30) + '...',
         'Accept': 'application/json'
       });
       console.log('📤 [PAYMENT] Full request payload:', JSON.stringify(paymentData, null, 2));
@@ -507,12 +487,17 @@ export class PaymentService {
       if (!paymentResponse.ok) {
         let errorData;
         try {
-          errorData = await paymentResponse.json();
-          console.error('❌ [PAYMENT] Payment response error (JSON):', errorData);
+          const responseText = await paymentResponse.text();
+          try {
+            errorData = JSON.parse(responseText);
+            console.error('❌ [PAYMENT] Payment response error (JSON):', errorData);
+          } catch (e) {
+            errorData = { error: responseText };
+            console.error('❌ [PAYMENT] Payment response error (Text):', responseText);
+          }
         } catch (e) {
-          const errorText = await paymentResponse.text();
-          errorData = { error: errorText };
-          console.error('❌ [PAYMENT] Payment response error (Text):', errorText);
+          errorData = { error: 'Could not read response body' };
+          console.error('❌ [PAYMENT] Could not read response body:', e);
         }
         
         // Enhanced error logging for debugging
