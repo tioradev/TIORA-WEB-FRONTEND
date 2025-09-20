@@ -57,14 +57,21 @@ webSocketPaymentService.disconnect();
 ### 3. Environment Configuration
 
 **WebSocket URLs**:
-- Development: `ws://localhost:8090/ws`
-- Production: `wss://salon.run.place/ws` ✅ *Currently configured*
+- Development: `ws://localhost:8090/ws/payments/salon/{salonId}`
+- Production: `wss://salon.run.place/ws/payments/salon/{salonId}` ✅ **Your Current Setup**
 
 **API URLs**:
 - Development: `http://localhost:8090/api/v1`
-- Production: `https://salon.run.place/api/v1` ✅ *Currently configured*
+- Production: `https://salon.run.place/api/v1` ✅ **Currently configured**
 
 **Current Environment**: `production` ✅
+
+**Your Environment Variables**:
+```env
+VITE_API_BASE_URL=https://salon.run.place/api/v1
+VITE_WS_BASE_URL=wss://salon.run.place
+VITE_ENVIRONMENT=production
+```
 
 **Configuration Path**: `src/config/environment.ts`
 

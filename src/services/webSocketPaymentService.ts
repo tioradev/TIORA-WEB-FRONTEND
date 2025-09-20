@@ -38,12 +38,12 @@ class WebSocketPaymentService {
       throw new Error('Authentication token not found');
     }
 
-    // Use the correct WebSocket URL pattern for your backend
+    // Use the correct WebSocket URL pattern for payment events
     const WS_BASE = import.meta.env.PROD 
-      ? 'wss://salon.run.place:8090' 
+      ? 'wss://salon.run.place' 
       : 'ws://localhost:8090';
     
-    const wsUrl = `${WS_BASE}/ws/appointments/${salonId}`;
+    const wsUrl = `${WS_BASE}/ws/payments/salon/${salonId}`;
     
     console.log('🔌 [WEBSOCKET] Connecting to:', wsUrl, 'Environment:', import.meta.env.PROD ? 'production' : 'development');
     

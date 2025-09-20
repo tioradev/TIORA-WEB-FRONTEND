@@ -7,15 +7,15 @@ Your TIORA Web Frontend is configured for production with the following settings
 ### Environment Variables (Verified)
 ```env
 VITE_API_BASE_URL=https://salon.run.place/api/v1
-VITE_WS_BASE_URL=wss://salon.run.place:8090
+VITE_WS_BASE_URL=wss://salon.run.place
 VITE_ENVIRONMENT=production
 ```
 
 ### Key URLs
 - **Frontend**: `https://salon.run.place`
 - **API Base**: `https://salon.run.place/api/v1`
-- **WebSocket Base**: `wss://salon.run.place:8090`
-- **WebSocket Pattern**: `wss://salon.run.place:8090/ws/appointments/{salonId}`
+- **WebSocket Base**: `wss://salon.run.place`
+- **Payment WebSocket**: `wss://salon.run.place/ws/payments/salon/{salonId}`
 - **Webhook Endpoint**: `https://salon.run.place/api/payments/webhook` ⭐
 
 ## 🔧 Payable IPG Dashboard Configuration
