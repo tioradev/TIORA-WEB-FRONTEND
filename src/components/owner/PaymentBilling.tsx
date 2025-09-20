@@ -871,78 +871,146 @@ const PaymentBilling: React.FC = () => {
 
       {/* Payment Options Modal */}
       {showPaymentOptions && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-semibold text-gray-900">Choose Payment Method</h3>
-              <button
-                onClick={() => setShowPaymentOptions(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <AlertCircle className="w-6 h-6" />
-              </button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-6 rounded-t-2xl">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">Choose Payment Method</h3>
+                  <p className="text-gray-600 mt-1">Select how you'd like to pay</p>
+                </div>
+                <button
+                  onClick={() => setShowPaymentOptions(false)}
+                  className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <AlertCircle className="w-6 h-6" />
+                </button>
+              </div>
             </div>
             
-            <div className="mb-6">
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <div className="flex items-center space-x-2">
-                  <AlertTriangle className="w-5 h-5 text-amber-600" />
-                  <div>
-                    <h4 className="font-medium text-amber-900">Pending Payment</h4>
-                    <p className="text-amber-700">Total amount: Rs. {totalPendingAmount.toFixed(2)}</p>
+            {/* Modal Content */}
+            <div className="px-8 py-6">
+              {/* Amount Summary */}
+              <div className="mb-8">
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-3 bg-amber-100 rounded-full">
+                        <AlertTriangle className="w-6 h-6 text-amber-600" />
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-semibold text-amber-900">Payment Amount</h4>
+                        <p className="text-amber-700">Total pending charges</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-3xl font-bold text-amber-900">Rs. {totalPendingAmount.toFixed(2)}</div>
+                      <div className="text-sm text-amber-700">{pendingCharges.length} charges</div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="space-y-4">
-              <h4 className="font-medium text-gray-900">Saved Cards</h4>
-              <div className="space-y-3">
-                {savedCards.filter(card => card.tokenStatus === 'ACTIVE').map((card) => (
-                  <div key={card.tokenId} className="border border-gray-200 rounded-lg p-4 hover:border-purple-300 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <CreditCard className="w-5 h-5 text-gray-600" />
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="font-medium text-gray-900">{card.maskedCardNo}</span>
-                            <span className="text-sm text-gray-500">{card.cardScheme}</span>
-                            {card.isDefaultCard && (
-                              <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">
-                                Default
-                              </span>
-                            )}
+              {/* Saved Cards Section */}
+              <div className="space-y-6">
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+                    <CreditCard className="w-5 h-5 text-purple-600" />
+                    <span>Your Saved Cards</span>
+                  </h4>
+                  <div className="space-y-4">
+                    {savedCards.filter(card => card.tokenStatus === 'ACTIVE').map((card) => (
+                      <div key={card.tokenId} className="group border border-gray-200 rounded-xl p-6 hover:border-purple-300 hover:shadow-lg transition-all duration-300 bg-gradient-to-r from-white to-gray-50">
+                        <div className="flex items-center justify-between">
+                          {/* Card Info */}
+                          <div className="flex items-center space-x-4">
+                            <div className="p-3 bg-gray-100 group-hover:bg-purple-100 rounded-xl transition-colors">
+                              <CreditCard className="w-6 h-6 text-gray-600 group-hover:text-purple-600" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-3 mb-2">
+                                <span className="text-lg font-semibold text-gray-900">{card.maskedCardNo}</span>
+                                <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
+                                  {card.cardScheme}
+                                </span>
+                                {card.isDefaultCard && (
+                                  <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
+                                    Default Card
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center space-x-4 text-sm text-gray-600">
+                                <span className="font-medium">{card.cardHolderName}</span>
+                                <span>Expires {card.cardExpiry}</span>
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-sm text-gray-600">{card.cardHolderName}</div>
+                          
+                          {/* Pay Button */}
+                          <div className="ml-4">
+                            <button
+                              onClick={() => {
+                                setShowPaymentOptions(false);
+                                handlePayWithSavedCard(card.tokenId);
+                              }}
+                              disabled={processingPayment}
+                              className="px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold rounded-xl hover:from-green-600 hover:to-green-700 disabled:from-gray-400 disabled:to-gray-500 transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg min-w-[140px]"
+                            >
+                              {processingPayment ? (
+                                <div className="flex items-center justify-center space-x-2">
+                                  <Clock className="w-4 h-4 animate-spin" />
+                                  <span>Processing...</span>
+                                </div>
+                              ) : (
+                                <span>Pay Rs. {totalPendingAmount.toFixed(2)}</span>
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      <button
-                        onClick={() => {
-                          setShowPaymentOptions(false);
-                          handlePayWithSavedCard(card.tokenId);
-                        }}
-                        disabled={processingPayment}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors duration-200"
-                      >
-                        Pay Rs. {totalPendingAmount.toFixed(2)}
-                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* New Card Payment Option */}
+                <div className="pt-6 border-t border-gray-200">
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+                      <Plus className="w-5 h-5 text-purple-600" />
+                      <span>Pay with New Card</span>
+                    </h4>
+                    <div className="border border-dashed border-gray-300 rounded-xl p-6 hover:border-purple-300 hover:bg-purple-50/30 transition-all duration-300">
+                      <div className="text-center">
+                        <div className="mx-auto w-16 h-16 bg-gradient-to-r from-purple-100 to-purple-200 rounded-2xl flex items-center justify-center mb-4">
+                          <Plus className="w-8 h-8 text-purple-600" />
+                        </div>
+                        <h5 className="text-lg font-semibold text-gray-900 mb-2">Add New Payment Card</h5>
+                        <p className="text-gray-600 mb-6">Securely add and use a new payment method</p>
+                        <button
+                          onClick={() => {
+                            setShowPaymentOptions(false);
+                            handlePayWithNewCard();
+                          }}
+                          disabled={processingPayment}
+                          className="w-full px-6 py-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white font-semibold rounded-xl hover:from-purple-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg"
+                        >
+                          {processingPayment ? (
+                            <div className="flex items-center justify-center space-x-2">
+                              <Clock className="w-4 h-4 animate-spin" />
+                              <span>Processing...</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center space-x-2">
+                              <Plus className="w-5 h-5" />
+                              <span>Pay Rs. {totalPendingAmount.toFixed(2)} with New Card</span>
+                            </div>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
-
-              <div className="pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => {
-                    setShowPaymentOptions(false);
-                    handlePayWithNewCard();
-                  }}
-                  disabled={processingPayment}
-                  className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 transition-colors duration-200 flex items-center justify-center space-x-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Pay with New Card</span>
-                </button>
+                </div>
               </div>
             </div>
           </div>
