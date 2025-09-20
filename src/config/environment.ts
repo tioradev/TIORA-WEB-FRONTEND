@@ -5,14 +5,14 @@ export const ENV_CONFIG = {
   
   development: {
     API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8090/api/v1',
-    WS_BASE_URL: import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8090/ws',
+    WS_BASE_URL: import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8090',
     API_TIMEOUT: 10000,
     ENABLE_LOGGING: true,
   },
   
   production: {
     API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'https://salon.run.place/api/v1',
-    WS_BASE_URL: import.meta.env.VITE_WS_BASE_URL || 'wss://salon.run.place/ws',
+    WS_BASE_URL: import.meta.env.VITE_WS_BASE_URL || 'wss://salon.run.place:8090',
     API_TIMEOUT: 30000,
     ENABLE_LOGGING: false,
   }

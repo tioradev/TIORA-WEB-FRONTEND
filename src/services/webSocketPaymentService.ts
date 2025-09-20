@@ -4,7 +4,6 @@
  */
 
 import { io, Socket } from 'socket.io-client';
-import { ENV_CONFIG } from '../config/environment';
 
 interface PaymentStatusEvent {
   invoiceId: string;
@@ -28,7 +27,7 @@ class WebSocketPaymentService {
   /**
    * Initialize WebSocket connection
    */
-  async connect(): Promise<void> {
+  async connect(salonId: string): Promise<void> {
     if (this.socket?.connected) {
       console.log('🔌 [WEBSOCKET] Already connected');
       return;
@@ -39,8 +38,14 @@ class WebSocketPaymentService {
       throw new Error('Authentication token not found');
     }
 
-    const wsUrl = import.meta.env.VITE_WS_BASE_URL || ENV_CONFIG[ENV_CONFIG.CURRENT_ENV].WS_BASE_URL;
-    console.log('🔌 [WEBSOCKET] Connecting to:', wsUrl, 'Environment:', ENV_CONFIG.CURRENT_ENV);
+    // Use the correct WebSocket URL pattern for your backend
+    const WS_BASE = import.meta.env.PROD 
+      ? 'wss://salon.run.place:8090' 
+      : 'ws://localhost:8090';
+    
+    const wsUrl = `${WS_BASE}/ws/appointments/${salonId}`;
+    
+    console.log('🔌 [WEBSOCKET] Connecting to:', wsUrl, 'Environment:', import.meta.env.PROD ? 'production' : 'development');
     
     this.socket = io(wsUrl, {
       auth: { token },
@@ -191,11 +196,11 @@ class WebSocketPaymentService {
   /**
    * Reconnect if disconnected
    */
-  async reconnect(): Promise<void> {
+  async reconnect(salonId: string): Promise<void> {
     if (!this.connected) {
       console.log('🔄 [WEBSOCKET] Attempting to reconnect...');
       this.disconnect(); // Clean up
-      await this.connect();
+      await this.connect(salonId);
     }
   }
 }

@@ -76,13 +76,18 @@ const PaymentBilling: React.FC = () => {
     
     // Initialize WebSocket connection
     const initializeWebSocket = async () => {
+      if (!salon?.salonId) {
+        console.log('⚠️ [PAYMENT] No salon ID available, skipping WebSocket connection');
+        return;
+      }
+      
       try {
-        await webSocketPaymentService.connect();
+        await webSocketPaymentService.connect(salon.salonId.toString());
         console.log('✅ [PAYMENT] WebSocket connected for real-time notifications');
         
         // Subscribe to token saved events for automatic card refresh
         webSocketPaymentService.subscribeToTokenEvents((event: TokenSavedEvent) => {
-          console.log('🔔 [PAYMENT] Token saved via WebSocket, refreshing cards...');
+          console.log('🔔 [PAYMENT] Token saved via WebSocket:', event.tokenId, 'refreshing cards...');
           setTimeout(() => loadSavedCards(), 1000);
         });
         
