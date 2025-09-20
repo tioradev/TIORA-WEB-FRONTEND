@@ -178,8 +178,8 @@ const PaymentBilling: React.FC = () => {
       
       console.log('🔐 [PAYMENT] Using auth token:', token.substring(0, 20) + '...');
       
-      // Call the new API endpoint with authentication and salonId parameter
-      const response = await fetch(`${getCurrentConfig().API_BASE_URL}/payments/tokens?salonId=${salon.salonId}`, {
+      // Call the new API endpoint with authentication and salonId as path variable
+      const response = await fetch(`${getCurrentConfig().API_BASE_URL}/payments/tokens/salon/${salon.salonId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
