@@ -7,14 +7,11 @@ import {
   AlertTriangle,
   TrendingUp,
   Calendar,
-  CheckCircle,
   Clock,
   AlertCircle,
 } from 'lucide-react';
 import { paymentService, PaymentRequest } from '../../services/paymentService';
-import { webhookHandler } from '../../services/webhookHandler';
 import { webSocketPaymentService, PaymentStatusEvent, TokenSavedEvent } from '../../services/webSocketPaymentService';
-import { testEnvironmentVariables } from '../../utils/environmentTest';
 import { getCurrentConfig } from '../../config/environment';
 import Toast from '../shared/Toast';
 import { useAuth } from '../../contexts/AuthContext';
@@ -47,11 +44,6 @@ interface AppointmentCharge {
   scheduledAt: Date;
   paidAt?: Date;
   paymentMethod?: string;
-}
-
-interface PaymentOption {
-  type: 'saved_card' | 'new_card';
-  cardData?: SavedCard;
 }
 
 const PaymentBilling: React.FC = () => {
@@ -169,21 +161,6 @@ const PaymentBilling: React.FC = () => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   };
 
-  // Test environment configuration
-  const handleTestEnvironment = () => {
-    try {
-      const result = testEnvironmentVariables();
-      showToast(
-        result.isValid ? 'success' : 'warning', 
-        'Environment Test', 
-        `Environment: ${result.environment}, WebSocket: ${result.wsUrl}`
-      );
-    } catch (error) {
-      console.error('Environment test error:', error);
-      showToast('error', 'Environment Test Failed', 'Check console for details');
-    }
-  };
-
   const loadSavedCards = async () => {
     if (!selectedCustomer || !salon?.salonId) return;
     
@@ -201,8 +178,8 @@ const PaymentBilling: React.FC = () => {
       
       console.log('🔐 [PAYMENT] Using auth token:', token.substring(0, 20) + '...');
       
-      // Call the new API endpoint with authentication
-      const response = await fetch(`${getCurrentConfig().API_BASE_URL}/payments/tokens`, {
+      // Call the new API endpoint with authentication and salonId parameter
+      const response = await fetch(`${getCurrentConfig().API_BASE_URL}/payments/tokens?salonId=${salon.salonId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -642,50 +619,6 @@ const PaymentBilling: React.FC = () => {
         </div>
       </div>
 
-      {/* Payable IPG Configuration Status */}
-      <div className={`rounded-xl border-2 p-6 ${
-        payableConfig.isConfigured 
-          ? 'bg-green-50 border-green-200' 
-          : 'bg-amber-50 border-amber-200'
-      }`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            {payableConfig.isConfigured ? (
-              <CheckCircle className="w-6 h-6 text-green-600" />
-            ) : (
-              <AlertCircle className="w-6 h-6 text-amber-600" />
-            )}
-            <div>
-              <h3 className={`font-semibold ${
-                payableConfig.isConfigured ? 'text-green-900' : 'text-amber-900'
-              }`}>
-                Payable IPG Payment Gateway
-              </h3>
-              <p className={`text-sm ${
-                payableConfig.isConfigured ? 'text-green-700' : 'text-amber-700'
-              }`}>
-                {payableConfig.isConfigured 
-                  ? `Configured and ready for payments (${payableConfig.testMode ? 'Test Mode' : 'Live Mode'})`
-                  : `Missing configuration: ${payableConfig.missingFields.join(', ')}`
-                }
-              </p>
-              <div className="mt-2 text-xs text-gray-600">
-                <div>Merchant Key: 42F77B3164786C34</div>
-                <div>Stored Merchant ID: {webhookHandler.getStoredMerchantId() || 'Not available (will be set after first tokenization)'}</div>
-              </div>
-            </div>
-          </div>
-          {!payableConfig.isConfigured && (
-            <button
-              onClick={() => showToast('info', 'Environment Configuration', 'Please add PAYABLE_MERCHANT_KEY, PAYABLE_MERCHANT_TOKEN, PAYABLE_BUSINESS_KEY, and PAYABLE_BUSINESS_TOKEN to your .env file.')}
-              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors duration-200"
-            >
-              Setup Guide
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Saved Cards Section */}
       {payableConfig.isConfigured && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -708,13 +641,6 @@ const PaymentBilling: React.FC = () => {
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 transition-colors duration-200 self-end"
               >
                 {loadingCards ? 'Loading...' : 'Refresh Cards'}
-              </button>
-              <button
-                onClick={handleTestEnvironment}
-                className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors duration-200 self-end text-sm"
-                title="Test WebSocket and API URLs"
-              >
-                Test URLs
               </button>
             </div>
           </div>
