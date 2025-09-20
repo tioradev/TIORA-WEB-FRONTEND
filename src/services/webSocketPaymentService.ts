@@ -43,15 +43,24 @@ class WebSocketPaymentService {
       ? 'wss://salon.run.place' 
       : 'ws://localhost:8090';
     
-    const wsUrl = `${WS_BASE}/ws/payments/salon/${salonId}`;
+    const wsUrl = `${WS_BASE}/payments/salon/${salonId}`;
     
     console.log('🔌 [WEBSOCKET] Connecting to:', wsUrl, 'Environment:', import.meta.env.PROD ? 'production' : 'development');
+    console.log('🔌 [WEBSOCKET] WS_BASE:', WS_BASE);
+    console.log('🔌 [WEBSOCKET] Salon ID:', salonId);
+    console.log('🔌 [WEBSOCKET] Full URL will be:', wsUrl);
     
-    this.socket = io(wsUrl, {
+    // For Socket.IO with custom namespace, connect to base URL with namespace path
+    this.socket = io(`${WS_BASE}/payments/salon/${salonId}`, {
       auth: { token },
       transports: ['websocket', 'polling'],
-      timeout: 10000,
-      retries: 3
+      timeout: 15000,
+      retries: 5,
+      forceNew: true,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000
     });
 
     return new Promise((resolve, reject) => {
