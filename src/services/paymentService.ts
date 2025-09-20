@@ -431,7 +431,7 @@ export class PaymentService {
       console.log('🔐 [PAYMENT] CheckValue (SHA512):', checkValue.substring(0, 20) + '...');
 
       // Step 3: Process payment with saved card token using correct parameter names
-      const paymentData = {
+      const paymentData: any = {
         merchantId: payableConfig.merchantKey,  // Use merchantKey as merchantId
         customerId,
         tokenId,
@@ -439,10 +439,16 @@ export class PaymentService {
         amount,
         currencyCode: 'LKR',
         checkValue,
-        webhookUrl: webhookUrl || 'https://salon.run.place:8090/api/v1/payments/webhook',
-        custom1: custom1 || '',
-        custom2: custom2 || ''
+        webhookUrl: webhookUrl || 'https://salon.run.place:8090/api/v1/payments/webhook'
       };
+
+      // Only include custom fields if they have valid values
+      if (custom1 && custom1.trim() !== '') {
+        paymentData.custom1 = custom1.trim();
+      }
+      if (custom2 && custom2.trim() !== '') {
+        paymentData.custom2 = custom2.trim();
+      }
 
       console.log('💳 [PAYMENT] Processing payment with saved card...');
       console.log('💳 [PAYMENT] Payment data:', {
@@ -452,7 +458,10 @@ export class PaymentService {
         invoiceId: paymentData.invoiceId,
         amount: paymentData.amount,
         currencyCode: paymentData.currencyCode,
-        checkValue: paymentData.checkValue?.substring(0, 20) + '...'
+        checkValue: paymentData.checkValue?.substring(0, 20) + '...',
+        webhookUrl: paymentData.webhookUrl,
+        custom1: paymentData.custom1,
+        custom2: paymentData.custom2
       });
 
       const paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
@@ -463,6 +472,9 @@ export class PaymentService {
         },
         body: JSON.stringify(paymentData)
       });
+
+      console.log('📤 [PAYMENT] Request sent to:', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
+      console.log('📤 [PAYMENT] Full request payload:', JSON.stringify(paymentData, null, 2));
 
       if (!paymentResponse.ok) {
         const errorData = await paymentResponse.json().catch(async () => {

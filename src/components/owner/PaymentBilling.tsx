@@ -525,8 +525,8 @@ const PaymentBilling: React.FC = () => {
         invoiceId,       // invoiceId
         orderDescription, // orderDescription
         'https://salon.run.place:8090/api/v1/payments/webhook', // webhookUrl
-        'payment',       // custom1
-        'salon_charges'  // custom2
+        'PAYMENT',       // custom1 - alphanumeric only
+        'SALONCHARGES'   // custom2 - alphanumeric only, no underscores
       );
       
     } catch (error) {
