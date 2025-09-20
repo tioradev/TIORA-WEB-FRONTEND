@@ -322,8 +322,16 @@ export class PaymentService {
     try {
       console.log('💳 [PAYMENT] Paying with saved card via Payable API');
       
+      // Verify credentials are loaded
+      if (!payableConfig.businessKey || !payableConfig.businessToken) {
+        throw new Error('Business credentials not configured. Please check environment variables.');
+      }
+      
+      console.log('✅ [PAYMENT] Business credentials verified');
+      
       // Step 1: Generate Basic Auth token and get JWT Access Token
-      const basicAuth = btoa(`${payableConfig.businessKey}:${payableConfig.businessToken}`);
+      const credentials = `${payableConfig.businessKey}:${payableConfig.businessToken}`;
+      const basicAuth = btoa(credentials);
       const apiBaseUrl = payableConfig.testMode 
         ? 'https://sandboxipgpayment.payable.lk' 
         : 'https://ipgpayment.payable.lk';
@@ -331,31 +339,79 @@ export class PaymentService {
       console.log('🔑 [PAYMENT] Generating JWT access token...');
       console.log('🔑 [PAYMENT] Business Key:', payableConfig.businessKey);
       console.log('🔑 [PAYMENT] Business Token:', payableConfig.businessToken?.substring(0, 8) + '...');
-      console.log('🔑 [PAYMENT] Basic Auth:', 'Basic ' + basicAuth.substring(0, 20) + '...');
+      console.log('🔑 [PAYMENT] Credentials String:', credentials.substring(0, 20) + '...');
+      console.log('🔑 [PAYMENT] Basic Auth (base64):', basicAuth.substring(0, 20) + '...');
+      console.log('🔑 [PAYMENT] Authorization Header:', `Basic ${basicAuth}`);
       console.log('🔑 [PAYMENT] API Base URL:', apiBaseUrl);
       
       // Call the correct tokenize auth endpoint
-      const authResponse = await fetch(`${apiBaseUrl}/ipg/v2/auth/tokenize`, {
+      console.log('📡 [PAYMENT] Making auth request to:', `${apiBaseUrl}/ipg/v2/auth/tokenize`);
+      console.log('📡 [PAYMENT] Request headers (Basic Auth format):', {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${basicAuth.substring(0, 20)}...`
+      });
+      console.log('📡 [PAYMENT] Request headers (Direct base64 format):', {
+        'Content-Type': 'application/json',
+        'Authorization': basicAuth.substring(0, 20) + '...'
+      });
+      console.log('📡 [PAYMENT] Request body:', JSON.stringify({ grant_type: 'client_credentials' }, null, 2));
+      
+      // Try both Basic Auth formats
+      let authResponse;
+      
+      // First try with "Basic" prefix
+      console.log('🔍 [PAYMENT] Trying with Basic prefix...');
+      authResponse = await fetch(`${apiBaseUrl}/ipg/v2/auth/tokenize`, {
         method: 'POST',
+        mode: 'cors',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Basic ${basicAuth}`
+          'Authorization': `Basic ${basicAuth}`,
+          'Accept': 'application/json'
         },
         body: JSON.stringify({
           grant_type: 'client_credentials'
         })
       });
-
+      
+      // If that fails, try without "Basic" prefix
       if (!authResponse.ok) {
-        const errorText = await authResponse.text();
-        console.error('❌ [PAYMENT] Auth response error:', errorText);
+        console.log('🔍 [PAYMENT] Basic prefix failed, trying direct base64...');
+        authResponse = await fetch(`${apiBaseUrl}/ipg/v2/auth/tokenize`, {
+          method: 'POST',
+          mode: 'cors',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': basicAuth,
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            grant_type: 'client_credentials'
+          })
+        });
+      }
+
+      console.log('📥 [PAYMENT] Auth response status:', authResponse.status, authResponse.statusText);
+      console.log('📥 [PAYMENT] Auth response headers:', Object.fromEntries(authResponse.headers.entries()));
+      
+      if (!authResponse.ok) {
+        let errorText;
+        try {
+          const errorData = await authResponse.json();
+          errorText = JSON.stringify(errorData);
+          console.error('❌ [PAYMENT] Auth error (JSON):', errorData);
+        } catch (e) {
+          errorText = await authResponse.text();
+          console.error('❌ [PAYMENT] Auth error (Text):', errorText);
+        }
         throw new Error(`Auth failed: ${authResponse.status} ${authResponse.statusText} - ${errorText}`);
       }
 
       const authData = await authResponse.json();
-      console.log('✅ [PAYMENT] Auth response:', authData);
+      console.log('✅ [PAYMENT] Auth response data:', authData);
       
-      const accessToken = authData.access_token || authData.accessToken;
+      // Extract access token - try multiple possible field names
+      const accessToken = authData.accessToken || authData.access_token || authData.token;
       
       if (!accessToken) {
         throw new Error('Failed to obtain access token from response: ' + JSON.stringify(authData));
@@ -363,15 +419,20 @@ export class PaymentService {
 
       console.log('✅ [PAYMENT] JWT access token obtained:', accessToken.substring(0, 20) + '...');
 
-      // Step 2: Generate checkValue for saved card payment
+      // Step 2: Generate checkValue using the correct format
+      // UPPERCASE(SHA512[merchantId|invoiceId|amount|currencyCode|customerId|tokenId|UPPERCASE(SHA512[merchantToken])])
       const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
-      const checkValue = CryptoJS.SHA512(
-        `${payableConfig.merchantKey}|${invoiceId}|${amount}|LKR|${customerId}|${tokenId}|${merchantToken}`
-      ).toString().toUpperCase();
+      const checkValueString = `${payableConfig.merchantKey}|${invoiceId}|${amount}|LKR|${customerId}|${tokenId}|${merchantToken}`;
+      const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();
 
-      // Step 3: Process payment with saved card token
+      console.log('🔐 [PAYMENT] CheckValue generation:');
+      console.log('🔐 [PAYMENT] Merchant Token (SHA512):', merchantToken.substring(0, 20) + '...');
+      console.log('🔐 [PAYMENT] CheckValue string:', checkValueString);
+      console.log('🔐 [PAYMENT] CheckValue (SHA512):', checkValue.substring(0, 20) + '...');
+
+      // Step 3: Process payment with saved card token using correct parameter names
       const paymentData = {
-        merchantId: payableConfig.merchantKey,
+        merchantId: payableConfig.merchantKey,  // Use merchantKey as merchantId
         customerId,
         tokenId,
         invoiceId,
