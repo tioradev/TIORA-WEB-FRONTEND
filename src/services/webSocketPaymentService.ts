@@ -1,9 +1,7 @@
 /**
  * WebSocket Payment Notification Service
- * Real-time payment status updates using Socket.IO
+ * Real-time payment status updates using native WebSocket (matching appointments pattern)
  */
-
-import { io, Socket } from 'socket.io-client';
 
 interface PaymentStatusEvent {
   invoiceId: string;
@@ -19,121 +17,148 @@ interface TokenSavedEvent {
 }
 
 class WebSocketPaymentService {
-  private socket: Socket | null = null;
+  private socket: WebSocket | null = null;
   private isConnected = false;
   private paymentCallbacks: Map<string, (status: PaymentStatusEvent) => void> = new Map();
   private tokenCallbacks: Array<(event: TokenSavedEvent) => void> = [];
 
   /**
-   * Initialize WebSocket connection
+   * Initialize WebSocket connection using native WebSocket (same as appointments)
    */
   async connect(salonId: string): Promise<void> {
-    if (this.socket?.connected) {
+    if (this.socket?.readyState === WebSocket.OPEN) {
       console.log('🔌 [WEBSOCKET] Already connected');
       return;
     }
 
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-      throw new Error('Authentication token not found');
-    }
-
-    // Use the correct WebSocket URL pattern for payment events
+    // Use the same pattern as appointments WebSocket but for payments
     const WS_BASE = import.meta.env.PROD 
       ? 'wss://salon.run.place' 
       : 'ws://localhost:8090';
     
-    const wsUrl = `${WS_BASE}/payments/salon/${salonId}`;
+    const wsUrl = `${WS_BASE}/ws/payments/salon/${salonId}`;
     
     console.log('🔌 [WEBSOCKET] Connecting to:', wsUrl, 'Environment:', import.meta.env.PROD ? 'production' : 'development');
     console.log('🔌 [WEBSOCKET] WS_BASE:', WS_BASE);
     console.log('🔌 [WEBSOCKET] Salon ID:', salonId);
     console.log('🔌 [WEBSOCKET] Full URL will be:', wsUrl);
     
-    // For Socket.IO with custom namespace, connect to base URL with namespace path
-    this.socket = io(`${WS_BASE}/payments/salon/${salonId}`, {
-      auth: { token },
-      transports: ['websocket', 'polling'],
-      timeout: 15000,
-      retries: 5,
-      forceNew: true,
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000
-    });
-
     return new Promise((resolve, reject) => {
-      if (!this.socket) return reject(new Error('Socket not initialized'));
+      try {
+        this.socket = new WebSocket(wsUrl);
 
-      this.socket.on('connect', () => {
-        console.log('✅ [WEBSOCKET] Connected to payment notification service');
-        this.isConnected = true;
-        this.setupEventListeners();
-        resolve();
-      });
+        this.socket.onopen = () => {
+          console.log('✅ [WEBSOCKET] Successfully connected to payment updates!');
+          this.isConnected = true;
+          this.setupEventListeners();
+          resolve();
+        };
 
-      this.socket.on('connect_error', (error: any) => {
-        console.error('❌ [WEBSOCKET] Connection error:', error);
+        this.socket.onmessage = (event) => {
+          this.handleWebSocketMessage(event);
+        };
+
+        this.socket.onclose = (event) => {
+          console.log('🔌 [WEBSOCKET] Payment connection closed. Code:', event.code, 'Reason:', event.reason);
+          this.isConnected = false;
+          
+          if (event.code !== 1000) {
+            console.log('🔄 [WEBSOCKET] Connection closed unexpectedly. Manual reconnection may be needed.');
+          }
+        };
+
+        this.socket.onerror = (error) => {
+          console.error('❌ [WEBSOCKET] Payment connection error:', error);
+          console.error('❌ [WEBSOCKET] Make sure your backend WebSocket server supports /ws/payments/salon/{salonId}');
+          this.isConnected = false;
+          reject(error);
+        };
+
+      } catch (error) {
+        console.error('❌ [WEBSOCKET] Failed to create payment WebSocket connection:', error);
         this.isConnected = false;
         reject(error);
-      });
-
-      this.socket.on('disconnect', (reason: any) => {
-        console.log('🔌 [WEBSOCKET] Disconnected:', reason);
-        this.isConnected = false;
-      });
+      }
     });
   }
 
   /**
-   * Setup event listeners for payment notifications
+   * Handle incoming WebSocket messages
+   */
+  private handleWebSocketMessage(event: MessageEvent): void {
+    try {
+      const data = JSON.parse(event.data);
+      console.log('📡 [WEBSOCKET] Received payment message:', data);
+
+      // Handle different types of payment events
+      switch (data.type) {
+        case 'payment:status-update':
+        case 'payment:completed':
+          this.handlePaymentStatusUpdate(data);
+          break;
+          
+        case 'payment:token-saved':
+          this.handleTokenSaved(data);
+          break;
+          
+        default:
+          console.log('📡 [WEBSOCKET] Unknown payment message type:', data.type);
+      }
+    } catch (error) {
+      console.error('❌ [WEBSOCKET] Error parsing payment message:', error);
+    }
+  }
+
+  /**
+   * Handle payment status updates
+   */
+  private handlePaymentStatusUpdate(data: any): void {
+    const event: PaymentStatusEvent = {
+      invoiceId: data.invoiceId,
+      status: data.status,
+      timestamp: data.timestamp || Date.now(),
+      data: data.data
+    };
+
+    console.log('📡 [WEBSOCKET] Payment status update:', event);
+    
+    const callback = this.paymentCallbacks.get(event.invoiceId);
+    if (callback) {
+      callback(event);
+      // Remove callback after notification
+      this.paymentCallbacks.delete(event.invoiceId);
+    }
+  }
+
+  /**
+   * Handle token saved events
+   */
+  private handleTokenSaved(data: any): void {
+    const event: TokenSavedEvent = {
+      tokenId: data.tokenId,
+      timestamp: data.timestamp || Date.now(),
+      data: data.data
+    };
+
+    console.log('📡 [WEBSOCKET] Token saved:', event);
+    
+    // Notify all token callbacks
+    this.tokenCallbacks.forEach(callback => callback(event));
+  }
+
+  /**
+   * Setup event listeners (keeping for compatibility)
    */
   private setupEventListeners(): void {
-    if (!this.socket) return;
-
-    // Listen for payment status updates
-    this.socket.on('payment:status-update', (event: PaymentStatusEvent) => {
-      console.log('📡 [WEBSOCKET] Payment status update:', event);
-      
-      const callback = this.paymentCallbacks.get(event.invoiceId);
-      if (callback) {
-        callback(event);
-        // Remove callback after notification
-        this.paymentCallbacks.delete(event.invoiceId);
-      }
-    });
-
-    // Listen for payment completion (specific to invoice)
-    this.socket.on('payment:completed', (event: PaymentStatusEvent) => {
-      console.log('📡 [WEBSOCKET] Payment completed:', event);
-      
-      const callback = this.paymentCallbacks.get(event.invoiceId);
-      if (callback) {
-        callback(event);
-        this.paymentCallbacks.delete(event.invoiceId);
-      }
-    });
-
-    // Listen for token saved events
-    this.socket.on('payment:token-saved', (event: TokenSavedEvent) => {
-      console.log('📡 [WEBSOCKET] Token saved:', event);
-      
-      // Notify all token callbacks
-      this.tokenCallbacks.forEach(callback => callback(event));
-    });
-
-    // Listen for connection errors
-    this.socket.on('error', (error: any) => {
-      console.error('❌ [WEBSOCKET] Socket error:', error);
-    });
+    // Event listeners are handled in handleWebSocketMessage
+    console.log('📡 [WEBSOCKET] Payment event listeners ready');
   }
 
   /**
    * Subscribe to payment status for a specific invoice
    */
   subscribeToPayment(invoiceId: string, callback: (status: PaymentStatusEvent) => void): void {
-    if (!this.isConnected || !this.socket) {
+    if (!this.isConnected || !this.socket || this.socket.readyState !== WebSocket.OPEN) {
       console.error('❌ [WEBSOCKET] Not connected. Cannot subscribe to payment:', invoiceId);
       return;
     }
@@ -143,23 +168,33 @@ class WebSocketPaymentService {
     // Store callback for this invoice
     this.paymentCallbacks.set(invoiceId, callback);
     
-    // Subscribe to payment events for this invoice
-    this.socket.emit('subscribe:payment-events', { invoiceId });
+    // Send subscription message to backend
+    const message = {
+      type: 'subscribe:payment-events',
+      invoiceId: invoiceId
+    };
+    
+    this.socket.send(JSON.stringify(message));
   }
 
   /**
    * Unsubscribe from payment status for a specific invoice
    */
   unsubscribeFromPayment(invoiceId: string): void {
-    if (!this.socket) return;
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
 
     console.log('🔕 [WEBSOCKET] Unsubscribing from payment notifications:', invoiceId);
     
     // Remove callback
     this.paymentCallbacks.delete(invoiceId);
     
-    // Unsubscribe from payment events
-    this.socket.emit('unsubscribe:payment-events', { invoiceId });
+    // Send unsubscription message to backend
+    const message = {
+      type: 'unsubscribe:payment-events',
+      invoiceId: invoiceId
+    };
+    
+    this.socket.send(JSON.stringify(message));
   }
 
   /**
@@ -187,7 +222,7 @@ class WebSocketPaymentService {
   disconnect(): void {
     if (this.socket) {
       console.log('🔌 [WEBSOCKET] Disconnecting...');
-      this.socket.disconnect();
+      this.socket.close();
       this.socket = null;
       this.isConnected = false;
       this.paymentCallbacks.clear();
@@ -199,7 +234,7 @@ class WebSocketPaymentService {
    * Check if WebSocket is connected
    */
   get connected(): boolean {
-    return this.isConnected && this.socket?.connected === true;
+    return this.isConnected && this.socket?.readyState === WebSocket.OPEN;
   }
 
   /**
