@@ -448,42 +448,42 @@ export class PaymentService {
       const authorizationHeader = `${tokenType} ${accessToken}`;
       console.log('🔑 [PAYMENT] Authorization header format:', authorizationHeader.substring(0, 30) + '...');
 
-      // For tokenize/pay endpoint, try both JWT and checkValue-based authentication
-      console.log('🔍 [PAYMENT] Attempting payment with JWT Bearer token first...');
+      // For saved card payments, use /pay endpoint with checkValue authentication
+      console.log('🔍 [PAYMENT] Making saved card payment with checkValue authentication...');
       
-      let paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
+      let paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/pay`, {
         method: 'POST',
         mode: 'cors',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authorizationHeader,
           'Accept': 'application/json'
+          // No Authorization header - relying on checkValue for authentication
         },
         body: JSON.stringify(paymentData)
       });
 
-      let authMethod = 'JWT Bearer Token';
+      let authMethod = 'CheckValue Authentication';
 
-      // If JWT fails with 404, try without Authorization header (checkValue-only authentication)
+      // If still fails, try with JWT Bearer token as fallback
       if (!paymentResponse.ok && paymentResponse.status === 404) {
-        console.log('🔍 [PAYMENT] JWT authentication failed, trying checkValue-only authentication...');
+        console.log('🔍 [PAYMENT] CheckValue authentication failed, trying JWT Bearer token as fallback...');
         
-        paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
+        paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/pay`, {
           method: 'POST',
           mode: 'cors',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': authorizationHeader,
             'Accept': 'application/json'
-            // No Authorization header - relying on checkValue for authentication
           },
           body: JSON.stringify(paymentData)
         });
-        authMethod = 'CheckValue Only';
+        authMethod = 'JWT Bearer Token (Fallback)';
       }
 
-      console.log('📤 [PAYMENT] Request sent to:', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
+      console.log('📤 [PAYMENT] Request sent to:', `${apiBaseUrl}/ipg/v2/pay`);
       console.log('📤 [PAYMENT] Authentication method used:', authMethod);
-      console.log('📤 [PAYMENT] Request headers:', authMethod === 'JWT Bearer Token' ? {
+      console.log('📤 [PAYMENT] Request headers:', authMethod === 'JWT Bearer Token (Fallback)' ? {
         'Content-Type': 'application/json',
         'Authorization': authorizationHeader.substring(0, 30) + '...',
         'Accept': 'application/json'
@@ -493,10 +493,10 @@ export class PaymentService {
       });
       console.log('📤 [PAYMENT] Full request payload:', JSON.stringify(paymentData, null, 2));
 
-      console.log('📤 [PAYMENT] Request sent to:', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
+      console.log('📤 [PAYMENT] Request sent to:', `${apiBaseUrl}/ipg/v2/pay`);
       console.log('📤 [PAYMENT] Request headers:', {
         'Content-Type': 'application/json',
-        'Authorization': paymentResponse.url.includes('Authorization') ? authorizationHeader.substring(0, 30) + '...' : 'None (checkValue-only)',
+        'Authorization': authMethod.includes('JWT') ? authorizationHeader.substring(0, 30) + '...' : 'None (checkValue-only)',
         'Accept': 'application/json'
       });
       console.log('📤 [PAYMENT] Full request payload:', JSON.stringify(paymentData, null, 2));
