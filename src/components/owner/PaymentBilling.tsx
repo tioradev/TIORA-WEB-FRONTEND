@@ -90,6 +90,19 @@ const PaymentBilling: React.FC = () => {
       loadSavedCards();
     }
     
+    // Add page refresh when user returns from external payment gateway
+    const handleVisibilityChange = () => {
+      if (!document.hidden && (redirectingToIPG || processingPayment)) {
+        console.log('🔄 [PAYMENT] User returned from external payment gateway, refreshing page...');
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }
+    };
+
+    // Add event listener for page visibility changes
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
     // Initialize WebSocket connection
     const initializeWebSocket = async () => {
       if (!salon?.salonId) {
@@ -143,6 +156,7 @@ const PaymentBilling: React.FC = () => {
     
     // Cleanup
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('payable-tokenization-success', handleTokenizationSuccess);
       window.removeEventListener('payable-payment-success', handlePaymentSuccess);
       window.removeEventListener('payable-payment-failure', handlePaymentFailure as EventListener);
@@ -525,125 +539,118 @@ const PaymentBilling: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Payment & Billing</h2>
-          <p className="text-gray-600">Manage payment cards and appointment charges</p>
-        </div>
-        <div className="flex space-x-3">
-          {pendingCharges.length > 0 && (
-            <button
-              onClick={handlePayPendingCharges}
-              disabled={processingPayment}
-              className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 text-white hover:from-amber-600 hover:to-amber-700 disabled:from-gray-400 disabled:to-gray-500 rounded-lg transition-all duration-200"
-            >
-              {processingPayment ? (
-                <>
-                  <Clock className="w-4 h-4 animate-spin" />
-                  <span>Processing...</span>
-                </>
-              ) : (
-                <>
-                  <AlertTriangle className="w-4 h-4" />
-                  <span>Pay Pending (Rs. {totalPendingAmount.toFixed(2)})</span>
-                </>
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        {/* Header */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Payment & Billing</h1>
+              <p className="text-lg text-gray-600">Manage your payment methods and billing efficiently</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              {pendingCharges.length > 0 && (
+                <button
+                  onClick={handlePayPendingCharges}
+                  disabled={processingPayment}
+                  className="flex items-center justify-center space-x-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white hover:from-amber-600 hover:to-amber-700 disabled:from-gray-400 disabled:to-gray-500 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
+                >
+                  {processingPayment ? (
+                    <>
+                      <Clock className="w-5 h-5 animate-spin" />
+                      <span className="font-semibold">Processing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className="w-5 h-5" />
+                      <span className="font-semibold">Pay Pending (Rs. {totalPendingAmount.toFixed(2)})</span>
+                    </>
+                  )}
+                </button>
               )}
-            </button>
-          )}
-          <button
-            onClick={handleAddCard}
-            disabled={processingPayment}
-            className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 rounded-lg transition-all duration-200"
-          >
-            {processingPayment ? (
-              <>
-                <Clock className="w-4 h-4 animate-spin" />
-                <span>Processing...</span>
-              </>
-            ) : (
-              <>
-                <Plus className="w-4 h-4" />
-                <span>Add Payment Card</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Today's Income</p>
-              <p className="text-2xl font-bold text-green-600">Rs. {todayIncome.toFixed(2)}</p>
-              <p className="text-xs text-gray-500">From appointment charges</p>
-            </div>
-            <TrendingUp className="w-8 h-8 text-emerald-500" />
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Monthly Income</p>
-              <p className="text-2xl font-bold text-blue-600">Rs. {monthlyIncome.toFixed(2)}</p>
-              <p className="text-xs text-gray-500">This month's total</p>
-            </div>
-            <Calendar className="w-8 h-8 text-blue-500" />
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Pending Payments</p>
-              <p className="text-2xl font-bold text-amber-600">Rs. {totalPendingAmount.toFixed(2)}</p>
-              <p className="text-xs text-gray-500">{pendingCharges.length} charges pending</p>
-            </div>
-            <AlertTriangle className="w-8 h-8 text-amber-500" />
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Active Cards</p>
-              <p className="text-2xl font-bold text-gray-900">{activeCards}</p>
-              <p className="text-xs text-gray-500">Payment methods</p>
-            </div>
-            <CreditCard className="w-8 h-8 text-purple-500" />
-          </div>
-        </div>
-      </div>
-
-      {/* Saved Cards Section */}
-      {payableConfig.isConfigured && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Payable IPG Saved Cards</h3>
-            <div className="flex space-x-3">
-              <div className="flex flex-col">
-                <label className="text-xs text-gray-500 mb-1">Customer ID (Alphanumeric)</label>
-                <input
-                  type="text"
-                  placeholder="Alphanumeric Customer ID"
-                  value={selectedCustomer}
-                  readOnly
-                  className="px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
-              </div>
               <button
-                onClick={loadSavedCards}
-                disabled={!selectedCustomer || loadingCards}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 transition-colors duration-200 self-end"
+                onClick={handleAddCard}
+                disabled={processingPayment}
+                className="flex items-center justify-center space-x-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
               >
-                {loadingCards ? 'Loading...' : 'Refresh Cards'}
+                {processingPayment ? (
+                  <>
+                    <Clock className="w-5 h-5 animate-spin" />
+                    <span className="font-semibold">Processing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-5 h-5" />
+                    <span className="font-semibold">Add Payment Card</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Today's Income</p>
+                <p className="text-3xl font-bold text-green-600">Rs. {todayIncome.toFixed(2)}</p>
+                <p className="text-xs text-gray-500 mt-1">From appointment charges</p>
+              </div>
+              <div className="p-3 bg-green-50 rounded-xl">
+                <TrendingUp className="w-8 h-8 text-green-500" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Monthly Income</p>
+                <p className="text-3xl font-bold text-blue-600">Rs. {monthlyIncome.toFixed(2)}</p>
+                <p className="text-xs text-gray-500 mt-1">This month's total</p>
+              </div>
+              <div className="p-3 bg-blue-50 rounded-xl">
+                <Calendar className="w-8 h-8 text-blue-500" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Pending Payments</p>
+                <p className="text-3xl font-bold text-amber-600">Rs. {totalPendingAmount.toFixed(2)}</p>
+                <p className="text-xs text-gray-500 mt-1">{pendingCharges.length} charges pending</p>
+              </div>
+              <div className="p-3 bg-amber-50 rounded-xl">
+                <AlertTriangle className="w-8 h-8 text-amber-500" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Active Cards</p>
+                <p className="text-3xl font-bold text-gray-900">{activeCards}</p>
+                <p className="text-xs text-gray-500 mt-1">Payment methods</p>
+              </div>
+              <div className="p-3 bg-purple-50 rounded-xl">
+                <CreditCard className="w-8 h-8 text-purple-500" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Saved Cards Section */}
+        {payableConfig.isConfigured && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+            <div className="mb-8">
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">Your Payment Cards</h3>
+              <p className="text-gray-600">Securely manage your saved payment methods</p>
+            </div>
           
           {/* Error State */}
           {error && (
@@ -678,62 +685,72 @@ const PaymentBilling: React.FC = () => {
           )}
           
           {!loadingCards && savedCards.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {savedCards.map((card) => (
-                <div key={card.tokenId} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-2">
-                      <CreditCard className="w-5 h-5 text-gray-600" />
-                      <span className="font-medium text-gray-900">{card.maskedCardNo}</span>
-                    </div>
+                <div key={card.tokenId} className="relative group">
+                  {/* Credit Card Design */}
+                  <div className="relative w-full h-48 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-xl shadow-lg overflow-hidden transform transition-all duration-300 hover:scale-105 hover:shadow-xl">
+                    {/* Card Background Pattern */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-600/10 to-purple-600/10"></div>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-white/5 to-transparent rounded-full -translate-y-16 translate-x-16"></div>
+                    
+                    {/* Default Card Badge */}
                     {card.isDefaultCard && (
-                      <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">
+                      <div className="absolute top-3 right-3 bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded-full">
                         Default
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2 text-sm text-gray-600">
-                    <div className="flex justify-between">
-                      <span>Expires:</span>
-                      <span>{card.cardExpiry}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Scheme:</span>
-                      <span>{card.cardScheme}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Status:</span>
-                      <span className={`font-medium ${
-                        card.tokenStatus === 'ACTIVE' ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        {card.tokenStatus}
-                      </span>
-                    </div>
-                    {card.nickname && (
-                      <div className="flex justify-between">
-                        <span>Nickname:</span>
-                        <span>{card.nickname}</span>
                       </div>
                     )}
+                    
+                    {/* Card Content */}
+                    <div className="relative h-full p-6 flex flex-col justify-between text-white">
+                      {/* Top Section */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <CreditCard className="w-6 h-6 text-white/90" />
+                          <span className="text-sm font-medium text-white/90">
+                            {card.cardScheme}
+                          </span>
+                        </div>
+                        <div className="text-xs bg-white/10 px-2 py-1 rounded">
+                          {card.tokenStatus}
+                        </div>
+                      </div>
+                      
+                      {/* Card Number */}
+                      <div className="text-center">
+                        <div className="text-lg font-mono tracking-widest text-white/95 mb-2">
+                          {card.maskedCardNo}
+                        </div>
+                      </div>
+                      
+                      {/* Bottom Section */}
+                      <div className="flex items-end justify-between">
+                        <div>
+                          <div className="text-xs text-white/70 uppercase tracking-wide mb-1">
+                            Cardholder
+                          </div>
+                          <div className="text-sm font-semibold text-white/95 truncate max-w-[150px]">
+                            {card.cardHolderName}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-white/70 uppercase tracking-wide mb-1">
+                            Expires
+                          </div>
+                          <div className="text-sm font-semibold text-white/95">
+                            {card.cardExpiry}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   
-                  {card.tokenStatus === 'ACTIVE' && pendingCharges.length > 0 && (
-                    <button
-                      onClick={() => handlePayWithSavedCard(card.tokenId)}
-                      disabled={processingPayment}
-                      className="w-full mt-3 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors duration-200 text-sm"
-                    >
-                      {processingPayment ? 'Processing...' : `Pay Rs. ${totalPendingAmount.toFixed(2)}`}
-                    </button>
-                  )}
-                  
-                  {/* Card Management Buttons */}
-                  <div className="flex space-x-2 mt-3">
+                  {/* Card Management Options */}
+                  <div className="mt-3 flex space-x-2">
                     <button
                       onClick={() => handleEditSavedCard(card.tokenId, card.nickname || undefined, !card.isDefaultCard)}
                       disabled={processingPayment}
-                      className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors duration-200 text-sm flex items-center justify-center space-x-1"
+                      className="flex-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:bg-gray-300 transition-colors duration-200 text-sm flex items-center justify-center space-x-1"
                     >
                       <Edit className="w-3 h-3" />
                       <span>{card.isDefaultCard ? 'Remove Default' : 'Set Default'}</span>
@@ -741,7 +758,7 @@ const PaymentBilling: React.FC = () => {
                     <button
                       onClick={() => handleDeleteSavedCard(card.tokenId)}
                       disabled={processingPayment}
-                      className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 transition-colors duration-200 text-sm flex items-center justify-center space-x-1"
+                      className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 disabled:bg-red-200 transition-colors duration-200 text-sm flex items-center justify-center space-x-1"
                     >
                       <Trash2 className="w-3 h-3" />
                       <span>Delete</span>
@@ -751,95 +768,77 @@ const PaymentBilling: React.FC = () => {
               ))}
             </div>
           ) : !loadingCards && selectedCustomer ? (
-            <div className="text-center py-8 text-gray-500">
-              <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-              <p>No saved cards found for this customer</p>
+            <div className="text-center py-12 text-gray-500">
+              <CreditCard className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h4 className="text-lg font-semibold text-gray-600 mb-2">No payment cards yet</h4>
+              <p className="text-gray-500 mb-4">Add your first payment card to get started</p>
+              <button
+                onClick={handleAddCard}
+                disabled={processingPayment}
+                className="inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 rounded-lg transition-all duration-200"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Your First Card</span>
+              </button>
             </div>
           ) : !loadingCards ? (
             <div className="text-center py-8 text-gray-500">
-              <p>Customer ID will be automatically generated based on your salon profile. Click "Refresh Cards" to check for saved cards.</p>
+              <p>Loading your payment cards...</p>
             </div>
           ) : null}
         </div>
       )}
 
-      {/* Overview Content */}
-      <div className="space-y-6">
-        {/* Pending Payments Alert */}
-        {pendingCharges.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <AlertTriangle className="w-6 h-6 text-amber-600" />
+        {/* Overview Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Automated Payment Scheduler */}
+          <div className="relative overflow-hidden bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-8 hover:shadow-lg transition-shadow duration-300">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-200/20 to-indigo-200/20 rounded-full transform translate-x-16 -translate-y-16"></div>
+            <div className="relative">
+              <div className="flex items-center space-x-4 mb-4">
+                <div className="p-4 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-2xl">
+                  <Calendar className="w-8 h-8 text-blue-600" />
+                </div>
                 <div>
-                  <h3 className="font-semibold text-amber-900">Pending Appointment Charges</h3>
-                  <p className="text-amber-700">
-                    You have {pendingCharges.length} pending charges totaling Rs. {totalPendingAmount.toFixed(2)}
-                  </p>
+                  <h3 className="text-xl font-bold text-blue-900">Automated Payment Schedule</h3>
                 </div>
               </div>
-              <button
-                onClick={handlePayPendingCharges}
-                disabled={processingPayment}
-                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:bg-gray-500 transition-colors duration-200 flex items-center space-x-2"
-              >
-                {processingPayment ? (
-                  <>
-                    <Clock className="w-4 h-4 animate-spin" />
-                    <span>Processing...</span>
-                  </>
-                ) : (
-                  <span>Pay Now</span>
-                )}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Automated Payment Scheduler */}
-        <div className="relative overflow-hidden bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-8">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-200/20 to-indigo-200/20 rounded-full transform translate-x-16 -translate-y-16"></div>
-          <div className="relative flex items-center space-x-4">
-            <div className="p-4 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-2xl">
-              <Calendar className="w-8 h-8 text-blue-600" />
-            </div>
-            <div>
-              <h3 className="text-xl font-bold text-blue-900 mb-2">Automated Payment Schedule</h3>
               <p className="text-blue-700 text-base leading-relaxed">
-                System automatically charges Rs. 50.00 per appointment daily at 10:00 PM. 
-                <br />
-                <span className="font-semibold">Today's charge: Rs. {todayCharges.reduce((sum, charge) => sum + charge.totalCharge, 0).toFixed(2)} for {todayCharges.reduce((sum, charge) => sum + charge.appointmentCount, 0)} appointments.</span>
+                System automatically charges <span className="font-semibold">Rs. 50.00 per appointment</span> daily at 10:00 PM.
               </p>
+              <div className="mt-4 p-4 bg-white/50 rounded-xl">
+                <p className="text-blue-800 font-semibold">
+                  Today's charge: Rs. {todayCharges.reduce((sum, charge) => sum + charge.totalCharge, 0).toFixed(2)} for {todayCharges.reduce((sum, charge) => sum + charge.appointmentCount, 0)} appointments
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Daily Income Overview */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 hover:shadow-lg transition-shadow duration-300">
+            <h3 className="text-xl font-bold text-gray-900 mb-6">Daily Income Breakdown</h3>
+            <div className="space-y-6">
+              <div className="flex justify-between items-center p-4 bg-gray-50 rounded-xl">
+                <span className="text-gray-600 font-medium">Today's Appointments</span>
+                <span className="font-bold text-gray-900 text-lg">
+                  {todayCharges.reduce((sum, charge) => sum + charge.appointmentCount, 0)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center p-4 bg-gray-50 rounded-xl">
+                <span className="text-gray-600 font-medium">Charge per Appointment</span>
+                <span className="font-bold text-gray-900 text-lg">Rs. 50.00</span>
+              </div>
+              <div className="flex justify-between items-center p-4 bg-green-50 rounded-xl">
+                <span className="text-green-700 font-medium">Today's Income</span>
+                <span className="font-bold text-green-600 text-lg">Rs. {todayIncome.toFixed(2)}</span>
+              </div>
+              <div className="pt-4 border-t border-gray-200 flex justify-between items-center">
+                <span className="text-gray-600 font-medium">Scheduler Time</span>
+                <span className="font-semibold text-gray-900">10:00 PM Daily</span>
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Daily Income Overview */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Daily Income Breakdown</h3>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600">Today's Appointments</span>
-              <span className="font-semibold text-gray-900">
-                {todayCharges.reduce((sum, charge) => sum + charge.appointmentCount, 0)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600">Charge per Appointment</span>
-              <span className="font-semibold text-gray-900">Rs. 50.00</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600">Today's Income</span>
-              <span className="font-semibold text-green-600">Rs. {todayIncome.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between items-center pt-2 border-t border-gray-200">
-              <span className="text-gray-600">Scheduler Time</span>
-              <span className="font-semibold text-gray-900">10:00 PM Daily</span>
-            </div>
-          </div>
-        </div>
-
-      </div>
       {/* End Overview Content */}
 
       {/* Toast Notifications */}
@@ -949,6 +948,7 @@ const PaymentBilling: React.FC = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
