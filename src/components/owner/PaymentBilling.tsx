@@ -193,16 +193,27 @@ const PaymentBilling: React.FC = () => {
     try {
       console.log('🔄 [PAYMENT] Loading saved cards from backend API for salon:', salon.salonId);
       
+      // Get the authentication token
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('Authentication token not found. Please log in again.');
+      }
+      
+      console.log('🔐 [PAYMENT] Using auth token:', token.substring(0, 20) + '...');
+      
       // Call the new API endpoint with authentication
       const response = await fetch(`${getCurrentConfig().API_BASE_URL}/payments/tokens`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}` // Add auth token
+          'Authorization': `Bearer ${token}`
         }
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Authentication failed. Please log in again.');
+        }
         throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
       }
 
@@ -211,8 +222,14 @@ const PaymentBilling: React.FC = () => {
       console.log('✅ [PAYMENT] Successfully loaded', data.tokens?.length || 0, 'saved cards from backend API');
     } catch (error) {
       console.error('Failed to load saved cards:', error);
-      setError('Failed to load saved cards. Please try again.');
-      showToast('error', 'Failed to load saved cards', 'Please check the console for debugging information.');
+      
+      if (error instanceof Error && error.message.includes('Authentication')) {
+        setError('Authentication failed. Please log in again.');
+        showToast('error', 'Authentication Error', 'Your session has expired. Please log in again.');
+      } else {
+        setError('Failed to load saved cards. Please try again.');
+        showToast('error', 'Failed to load saved cards', 'Please check the console for debugging information.');
+      }
       setSavedCards([]);
     } finally {
       setLoadingCards(false);
