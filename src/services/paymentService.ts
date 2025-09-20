@@ -305,6 +305,210 @@ export class PaymentService {
   }
 
   /**
+   * Get JWT access token for Payable API authentication
+   */
+  public async getJwtToken(): Promise<string> {
+    try {
+      // Verify credentials are loaded
+      if (!payableConfig.businessKey || !payableConfig.businessToken) {
+        throw new Error('Business credentials not configured. Please check environment variables.');
+      }
+      
+      const credentials = `${payableConfig.businessKey}:${payableConfig.businessToken}`;
+      const basicAuth = btoa(credentials);
+      const apiBaseUrl = payableConfig.testMode 
+        ? 'https://sandboxipgpayment.payable.lk' 
+        : 'https://ipgpayment.payable.lk';
+      
+      console.log('🔑 [PAYMENT] Getting JWT access token...');
+      
+      const authResponse = await fetch(`${apiBaseUrl}/ipg/v2/auth/tokenize`, {
+        method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': basicAuth, // Direct base64, no "Basic" prefix
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          grant_type: 'client_credentials'
+        })
+      });
+
+      if (!authResponse.ok) {
+        let errorText;
+        try {
+          const errorData = await authResponse.json();
+          errorText = JSON.stringify(errorData);
+          console.error('❌ [PAYMENT] Auth error (JSON):', errorData);
+        } catch (e) {
+          errorText = await authResponse.text();
+          console.error('❌ [PAYMENT] Auth error (Text):', errorText);
+        }
+        throw new Error(`Authentication failed: ${authResponse.status} ${authResponse.statusText} - ${errorText}`);
+      }
+
+      const authData = await authResponse.json();
+      const accessToken = authData.accessToken || authData.access_token || authData.token;
+      
+      if (!accessToken) {
+        throw new Error('No access token received from authentication');
+      }
+
+      console.log('✅ [PAYMENT] JWT access token obtained:', accessToken.substring(0, 20) + '...');
+      return accessToken;
+      
+    } catch (error) {
+      console.error('❌ [PAYMENT] Error getting JWT token:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Pay with saved card using existing JWT token (bypasses auth step)
+   */
+  public async payWithSavedCardUsingToken(
+    customerId: string,
+    tokenId: string,
+    amount: string,
+    invoiceId: string,
+    orderDescription: string,
+    jwtToken: string,
+    webhookUrl?: string,
+    custom1?: string,
+    custom2?: string
+  ): Promise<void> {
+    try {
+      console.log('💳 [PAYMENT] Paying with saved card using existing JWT token');
+      console.log('🔑 [PAYMENT] Using provided JWT token:', jwtToken.substring(0, 20) + '...');
+      
+      // Verify credentials are loaded for checkValue generation
+      if (!payableConfig.merchantKey || !payableConfig.merchantToken) {
+        throw new Error('Merchant credentials not configured. Please check environment variables.');
+      }
+      
+      const apiBaseUrl = payableConfig.testMode 
+        ? 'https://sandboxipgpayment.payable.lk' 
+        : 'https://ipgpayment.payable.lk';
+
+      // Generate checkValue using the correct format
+      // UPPERCASE(SHA512[merchantId|invoiceId|amount|currencyCode|customerId|tokenId|UPPERCASE(SHA512[merchantToken])])
+      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
+      const checkValueString = `${payableConfig.merchantKey}|${invoiceId}|${amount}|LKR|${customerId}|${tokenId}|${merchantToken}`;
+      const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();
+
+      console.log('🔐 [PAYMENT] CheckValue generation:');
+      console.log('🔐 [PAYMENT] Merchant Key:', payableConfig.merchantKey);
+      console.log('🔐 [PAYMENT] Merchant Token (SHA512):', merchantToken.substring(0, 20) + '...');
+      console.log('🔐 [PAYMENT] CheckValue string:', checkValueString);
+      console.log('🔐 [PAYMENT] CheckValue (SHA512):', checkValue.substring(0, 20) + '...');
+
+      // Process payment with saved card token
+      const paymentData: any = {
+        merchantId: payableConfig.merchantKey,  // Use merchantKey as merchantId
+        customerId,
+        tokenId,
+        invoiceId,
+        amount,
+        currencyCode: 'LKR',
+        checkValue,
+        webhookUrl: webhookUrl || 'https://salon.run.place:8090/api/v1/payments/webhook'
+      };
+
+      // Add optional custom fields
+      if (custom1) paymentData.custom1 = custom1;
+      if (custom2) paymentData.custom2 = custom2;
+
+      console.log('📋 [PAYMENT] Payment data prepared:');
+      console.log('📋 [PAYMENT] - Merchant ID:', paymentData.merchantId);
+      console.log('📋 [PAYMENT] - Customer ID:', paymentData.customerId);
+      console.log('📋 [PAYMENT] - Token ID:', paymentData.tokenId);
+      console.log('📋 [PAYMENT] - Invoice ID:', paymentData.invoiceId);
+      console.log('📋 [PAYMENT] - Amount:', paymentData.amount);
+      console.log('📋 [PAYMENT] - Currency:', paymentData.currencyCode);
+      console.log('📋 [PAYMENT] - CheckValue:', paymentData.checkValue?.substring(0, 20) + '...');
+      console.log('📋 [PAYMENT] - Webhook URL:', paymentData.webhookUrl);
+      console.log('📋 [PAYMENT] - Custom1:', paymentData.custom1);
+      console.log('📋 [PAYMENT] - Custom2:', paymentData.custom2);
+
+      // Use the provided JWT token for authorization
+      const authorizationHeader = `Bearer ${jwtToken}`;
+      console.log('🔑 [PAYMENT] Authorization header format:', authorizationHeader.substring(0, 30) + '...');
+
+      // For saved card payments, use /tokenize/pay endpoint with JWT Bearer authentication
+      console.log('🔍 [PAYMENT] Making saved card payment with provided JWT token (USING EXISTING TOKEN)...');
+      
+      let paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
+        method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authorizationHeader,
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(paymentData)
+      });
+
+      console.log('📤 [PAYMENT] Request sent to (USING EXISTING TOKEN):', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
+      console.log('📤 [PAYMENT] Authentication method used: JWT Bearer Token (PROVIDED)');
+      console.log('📤 [PAYMENT] Request headers:', {
+        'Content-Type': 'application/json',
+        'Authorization': authorizationHeader.substring(0, 30) + '...',
+        'Accept': 'application/json'
+      });
+      console.log('📤 [PAYMENT] Full request payload:', JSON.stringify(paymentData, null, 2));
+      
+      console.log('📥 [PAYMENT] Payment response status:', paymentResponse.status, paymentResponse.statusText);
+      console.log('📥 [PAYMENT] Payment response headers:', Object.fromEntries(paymentResponse.headers.entries()));
+
+      if (!paymentResponse.ok) {
+        let errorData;
+        try {
+          const responseText = await paymentResponse.text();
+          try {
+            errorData = JSON.parse(responseText);
+            console.error('❌ [PAYMENT] Payment response error (JSON):', errorData);
+          } catch (e) {
+            errorData = { error: responseText };
+            console.error('❌ [PAYMENT] Payment response error (Text):', responseText);
+          }
+        } catch (e) {
+          errorData = { error: 'Could not read response body' };
+          console.error('❌ [PAYMENT] Could not read response body:', e);
+        }
+        
+        // Enhanced error logging for debugging
+        console.error('❌ [PAYMENT] Full error details:', {
+          status: paymentResponse.status,
+          statusText: paymentResponse.statusText,
+          url: paymentResponse.url,
+          headers: Object.fromEntries(paymentResponse.headers.entries()),
+          errorData: errorData
+        });
+        throw new Error(`Payment failed: ${paymentResponse.status} ${paymentResponse.statusText} - ${JSON.stringify(errorData)}`);
+      }
+
+      const paymentResult = await paymentResponse.json();
+      console.log('✅ [PAYMENT] Payment with saved card successful:', paymentResult);
+
+      // Handle the response based on Payable API specification
+      if (paymentResult.redirectUrl) {
+        // Redirect user to complete payment if needed
+        window.location.href = paymentResult.redirectUrl;
+      } else if (paymentResult.success || paymentResult.status === 'SUCCESS') {
+        console.log('✅ [PAYMENT] Payment processed successfully');
+        // Payment completed successfully
+      } else {
+        throw new Error(paymentResult.error || paymentResult.message || 'Payment failed');
+      }
+      
+    } catch (error) {
+      console.error('❌ [PAYMENT] Error paying with saved card using token:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Pay with saved card using Payable API directly
    * Step 1: Get access token using Basic Auth
    * Step 2: Use access token to process payment with saved card token

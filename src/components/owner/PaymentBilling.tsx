@@ -517,13 +517,19 @@ const PaymentBilling: React.FC = () => {
 
       showToast('info', 'Processing Payment with Saved Card', 'Please wait while we process your payment...');
 
-      // Use the paymentService method that follows PAYable API guidelines
-      await paymentService.payWithSavedCard(
+      // Step 1: Get JWT token first
+      console.log('🔑 [PAYMENT] Getting JWT token for saved card payment...');
+      const jwtToken = await paymentService.getJwtToken();
+      console.log('✅ [PAYMENT] JWT token obtained, proceeding with payment...');
+
+      // Step 2: Use the new method that accepts existing JWT token
+      await paymentService.payWithSavedCardUsingToken(
         selectedCustomer, // customerId
         tokenId,         // tokenId
         totalAmount,     // amount
         invoiceId,       // invoiceId
         orderDescription, // orderDescription
+        jwtToken,        // JWT token from tokenize API
         'https://salon.run.place:8090/api/v1/payments/webhook', // webhookUrl
         'PAYMENT',       // custom1 - alphanumeric only
         'SALONCHARGES'   // custom2 - alphanumeric only, no underscores
