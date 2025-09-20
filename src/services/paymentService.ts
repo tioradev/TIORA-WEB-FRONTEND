@@ -1,7 +1,9 @@
 import CryptoJS from 'crypto-js';
+import { payablePayment } from 'payable-ipg-js';
 import { payableConfig, validatePayableConfig } from './payableConfig';
 import { webhookHandler } from './webhookHandler';
 import { apiService } from './api';
+import { getCurrentConfig } from '../config/environment';
 
 export interface PaymentRequest {
   amount: string;
@@ -81,6 +83,56 @@ export interface PayableTransaction {
   chargeId?: string; // Links to AppointmentCharge
 }
 
+// Salon Billing Interfaces
+export interface SalonBillingRequest {
+  salonId: number;
+  billingDate: string;
+  totalAmount: string;
+  currency: string;
+  appointmentCount: number;
+  description: string;
+}
+
+export interface PaymentDataResponse {
+  success: boolean;
+  message: string;
+  invoiceId: string;
+  paymentData: {
+    merchantKey: string;
+    merchantId: string;
+    invoiceId: string;
+    amount: string;
+    currency: string;
+    customerId: string;
+    customerRefNo: string;
+    notifyUrl: string;
+    returnUrl: string;
+    checkValue: string;
+    testMode: boolean;
+    custom1: string;
+    custom2: string;
+    orderDescription: string;
+    customerFirstName: string;
+    customerLastName: string;
+    customerEmail: string;
+    customerMobilePhone: string;
+    billingAddressStreet: string;
+    billingAddressCity: string;
+    billingAddressCountry: string;
+    paymentType: string;
+    currencyCode: string;
+    logoUrl: string;
+  };
+}
+
+export interface BillingStatusResponse {
+  success: boolean;
+  salonId: number;
+  billingDate: string;
+  isPaid: boolean;
+  message: string;
+}
+
 export class PaymentService {
   private static instance: PaymentService;
   
@@ -158,84 +210,73 @@ export class PaymentService {
   }
 
   /**
-   * Process one-time payment (paymentType = '1') - Now uses backend API
+   * Generate payment data for salon billing - Backend provides PAYable configuration
    */
-  public async processOneTimePayment(request: PaymentRequest): Promise<void> {
+  public async generateSalonBillingPaymentData(request: SalonBillingRequest): Promise<PaymentDataResponse> {
     try {
-      console.log('💳 [PAYMENT] Initiating regular payment via backend API');
+      console.log('💳 [SALON BILLING] Generating payment data for salon billing');
       
-      const response = await apiService.initiateRegularPayment({
-        amount: request.amount,
-        invoiceId: request.invoiceId || this.generateInvoiceId(),
-        orderDescription: request.orderDescription,
-        customerFirstName: request.customerFirstName,
-        customerLastName: request.customerLastName,
-        customerEmail: request.customerEmail,
-        customerMobilePhone: request.customerMobilePhone,
-        customerPhone: request.customerPhone || '',
-        billingAddressStreet: request.billingAddressStreet,
-        billingAddressCity: request.billingAddressCity,
-        billingAddressCountry: request.billingAddressCountry,
-        billingCompanyName: request.billingCompanyName || '',
-        billingAddressStreet2: request.billingAddressStreet2 || '',
-        billingAddressPostcodeZip: request.billingAddressPostcodeZip || '',
-        billingAddressStateProvince: request.billingAddressStateProvince || ''
+      const response = await fetch(`${getCurrentConfig().API_BASE_URL}/payments/salon-billing/generate-payment-data`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          salonId: request.salonId,
+          billingDate: request.billingDate,
+          totalAmount: request.totalAmount,
+          currency: request.currency,
+          appointmentCount: request.appointmentCount,
+          description: request.description
+        })
       });
 
-      // Backend handles checkValue generation and Payable API call
-      // Response should contain the payment URL to redirect to
-      if (response.paymentUrl) {
-        console.log('✅ [PAYMENT] Backend initiated payment, redirecting to:', response.paymentUrl);
-        window.location.href = response.paymentUrl;
+      if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log('✅ [SALON BILLING] Payment data generated successfully');
+        return data;
       } else {
-        throw new Error('Backend did not return payment URL');
+        throw new Error(data.message || 'Failed to generate payment data');
       }
     } catch (error) {
-      console.error('❌ [PAYMENT] Failed to initiate regular payment:', error);
+      console.error('❌ [SALON BILLING] Failed to generate payment data:', error);
       throw error;
     }
   }
 
   /**
-   * Process payment with card tokenization (paymentType = '3') - Now uses backend API
+   * Process salon billing payment using PAYable SDK directly
+   * Frontend → Generate Payment Data → PAYable SDK → Webhook → Backend
    */
-  public async processTokenizePayment(request: PaymentRequest): Promise<void> {
+  public async processSalonBillingPayment(request: SalonBillingRequest): Promise<void> {
     try {
-      console.log('💳 [PAYMENT] Initiating tokenize payment via backend API');
+      console.log('💳 [SALON BILLING] Initiating salon billing payment');
       
-      const customerRefNo = request.customerRefNo || `CUST${Date.now()}`;
+      // Step 1: Get payment data from backend
+      const paymentDataResponse = await this.generateSalonBillingPaymentData(request);
       
-      const response = await apiService.initiateTokenizePayment({
-        amount: request.amount,
-        invoiceId: request.invoiceId || this.generateInvoiceId(),
-        orderDescription: request.orderDescription,
-        customerFirstName: request.customerFirstName,
-        customerLastName: request.customerLastName,
-        customerEmail: request.customerEmail,
-        customerMobilePhone: request.customerMobilePhone,
-        customerPhone: request.customerPhone || '',
-        billingAddressStreet: request.billingAddressStreet,
-        billingAddressCity: request.billingAddressCity,
-        billingAddressCountry: request.billingAddressCountry,
-        billingCompanyName: request.billingCompanyName || '',
-        billingAddressStreet2: request.billingAddressStreet2 || '',
-        billingAddressPostcodeZip: request.billingAddressPostcodeZip || '',
-        billingAddressStateProvince: request.billingAddressStateProvince || '',
-        customerRefNo,
-        isSaveCard: request.isSaveCard || '1',
-        doFirstPayment: request.doFirstPayment || '1'
-      });
-
-      // Backend handles checkValue generation and Payable API call
-      // Response should contain the payment URL to redirect to
-      if (response.paymentUrl) {
-        console.log('✅ [PAYMENT] Backend initiated tokenize payment, redirecting to:', response.paymentUrl);
-        window.location.href = response.paymentUrl;
-      } else {
-        throw new Error('Backend did not return payment URL');
+      if (!paymentDataResponse.success || !paymentDataResponse.paymentData) {
+        throw new Error('Failed to generate payment data');
       }
+
+      const paymentData = paymentDataResponse.paymentData;
+
+      // Step 2: Use PAYable SDK with the generated payment data
+      console.log('💳 [SALON BILLING] Calling PAYable SDK with payment data');
+      console.log('💳 [SALON BILLING] Invoice ID:', paymentData.invoiceId);
+      console.log('💳 [SALON BILLING] Customer ID:', paymentData.customerId);
+      console.log('💳 [SALON BILLING] Amount:', paymentData.amount);
+
+      // Call PAYable SDK directly from frontend
+      payablePayment(paymentData, paymentData.testMode);
+      
     } catch (error) {
-      console.error('❌ [PAYMENT] Failed to initiate tokenize payment:', error);
+      console.error('❌ [SALON BILLING] Failed to process salon billing payment:', error);
       throw error;
     }
   }
@@ -428,6 +469,49 @@ export class PaymentService {
       console.error('❌ [PAYMENT] Error getting default payment token:', error);
       return null;
     }
+  }
+
+  /**
+   * Check salon billing status for a specific date
+   */
+  public async checkSalonBillingStatus(salonId: number, billingDate: string): Promise<BillingStatusResponse> {
+    try {
+      console.log('💳 [SALON BILLING] Checking billing status for salon:', salonId, 'date:', billingDate);
+      
+      const response = await fetch(`${getCurrentConfig().API_BASE_URL}/payments/salon-billing/billing-status/${salonId}?date=${billingDate}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      console.log('✅ [SALON BILLING] Billing status retrieved:', data.isPaid ? 'PAID' : 'PENDING');
+      return data;
+      
+    } catch (error) {
+      console.error('❌ [SALON BILLING] Failed to check billing status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Calculate daily charges for salon billing
+   */
+  public calculateDailyCharges(appointments: any[], serviceChargePerAppointment: number): number {
+    return appointments.length * serviceChargePerAppointment;
+  }
+
+  /**
+   * Get today's date in YYYY-MM-DD format
+   */
+  public getTodayDateString(): string {
+    return new Date().toISOString().split('T')[0];
   }
 }
 
