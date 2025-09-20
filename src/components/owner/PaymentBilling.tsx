@@ -12,12 +12,29 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { paymentService, PaymentRequest } from '../../services/paymentService';
-import { backendPaymentService, BackendSavedCard } from '../../services/backendPaymentService';
 import { webhookHandler } from '../../services/webhookHandler';
 import { webSocketPaymentService, PaymentStatusEvent, TokenSavedEvent } from '../../services/webSocketPaymentService';
 import { testEnvironmentVariables } from '../../utils/environmentTest';
+import { getCurrentConfig } from '../../config/environment';
 import Toast from '../shared/Toast';
 import { useAuth } from '../../contexts/AuthContext';
+
+interface SavedCard {
+  id: number;
+  tokenId: string;
+  customerRefNo: string;
+  salonId: number;
+  maskedCardNo: string;
+  cardExpiry: string | null;
+  cardScheme: string;
+  cardHolderName: string;
+  nickname: string | null;
+  isDefaultCard: boolean;
+  tokenStatus: string;
+  createdAt: string;
+  updatedAt: string;
+  lastUsedAt: string | null;
+}
 
 interface AppointmentCharge {
   id: string;
@@ -32,16 +49,23 @@ interface AppointmentCharge {
   paymentMethod?: string;
 }
 
+interface PaymentOption {
+  type: 'saved_card' | 'new_card';
+  cardData?: SavedCard;
+}
+
 const PaymentBilling: React.FC = () => {
   // Get salon owner data from auth context
   const { salon } = useAuth();
   
   // Payable IPG Integration States
   const [payableConfig] = useState(paymentService.getConfigStatus());
-  const [savedCards, setSavedCards] = useState<BackendSavedCard[]>([]);
+  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [loadingCards, setLoadingCards] = useState(false);
   const [loadingPayment, setLoadingPayment] = useState(false);
+  const [redirectingToIPG, setRedirectingToIPG] = useState(false);
+  const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<string>(''); // Will be set based on salon data
   
@@ -167,32 +191,43 @@ const PaymentBilling: React.FC = () => {
     setError(null);
     
     try {
-      console.log('🔄 [PAYMENT] Loading saved cards from backend for salon:', salon.salonId);
+      console.log('🔄 [PAYMENT] Loading saved cards from backend API for salon:', salon.salonId);
       
-      // Generate a numeric customer ID based on salon (for backend API)
-      const numericCustomerId = parseInt(salon.salonId.toString()) || 1;
-      
-      const response = await backendPaymentService.getSavedTokens(numericCustomerId, salon.salonId);
-      setSavedCards(response.tokens);
-      console.log('✅ [PAYMENT] Successfully loaded', response.tokens.length, 'saved cards from backend');
+      // Call the new API endpoint with authentication
+      const response = await fetch(`${getCurrentConfig().API_BASE_URL}/payments/tokens`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}` // Add auth token
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setSavedCards(data.tokens || []);
+      console.log('✅ [PAYMENT] Successfully loaded', data.tokens?.length || 0, 'saved cards from backend API');
     } catch (error) {
       console.error('Failed to load saved cards:', error);
       setError('Failed to load saved cards. Please try again.');
       showToast('error', 'Failed to load saved cards', 'Please check the console for debugging information.');
+      setSavedCards([]);
     } finally {
       setLoadingCards(false);
     }
   };
 
   // Function to delete saved card
-  const handleDeleteSavedCard = async (customerId: string, tokenId: string) => {
+  const handleDeleteSavedCard = async (tokenId: string) => {
     if (!window.confirm('Are you sure you want to delete this saved card?')) {
       return;
     }
 
     try {
       setProcessingPayment(true);
-      const success = await paymentService.deleteSavedCard(customerId, tokenId);
+      const success = await paymentService.deleteSavedCard(tokenId);
       
       if (success) {
         showToast('success', 'Card Deleted', 'Saved card deleted successfully.');
@@ -210,7 +245,6 @@ const PaymentBilling: React.FC = () => {
 
   // Function to edit saved card
   const handleEditSavedCard = async (
-    customerId: string, 
     tokenId: string, 
     nickname?: string, 
     setAsDefault?: boolean
@@ -218,7 +252,6 @@ const PaymentBilling: React.FC = () => {
     try {
       setProcessingPayment(true);
       const success = await paymentService.editSavedCard(
-        customerId, 
         tokenId, 
         nickname, 
         setAsDefault ? 1 : 0
@@ -290,6 +323,7 @@ const PaymentBilling: React.FC = () => {
 
     try {
       setProcessingPayment(true);
+      setRedirectingToIPG(true);
       setError(null);
       
       // Generate invoice ID for tracking
@@ -298,14 +332,14 @@ const PaymentBilling: React.FC = () => {
       // Create tokenization payment request (zero amount to save card only)
       const paymentRequest: PaymentRequest = {
         amount: '0.00', // Zero amount for card tokenization only
-        currencyCode: 'LKR', // Added missing currency code
+        currencyCode: 'LKR',
         invoiceId,
         orderDescription: 'Add Payment Card - Tokenization Only',
         customerFirstName: salon?.ownerFirstName || 'Salon',
         customerLastName: salon?.ownerLastName || 'Owner',
         customerEmail: salon?.ownerEmail || 'owner@salon.com',
         customerMobilePhone: salon?.ownerPhone?.startsWith('+') ? salon.ownerPhone : `+94${salon?.ownerPhone?.replace(/^0/, '') || '771234567'}`,
-        customerRefNo: selectedCustomer, // Use the same customer ID for consistency
+        customerRefNo: selectedCustomer,
         paymentType: '3', // Tokenize payment
         isSaveCard: '1', // Save card for future use
         doFirstPayment: '0', // No initial payment
@@ -316,12 +350,9 @@ const PaymentBilling: React.FC = () => {
         billingAddressPostcodeZip: salon?.postalCode || '00100'
       };
 
-      console.log('🔍 [PAYMENT] Add card with alphanumeric customer ID:', selectedCustomer);
+      console.log('🔍 [PAYMENT] Add card with customer ID:', selectedCustomer);
 
-      // Process tokenization payment - this will redirect to IPG
-      await paymentService.processTokenizePayment(paymentRequest);
-      
-      // Subscribe to payment status via WebSocket since webhooks are server-side only
+      // Subscribe to payment status via WebSocket
       webSocketPaymentService.subscribeToPayment(invoiceId, (status: PaymentStatusEvent) => {
         console.log('🔔 [PAYMENT] Payment status update via WebSocket:', status);
         
@@ -331,15 +362,21 @@ const PaymentBilling: React.FC = () => {
         } else if (status.status === 'FAILED') {
           showToast('error', 'Card Addition Failed', 'Unable to save your payment card. Please try again.');
         }
-        // For PENDING status, we don't show notification yet
+        setRedirectingToIPG(false);
       });
       
-      showToast('info', 'Redirecting to Payment Gateway', 'You will be redirected to add your payment card. The page will automatically update when complete.');
+      showToast('info', 'Redirecting to Payment Gateway', 'Please wait while we redirect you to add your payment card...');
+      
+      // Add a small delay before redirecting
+      setTimeout(async () => {
+        await paymentService.processTokenizePayment(paymentRequest);
+      }, 1500);
       
     } catch (error) {
       console.error('Add card error:', error);
       setError('Failed to add card. Please try again.');
       showToast('error', 'Add Card Failed', 'Unable to add payment card. Please try again.');
+      setRedirectingToIPG(false);
     } finally {
       setProcessingPayment(false);
     }
@@ -357,9 +394,24 @@ const PaymentBilling: React.FC = () => {
       return;
     }
 
+    // Check if there are saved cards
+    const activeCards = savedCards.filter(card => card.tokenStatus === 'ACTIVE');
+    if (activeCards.length > 0) {
+      setShowPaymentOptions(true);
+      return;
+    }
+
+    // No saved cards, proceed with new card payment
+    await handlePayWithNewCard();
+  };
+
+  const handlePayWithNewCard = async () => {
+    const totalAmount = totalPendingAmount.toFixed(2);
+    
     try {
       setProcessingPayment(true);
       setLoadingPayment(true);
+      setRedirectingToIPG(true);
       setError(null);
       
       // Generate invoice ID for tracking
@@ -368,15 +420,15 @@ const PaymentBilling: React.FC = () => {
       // Create payment request for Payable IPG
       const paymentRequest: PaymentRequest = {
         amount: totalAmount,
-        currencyCode: 'LKR', // Added missing currency code
+        currencyCode: 'LKR',
         invoiceId,
         orderDescription: `Salon Appointment Charges - ${pendingCharges.length} charges`,
         customerFirstName: salon?.ownerFirstName || 'Salon',
         customerLastName: salon?.ownerLastName || 'Owner',
         customerEmail: salon?.ownerEmail || 'owner@salon.com',
         customerMobilePhone: salon?.ownerPhone?.startsWith('+') ? salon.ownerPhone : `+94${salon?.ownerPhone?.replace(/^0/, '') || '771234567'}`,
-        customerRefNo: selectedCustomer || `SALON${Date.now()}`, // Use consistent customer ID (alphanumeric only)
-        paymentType: '1', // One-time payment
+        customerRefNo: selectedCustomer || `SALON${Date.now()}`,
+        paymentType: '1',
         billingAddressStreet: 'N/A',
         billingAddressCity: salon?.district || 'Colombo',
         billingAddressCountry: 'LKA',
@@ -384,34 +436,36 @@ const PaymentBilling: React.FC = () => {
         billingAddressPostcodeZip: salon?.postalCode || '00100'
       };
 
-      // Process payment through Payable IPG - this will redirect immediately
-      await paymentService.processOneTimePayment(paymentRequest);
-      
-      // Subscribe to payment status via WebSocket since webhooks are server-side only
+      // Subscribe to payment status via WebSocket
       webSocketPaymentService.subscribeToPayment(invoiceId, (status: PaymentStatusEvent) => {
         console.log('🔔 [PAYMENT] Payment status update via WebSocket:', status);
         
         if (status.status === 'SUCCESS') {
           showToast('success', 'Payment Successful', `Successfully paid Rs. ${totalAmount} for appointment charges.`);
-          // In a real app, you'd refresh the pending charges data here
         } else if (status.status === 'FAILED') {
           showToast('error', 'Payment Failed', 'Unable to process payment. Please try again.');
         }
-        // For PENDING status, we don't show notification yet
+        setRedirectingToIPG(false);
       });
+
+      showToast('info', 'Redirecting to Payment Gateway', 'Please wait while we redirect you to the payment gateway...');
       
-      showToast('info', 'Processing Payment', 'You will be redirected to complete payment. The page will automatically update when complete.');
+      // Add a small delay before redirecting
+      setTimeout(async () => {
+        await paymentService.processOneTimePayment(paymentRequest);
+      }, 1500);
       
     } catch (error) {
       console.error('Payment error:', error);
       setError('Failed to process payment. Please try again.');
       showToast('error', 'Payment Failed', 'Unable to process payment. Please try again.');
+      setRedirectingToIPG(false);
     } finally {
       setProcessingPayment(false);
       setLoadingPayment(false);
     }
   };  // Function to pay with saved card
-  const handlePayWithSavedCard = async (customerId: string, tokenId: string) => {
+  const handlePayWithSavedCard = async (tokenId: string) => {
     if (!payableConfig.isConfigured) {
       showToast('warning', 'Payment Gateway Not Configured', 'Please configure Payable IPG first.');
       return;
@@ -425,35 +479,52 @@ const PaymentBilling: React.FC = () => {
 
     try {
       setProcessingPayment(true);
+      setRedirectingToIPG(true);
       
       const invoiceId = paymentService.generateInvoiceId();
       const orderDescription = `Salon Appointment Charges - ${pendingCharges.length} charges`;
       
+      // Subscribe to payment status via WebSocket
+      webSocketPaymentService.subscribeToPayment(invoiceId, (status: PaymentStatusEvent) => {
+        console.log('🔔 [PAYMENT] Saved card payment status update via WebSocket:', status);
+        
+        if (status.status === 'SUCCESS') {
+          showToast('success', 'Payment Successful', `Successfully paid Rs. ${totalAmount} for appointment charges.`);
+          // Update charges to paid status
+          setAppointmentCharges(appointmentCharges.map(charge =>
+            charge.status === 'pending'
+              ? {
+                  ...charge,
+                  status: 'paid' as const,
+                  paidAt: new Date(),
+                  paymentMethod: 'Payable IPG'
+                }
+              : charge
+          ));
+        } else if (status.status === 'FAILED') {
+          showToast('error', 'Payment Failed', 'Unable to process payment with saved card.');
+        }
+        setRedirectingToIPG(false);
+      });
+
+      showToast('info', 'Processing Payment with Saved Card', 'Please wait while we process your payment...');
+
+      // Use the paymentService method that follows PAYable API guidelines
       await paymentService.payWithSavedCard(
-        customerId,
-        tokenId,
-        totalAmount,
-        invoiceId,
-        orderDescription
+        selectedCustomer, // customerId
+        tokenId,         // tokenId
+        totalAmount,     // amount
+        invoiceId,       // invoiceId
+        orderDescription, // orderDescription
+        'https://salon.run.place:8090/api/v1/payments/webhook', // webhookUrl
+        'payment',       // custom1
+        'salon_charges'  // custom2
       );
-      
-      showToast('success', 'Payment Successful', 'Payment processed successfully!');
-      
-      // Update charges to paid status
-      setAppointmentCharges(appointmentCharges.map(charge =>
-        charge.status === 'pending'
-          ? {
-              ...charge,
-              status: 'paid' as const,
-              paidAt: new Date(),
-              paymentMethod: 'Payable IPG'
-            }
-          : charge
-      ));
       
     } catch (error) {
       console.error('Saved card payment error:', error);
       showToast('error', 'Payment Failed', 'Unable to process payment with saved card.');
+      setRedirectingToIPG(false);
     } finally {
       setProcessingPayment(false);
     }
@@ -706,7 +777,7 @@ const PaymentBilling: React.FC = () => {
                   
                   {card.tokenStatus === 'ACTIVE' && pendingCharges.length > 0 && (
                     <button
-                      onClick={() => handlePayWithSavedCard(selectedCustomer, card.tokenId)}
+                      onClick={() => handlePayWithSavedCard(card.tokenId)}
                       disabled={processingPayment}
                       className="w-full mt-3 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors duration-200 text-sm"
                     >
@@ -717,7 +788,7 @@ const PaymentBilling: React.FC = () => {
                   {/* Card Management Buttons */}
                   <div className="flex space-x-2 mt-3">
                     <button
-                      onClick={() => handleEditSavedCard(selectedCustomer, card.tokenId, card.nickname, !card.isDefaultCard)}
+                      onClick={() => handleEditSavedCard(card.tokenId, card.nickname || undefined, !card.isDefaultCard)}
                       disabled={processingPayment}
                       className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors duration-200 text-sm flex items-center justify-center space-x-1"
                     >
@@ -725,7 +796,7 @@ const PaymentBilling: React.FC = () => {
                       <span>{card.isDefaultCard ? 'Remove Default' : 'Set Default'}</span>
                     </button>
                     <button
-                      onClick={() => handleDeleteSavedCard(selectedCustomer, card.tokenId)}
+                      onClick={() => handleDeleteSavedCard(card.tokenId)}
                       disabled={processingPayment}
                       className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 transition-colors duration-200 text-sm flex items-center justify-center space-x-1"
                     >
@@ -841,6 +912,100 @@ const PaymentBilling: React.FC = () => {
           />
         ))}
       </div>
+
+      {/* Loading Spinner Overlay */}
+      {redirectingToIPG && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-8 max-w-md mx-4 text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-4"></div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Redirecting to Payment Gateway</h3>
+            <p className="text-gray-600">Please wait while we redirect you to PAYable IPG...</p>
+            <div className="mt-4 text-sm text-gray-500">
+              This may take a few moments. Please do not close this window.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Options Modal */}
+      {showPaymentOptions && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-semibold text-gray-900">Choose Payment Method</h3>
+              <button
+                onClick={() => setShowPaymentOptions(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <AlertCircle className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="mb-6">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-center space-x-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                  <div>
+                    <h4 className="font-medium text-amber-900">Pending Payment</h4>
+                    <p className="text-amber-700">Total amount: Rs. {totalPendingAmount.toFixed(2)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="font-medium text-gray-900">Saved Cards</h4>
+              <div className="space-y-3">
+                {savedCards.filter(card => card.tokenStatus === 'ACTIVE').map((card) => (
+                  <div key={card.tokenId} className="border border-gray-200 rounded-lg p-4 hover:border-purple-300 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <CreditCard className="w-5 h-5 text-gray-600" />
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <span className="font-medium text-gray-900">{card.maskedCardNo}</span>
+                            <span className="text-sm text-gray-500">{card.cardScheme}</span>
+                            {card.isDefaultCard && (
+                              <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-600">{card.cardHolderName}</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowPaymentOptions(false);
+                          handlePayWithSavedCard(card.tokenId);
+                        }}
+                        disabled={processingPayment}
+                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors duration-200"
+                      >
+                        Pay Rs. {totalPendingAmount.toFixed(2)}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowPaymentOptions(false);
+                    handlePayWithNewCard();
+                  }}
+                  disabled={processingPayment}
+                  className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 transition-colors duration-200 flex items-center justify-center space-x-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Pay with New Card</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

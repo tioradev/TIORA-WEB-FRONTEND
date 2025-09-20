@@ -305,7 +305,8 @@ export class PaymentService {
   }
 
   /**
-   * Pay with saved card using JWT authentication - Now uses backend API
+   * Pay with saved card using PAYable API directly
+   * Follows PAYable documentation for tokenize payment
    */
   public async payWithSavedCard(
     customerId: string,
@@ -318,30 +319,91 @@ export class PaymentService {
     custom2?: string
   ): Promise<void> {
     try {
-      console.log('💳 [PAYMENT] Paying with saved card via backend API');
+      console.log('💳 [PAYMENT] Paying with saved card via PAYable API');
       
-      const response = await apiService.payWithToken({
-        customerId,
-        tokenId,
-        amount,
-        invoiceId,
-        orderDescription,
-        webhookUrl,
-        custom1,
-        custom2
+      // Step 1: Generate JWT Access Token
+      const basicAuth = btoa(`${payableConfig.businessKey}:${payableConfig.businessToken}`);
+      const apiBaseUrl = payableConfig.testMode 
+        ? 'https://sandboxipgpayment.payable.lk' 
+        : 'https://ipgpayment.payable.lk';
+      
+      console.log('🔑 [PAYMENT] Generating JWT access token...');
+      const authResponse = await fetch(`${apiBaseUrl}/ipg/v2/auth/tokenize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${basicAuth}`
+        },
+        body: JSON.stringify({
+          grant_type: 'client_credentials'
+        })
       });
 
-      // Backend handles checkValue generation and Payable API call
-      if (response.success) {
-        console.log('✅ [PAYMENT] Payment with saved card successful');
-        if (response.redirectUrl) {
-          window.location.href = response.redirectUrl;
-        } else if (response.payableTransactionId) {
-          window.location.href = `/payment/success?transaction=${response.payableTransactionId}`;
-        }
-      } else {
-        throw new Error(response.error || 'Payment failed');
+      if (!authResponse.ok) {
+        throw new Error(`Auth failed: ${authResponse.status} ${authResponse.statusText}`);
       }
+
+      const authData = await authResponse.json();
+      const accessToken = authData.accessToken;
+      
+      if (!accessToken) {
+        throw new Error('Failed to obtain access token');
+      }
+
+      console.log('✅ [PAYMENT] JWT access token obtained');
+
+      // Step 2: Generate checkValue for saved card payment
+      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
+      const checkValue = CryptoJS.SHA512(
+        `${payableConfig.merchantKey}|${invoiceId}|${amount}|LKR|${customerId}|${tokenId}|${merchantToken}`
+      ).toString().toUpperCase();
+
+      // Step 3: Make payment with saved card
+      const paymentData = {
+        merchantId: payableConfig.merchantKey,
+        customerId,
+        tokenId,
+        invoiceId,
+        amount,
+        currencyCode: 'LKR',
+        checkValue,
+        webhookUrl: webhookUrl || 'https://salon.run.place:8090/api/v1/payments/webhook',
+        custom1: custom1 || '',
+        custom2: custom2 || ''
+      };
+
+      console.log('💳 [PAYMENT] Processing payment with saved card...');
+      console.log('💳 [PAYMENT] Merchant ID:', paymentData.merchantId);
+      console.log('💳 [PAYMENT] Customer ID:', paymentData.customerId);
+      console.log('💳 [PAYMENT] Token ID:', paymentData.tokenId);
+      console.log('💳 [PAYMENT] Amount:', paymentData.amount);
+
+      const paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify(paymentData)
+      });
+
+      if (!paymentResponse.ok) {
+        const errorData = await paymentResponse.json().catch(() => ({}));
+        throw new Error(`Payment failed: ${paymentResponse.status} ${paymentResponse.statusText} - ${JSON.stringify(errorData)}`);
+      }
+
+      const paymentResult = await paymentResponse.json();
+      console.log('✅ [PAYMENT] Payment with saved card successful:', paymentResult);
+
+      // Handle the response - typically PAYable will redirect or provide status
+      if (paymentResult.redirectUrl) {
+        window.location.href = paymentResult.redirectUrl;
+      } else if (paymentResult.success) {
+        console.log('✅ [PAYMENT] Payment processed successfully');
+      } else {
+        throw new Error(paymentResult.error || 'Payment failed');
+      }
+      
     } catch (error) {
       console.error('❌ [PAYMENT] Error paying with saved card:', error);
       throw error;
