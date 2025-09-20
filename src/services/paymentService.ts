@@ -328,19 +328,54 @@ export class PaymentService {
         : 'https://ipgpayment.payable.lk';
       
       console.log('🔑 [PAYMENT] Generating JWT access token...');
-      const authResponse = await fetch(`${apiBaseUrl}/ipg/v2/auth/tokenize`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${basicAuth}`
-        },
-        body: JSON.stringify({
-          grant_type: 'client_credentials'
-        })
-      });
+      console.log('🔑 [PAYMENT] Business Key:', payableConfig.businessKey);
+      console.log('🔑 [PAYMENT] Business Token:', payableConfig.businessToken?.substring(0, 8) + '...');
+      console.log('🔑 [PAYMENT] Basic Auth:', basicAuth.substring(0, 20) + '...');
+      console.log('🔑 [PAYMENT] API Base URL:', apiBaseUrl);
+      
+      // Try different possible endpoints
+      const possibleEndpoints = [
+        `${apiBaseUrl}/ipg/v2/auth/token`,
+        `${apiBaseUrl}/ipg/v2/auth/tokenize`,
+        `${apiBaseUrl}/auth/token`,
+        `${apiBaseUrl}/auth/tokenize`
+      ];
+      
+      let authResponse;
+      let lastError;
+      
+      for (const endpoint of possibleEndpoints) {
+        console.log('🔍 [PAYMENT] Trying endpoint:', endpoint);
+        try {
+          authResponse = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Basic ${basicAuth}`
+            },
+            body: JSON.stringify({
+              grant_type: 'client_credentials'
+            })
+          });
+          
+          if (authResponse.ok) {
+            console.log('✅ [PAYMENT] Successful auth endpoint:', endpoint);
+            break;
+          } else {
+            console.log(`❌ [PAYMENT] Failed endpoint ${endpoint}:`, authResponse.status, authResponse.statusText);
+            lastError = `${endpoint}: ${authResponse.status} ${authResponse.statusText}`;
+          }
+        } catch (error) {
+          console.log(`❌ [PAYMENT] Error with endpoint ${endpoint}:`, error);
+          lastError = `${endpoint}: ${error}`;
+        }
+      }
 
-      if (!authResponse.ok) {
-        throw new Error(`Auth failed: ${authResponse.status} ${authResponse.statusText}`);
+      if (!authResponse || !authResponse.ok) {
+        const errorMsg = authResponse 
+          ? `Auth failed: ${authResponse.status} ${authResponse.statusText}` 
+          : `All auth endpoints failed. Last error: ${lastError}`;
+        throw new Error(errorMsg);
       }
 
       const authData = await authResponse.json();
