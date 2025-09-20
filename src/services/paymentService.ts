@@ -523,7 +523,7 @@ export class PaymentService {
         orderDescription: request.orderDescription || 'Card tokenization',
         invoiceId: request.invoiceId,
         logoUrl: 'https://salon.run.place/images/logo.png', // Default logo
-        notifyUrl: 'https://salon.run.place:8090/api/v1/payments/webhook/tokenize', // Backend webhook
+        notifyUrl: 'https://salon.run.place:8090/api/v1/payments/webhook', // Fixed: Use main webhook endpoint
         returnUrl: `${window.location.origin}/payment/success`, // Frontend success page
         merchantKey: payableConfig.merchantKey,
         customerFirstName: request.customerFirstName,
@@ -583,7 +583,7 @@ export class PaymentService {
         orderDescription: request.orderDescription || 'One-time payment',
         invoiceId: request.invoiceId,
         logoUrl: 'https://salon.run.place/images/logo.png', // Default logo
-        notifyUrl: 'https://salon.run.place:8090/api/v1/payments/webhook/onetime', // Backend webhook
+        notifyUrl: 'https://salon.run.place:8090/api/v1/payments/webhook', // Fixed: Use main webhook endpoint
         returnUrl: `${window.location.origin}/payment/success`, // Frontend success page
         merchantKey: payableConfig.merchantKey,
         customerFirstName: request.customerFirstName,
