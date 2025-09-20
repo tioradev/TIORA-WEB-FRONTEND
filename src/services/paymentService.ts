@@ -449,7 +449,7 @@ export class PaymentService {
       console.log('🔑 [PAYMENT] Authorization header format:', authorizationHeader.substring(0, 30) + '...');
 
       // For saved card payments, use /tokenize/pay endpoint with JWT Bearer authentication
-      console.log('🔍 [PAYMENT] Making saved card payment with JWT Bearer token authentication...');
+      console.log('🔍 [PAYMENT] Making saved card payment with JWT Bearer token authentication (FIXED ENDPOINT)...');
       
       let paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
         method: 'POST',
@@ -464,7 +464,7 @@ export class PaymentService {
 
       let authMethod = 'JWT Bearer Token';
 
-      console.log('📤 [PAYMENT] Request sent to:', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
+      console.log('📤 [PAYMENT] Request sent to (FIXED):', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
       console.log('📤 [PAYMENT] Authentication method used:', authMethod);
       console.log('📤 [PAYMENT] Request headers:', {
         'Content-Type': 'application/json',
@@ -473,7 +473,7 @@ export class PaymentService {
       });
       console.log('📤 [PAYMENT] Full request payload:', JSON.stringify(paymentData, null, 2));
 
-      console.log('📤 [PAYMENT] Request sent to:', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
+      console.log('📤 [PAYMENT] Request sent to (DUPLICATE LOG):', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
       console.log('📤 [PAYMENT] Request headers:', {
         'Content-Type': 'application/json',
         'Authorization': authorizationHeader.substring(0, 30) + '...',
