@@ -7,6 +7,7 @@ import { getCurrentConfig } from '../config/environment';
 
 export interface PaymentRequest {
   amount: string;
+  currencyCode: string; // Added missing currency code
   invoiceId: string;
   orderDescription: string;
   customerFirstName: string;
@@ -502,60 +503,118 @@ export class PaymentService {
 
   /**
    * Process payment with card tokenization (for adding new cards)
-   * This is separate from salon billing and used for individual card management
+   * This is direct PAYable SDK integration for card management
    */
   public async processTokenizePayment(request: PaymentRequest): Promise<void> {
     try {
       console.log('💳 [CARD MANAGEMENT] Processing tokenize payment to add new card');
-      console.log('🔍 [PAYMENT] Add card with alphanumeric customer ID:', request.customerRefNo);
+      console.log('🔍 [PAYMENT] Customer Ref:', request.customerRefNo);
       
-      // Generate payment data for tokenization
-      const billingRequest: SalonBillingRequest = {
-        salonId: parseInt(request.customerRefNo?.replace('SALON_', '') || '0'),
-        billingDate: this.getTodayDateString(),
-        totalAmount: request.amount,
-        currency: 'LKR',
-        appointmentCount: 1,
-        description: 'Card tokenization payment'
-      };
-
-      const paymentDataResponse = await this.generateSalonBillingPaymentData(billingRequest);
+      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
       
-      if (!paymentDataResponse.success || !paymentDataResponse.paymentData) {
-        throw new Error('Failed to generate payment data for tokenization');
-      }
+      // Generate checkValue for tokenization (includes customerRefNo)
+      const checkValue = CryptoJS.SHA512(
+        `${payableConfig.merchantKey}|${request.invoiceId}|${request.amount}|${request.currencyCode}|${request.customerRefNo}|${merchantToken}`
+      ).toString().toUpperCase();
 
-      const paymentData = paymentDataResponse.paymentData;
-
-      // Override with tokenization-specific settings
+      // Create tokenization payment object
       const tokenizePayment = {
-        ...paymentData,
-        paymentType: '3', // Tokenize payment
-        isSaveCard: '1',
-        doFirstPayment: request.doFirstPayment || '1',
+        checkValue,
+        orderDescription: request.orderDescription || 'Card tokenization',
+        invoiceId: request.invoiceId,
+        logoUrl: 'https://salon.run.place/images/logo.png', // Default logo
+        notifyUrl: 'https://salon.run.place:8090/api/v1/payments/webhook/tokenize', // Backend webhook
+        returnUrl: `${window.location.origin}/payment/success`, // Frontend success page
+        merchantKey: payableConfig.merchantKey,
         customerFirstName: request.customerFirstName,
         customerLastName: request.customerLastName,
-        customerEmail: request.customerEmail,
         customerMobilePhone: request.customerMobilePhone,
         customerPhone: request.customerPhone || '',
-        billingAddressStreet: request.billingAddressStreet,
-        billingAddressCity: request.billingAddressCity,
-        billingAddressCountry: request.billingAddressCountry || 'LKA',
+        customerEmail: request.customerEmail,
         billingCompanyName: request.billingCompanyName || '',
+        billingAddressStreet: request.billingAddressStreet,
         billingAddressStreet2: request.billingAddressStreet2 || '',
+        billingAddressCity: request.billingAddressCity,
+        billingAddressStateProvince: request.billingAddressStateProvince || '',
+        billingAddressCountry: request.billingAddressCountry || 'LKA',
         billingAddressPostcodeZip: request.billingAddressPostcodeZip || '',
-        billingAddressStateProvince: request.billingAddressStateProvince || ''
+        amount: request.amount,
+        currencyCode: request.currencyCode,
+        paymentType: '3', // Tokenize payment
+        isSaveCard: '1', // Save card
+        customerRefNo: request.customerRefNo, // Customer reference for tokenization
+        doFirstPayment: request.doFirstPayment || '1', // Charge immediately
+        custom1: request.custom1 || '',
+        custom2: request.custom2 || ''
       };
 
       console.log('💳 [CARD MANAGEMENT] Calling PAYable SDK for card tokenization');
-      console.log('💳 [CARD MANAGEMENT] Customer ID:', tokenizePayment.customerId);
       console.log('💳 [CARD MANAGEMENT] Payment Type:', tokenizePayment.paymentType);
+      console.log('💳 [CARD MANAGEMENT] Customer Ref:', tokenizePayment.customerRefNo);
+      console.log('💳 [CARD MANAGEMENT] Invoice ID:', tokenizePayment.invoiceId);
 
-      // Call PAYable SDK for tokenization
-      payablePayment(tokenizePayment, tokenizePayment.testMode);
+      // Call PAYable SDK directly for tokenization
+      payablePayment(tokenizePayment, payableConfig.testMode);
       
     } catch (error) {
       console.error('❌ [CARD MANAGEMENT] Failed to process tokenize payment:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Process one-time payment (regular payment without tokenization)
+   */
+  public async processOneTimePayment(request: PaymentRequest): Promise<void> {
+    try {
+      console.log('💳 [PAYMENT] Processing one-time payment');
+      console.log('🔍 [PAYMENT] Invoice ID:', request.invoiceId);
+      
+      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
+      
+      // Generate checkValue for one-time payment (no customerRefNo)
+      const checkValue = CryptoJS.SHA512(
+        `${payableConfig.merchantKey}|${request.invoiceId}|${request.amount}|${request.currencyCode}|${merchantToken}`
+      ).toString().toUpperCase();
+
+      // Create one-time payment object
+      const oneTimePayment = {
+        checkValue,
+        orderDescription: request.orderDescription || 'One-time payment',
+        invoiceId: request.invoiceId,
+        logoUrl: 'https://salon.run.place/images/logo.png', // Default logo
+        notifyUrl: 'https://salon.run.place:8090/api/v1/payments/webhook/onetime', // Backend webhook
+        returnUrl: `${window.location.origin}/payment/success`, // Frontend success page
+        merchantKey: payableConfig.merchantKey,
+        customerFirstName: request.customerFirstName,
+        customerLastName: request.customerLastName,
+        customerMobilePhone: request.customerMobilePhone,
+        customerPhone: request.customerPhone || '',
+        customerEmail: request.customerEmail,
+        billingCompanyName: request.billingCompanyName || '',
+        billingAddressStreet: request.billingAddressStreet,
+        billingAddressStreet2: request.billingAddressStreet2 || '',
+        billingAddressCity: request.billingAddressCity,
+        billingAddressStateProvince: request.billingAddressStateProvince || '',
+        billingAddressCountry: request.billingAddressCountry || 'LKA',
+        billingAddressPostcodeZip: request.billingAddressPostcodeZip || '',
+        amount: request.amount,
+        currencyCode: request.currencyCode,
+        paymentType: '1', // One-time payment
+        isSaveCard: request.isSaveCard || '0', // Don't save card by default
+        custom1: request.custom1 || '',
+        custom2: request.custom2 || ''
+      };
+
+      console.log('💳 [PAYMENT] Calling PAYable SDK for one-time payment');
+      console.log('💳 [PAYMENT] Payment Type:', oneTimePayment.paymentType);
+      console.log('💳 [PAYMENT] Invoice ID:', oneTimePayment.invoiceId);
+
+      // Call PAYable SDK directly for one-time payment
+      payablePayment(oneTimePayment, payableConfig.testMode);
+      
+    } catch (error) {
+      console.error('❌ [PAYMENT] Failed to process one-time payment:', error);
       throw error;
     }
   }
