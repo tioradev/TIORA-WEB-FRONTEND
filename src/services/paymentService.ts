@@ -412,17 +412,30 @@ export class PaymentService {
       console.log('� [PAYMENT] - CheckValue String (for reference):', checkValueString);
       console.log('� [PAYMENT] - CheckValue (for reference):', checkValue.substring(0, 20) + '...');
 
-      // NOTE: The API specification requires NO REQUEST BODY for /tokenize/pay endpoint
-      // All payment details are managed through the JWT token authentication only
+      // Prepare payment data with required fields as per API error response
+      const paymentData: any = {
+        merchantId: merchantId, // Use correct Payable merchant ID value  
+        customerId: customerId, // Use correct Payable customer ID value
+        tokenId,
+        invoiceId,
+        amount,
+        currencyCode: 'LKR',
+        checkValue,
+        webhookUrl: webhookUrl || 'https://salon.run.place:8090/api/v1/payments/webhook'
+      };
+
+      // Add optional custom fields
+      if (custom1) paymentData.custom1 = custom1;
+      if (custom2) paymentData.custom2 = custom2;
 
       // Use Bearer token authentication as required by the API
       const authorizationHeader = `Bearer ${jwtToken}`;
       console.log('🔑 [PAYMENT] Using Bearer token authentication for /tokenize/pay endpoint');
       console.log('🔑 [PAYMENT] Bearer token:', authorizationHeader.substring(0, 50) + '...');
 
-      // For saved card payments, use /tokenize/pay endpoint with Bearer token authentication
-      // API specification requires EMPTY REQUEST BODY
-      console.log('🔍 [PAYMENT] Making saved card payment with Bearer token auth and EMPTY REQUEST BODY...');
+      // For saved card payments, use /tokenize/pay endpoint with required request body
+      console.log('🔍 [PAYMENT] Making saved card payment with Bearer token auth and required request body...');
+      console.log('📋 [PAYMENT] Full request payload:', JSON.stringify(paymentData, null, 2));
       
       let paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
         method: 'POST',
@@ -431,8 +444,8 @@ export class PaymentService {
           'Content-Type': 'application/json',
           'Authorization': authorizationHeader, // Use Bearer token
           'Accept': 'application/json'
-        }
-        // NO BODY - API specification requires empty request body
+        },
+        body: JSON.stringify(paymentData) // Send required fields
       });
 
       console.log('📤 [PAYMENT] Request sent to (BEARER TOKEN AUTH):', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
@@ -442,7 +455,7 @@ export class PaymentService {
         'Authorization': authorizationHeader.substring(0, 50) + '...',
         'Accept': 'application/json'
       });
-      console.log('📤 [PAYMENT] Request body: EMPTY (as required by API specification)');
+      console.log('📤 [PAYMENT] Request body sent with required fields:', JSON.stringify(paymentData, null, 2));
       
       console.log('📥 [PAYMENT] Payment response status:', paymentResponse.status, paymentResponse.statusText);
       console.log('📥 [PAYMENT] Payment response headers:', Object.fromEntries(paymentResponse.headers.entries()));
