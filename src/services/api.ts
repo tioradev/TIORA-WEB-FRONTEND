@@ -83,6 +83,9 @@ const ENDPOINTS = {
     UPDATE_TOKEN: '/payments/tokens',
     DEFAULT_TOKEN: '/payments/tokens/default/salon',
   },
+  ANALYTICS: {
+    PAYMENT_STATS: '/analytics/payment-stats', // GET /analytics/payment-stats?salonId={salonId}
+  },
 };
 
 // API Service Class
@@ -1448,6 +1451,20 @@ class ApiService {
       return response;
     } catch (error) {
       envLog.error('❌ [PAYMENT] Error retrieving payment status:', error);
+      throw error;
+    }
+  }
+
+  // Analytics methods
+  async getPaymentAnalytics(salonId: number): Promise<any> {
+    try {
+      const response = await this.request<any>(`${ENDPOINTS.ANALYTICS.PAYMENT_STATS}?salonId=${salonId}`, {
+        method: 'GET'
+      });
+      envLog.info('✅ [ANALYTICS] Retrieved payment analytics');
+      return response;
+    } catch (error) {
+      envLog.error('❌ [ANALYTICS] Error retrieving payment analytics:', error);
       throw error;
     }
   }

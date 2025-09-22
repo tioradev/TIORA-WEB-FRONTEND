@@ -9,12 +9,14 @@ import {
   Calendar,
   Clock,
   AlertCircle,
+  X,
 } from 'lucide-react';
 import { paymentService, PaymentRequest } from '../../services/paymentService';
 import { webSocketPaymentService, PaymentStatusEvent, TokenSavedEvent } from '../../services/webSocketPaymentService';
 import { getCurrentConfig } from '../../config/environment';
 import Toast from '../shared/Toast';
 import { useAuth } from '../../contexts/AuthContext';
+import { apiService } from '../../services/api';
 
 interface SavedCard {
   tokenId: string;
@@ -28,6 +30,57 @@ interface SavedCard {
   // Additional fields for UI display
   cardHolderName?: string; // We can derive or set a default
   isDefaultCard?: boolean; // Convert from defaultCard number
+}
+
+interface BranchStats {
+  branchId: number;
+  branchName: string;
+  appointmentCount: number;
+  pendingAmount: number;
+  historicalPendingAmount: number;
+}
+
+interface BranchIncomeStats {
+  branchId: number;
+  branchName: string;
+  appointmentRevenue: number;
+  serviceCharges: number;
+  netIncome: number;
+}
+
+interface BranchMonthlyStats {
+  branchId: number;
+  branchName: string;
+  monthlyAppointments: number;
+  monthlyRevenue: number;
+  monthlyServiceCharges: number;
+  monthlyNetIncome: number;
+  paidServiceCharges: number;
+  pendingServiceCharges: number;
+}
+
+interface AnalyticsData {
+  salonId: number;
+  analyticsDate: string;
+  totalPendingAmount: number;
+  todayStats: {
+    totalAppointments: number;
+    branchStats: BranchStats[];
+  };
+  todayIncome: {
+    totalAppointmentRevenue: number;
+    totalServiceCharges: number;
+    netIncome: number;
+    branchIncomeStats: BranchIncomeStats[];
+  };
+  monthlyIncome: {
+    monthYear: string;
+    totalMonthlyRevenue: number;
+    totalMonthlyServiceCharges: number;
+    totalMonthlyNetIncome: number;
+    branchMonthlyStats: BranchMonthlyStats[];
+  };
+  serviceCharge: number;
 }
 
 interface AppointmentCharge {
@@ -59,6 +112,8 @@ const PaymentBilling: React.FC = () => {
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<string>(''); // Will be set based on salon data
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
   
   // Toast states
   const [toasts, setToasts] = useState<Array<{
@@ -88,6 +143,9 @@ const PaymentBilling: React.FC = () => {
     if (payableConfig.isConfigured && selectedCustomer) {
       loadSavedCards();
     }
+    
+    // Load analytics data when component mounts
+    loadAnalyticsData();
     
     // Add page refresh when user returns from external payment gateway
     const handleVisibilityChange = () => {
@@ -276,9 +334,39 @@ const PaymentBilling: React.FC = () => {
     }
   };
 
+  const loadAnalyticsData = async () => {
+    if (!salon?.salonId) {
+      console.warn('🟡 [ANALYTICS] No salon ID available, skipping analytics loading');
+      return;
+    }
+
+    setIsLoadingAnalytics(true);
+    try {
+      console.log('🔄 [ANALYTICS] Loading payment analytics for salon:', salon.salonId);
+      const data = await apiService.getPaymentAnalytics(salon.salonId);
+      console.log('📊 [ANALYTICS] Retrieved analytics data:', data);
+      setAnalyticsData(data);
+    } catch (error: any) {
+      console.error('❌ [ANALYTICS] Error loading analytics data:', error);
+      // Don't show error to user, just log it - this is not critical for payment functionality
+    } finally {
+      setIsLoadingAnalytics(false);
+    }
+  };
+
   // Function to delete saved card
   const handleDeleteSavedCard = async (tokenId: string) => {
-    if (!window.confirm('Are you sure you want to delete this saved card?')) {
+    const selectedCard = savedCards.find(card => card.tokenId === tokenId);
+    const cardInfo = selectedCard ? `${selectedCard.cardScheme} ending in ${selectedCard.maskedCardNo.slice(-4)}` : 'this card';
+    
+    const confirmed = window.confirm(
+      `⚠️ DELETE PAYMENT CARD\n\n` +
+      `Are you sure you want to permanently delete ${cardInfo}?\n\n` +
+      `This action cannot be undone and you will need to add the card again if you want to use it for future payments.\n\n` +
+      `Click OK to delete or Cancel to keep the card.`
+    );
+    
+    if (!confirmed) {
       return;
     }
 
@@ -295,14 +383,14 @@ const PaymentBilling: React.FC = () => {
       const success = await paymentService.deleteSavedCard(payableMerchantId, payableCustomerId, tokenId);
       
       if (success) {
-        showToast('success', 'Card Deleted', 'Saved card deleted successfully.');
+        showToast('success', 'Card Deleted', `${cardInfo} has been successfully removed from your account.`);
         loadSavedCards(); // Reload the cards list
       } else {
-        showToast('error', 'Delete Failed', 'Failed to delete saved card.');
+        showToast('error', 'Delete Failed', 'Failed to delete saved card. Please try again.');
       }
     } catch (error) {
       console.error('Delete card error:', error);
-      showToast('error', 'Delete Failed', 'Unable to delete saved card.');
+      showToast('error', 'Delete Failed', 'Unable to delete saved card. Please check your connection and try again.');
     } finally {
       setProcessingPayment(false);
     }
@@ -346,43 +434,45 @@ const PaymentBilling: React.FC = () => {
     }
   };
 
-  // Real appointment charges data - TODO: Replace with API call
-  const [appointmentCharges, setAppointmentCharges] = useState<AppointmentCharge[]>([
-    {
-      id: '1',
-      salonId: 'salon1',
-      date: new Date().toISOString().split('T')[0], // Today's date
-      appointmentCount: 12,
-      chargePerAppointment: 50,
-      totalCharge: 600,
-      status: 'pending',
-      scheduledAt: new Date(),
-    },
-    {
-      id: '2',
-      salonId: 'salon1',
-      date: new Date(Date.now() - 86400000).toISOString().split('T')[0], // Yesterday
-      appointmentCount: 8,
-      chargePerAppointment: 50,
-      totalCharge: 400,
-      status: 'paid',
-      scheduledAt: new Date(Date.now() - 86400000),
-      paidAt: new Date(Date.now() - 86400000 + 300000),
-      paymentMethod: 'Payable IPG',
-    },
-  ]);
-
   // Calculate active cards from saved cards
   const activeCards = savedCards.filter(card => card.tokenStatus === 'SUCCESS').length;
   
-  // Appointment charge metrics
-  const pendingCharges = appointmentCharges.filter(charge => charge.status === 'pending');
-  const totalPendingAmount = pendingCharges.reduce((sum, charge) => sum + charge.totalCharge, 0);
-  const todayCharges = appointmentCharges.filter(charge => charge.date === new Date().toISOString().split('T')[0]);
-  const todayIncome = todayCharges.reduce((sum, charge) => charge.status === 'paid' ? sum + charge.totalCharge : sum, 0);
-  const monthlyIncome = appointmentCharges
-    .filter(charge => charge.status === 'paid' && new Date(charge.date).getMonth() === new Date().getMonth())
-    .reduce((sum, charge) => sum + charge.totalCharge, 0);
+  // Get analytics data or use defaults
+  const totalPendingAmount = analyticsData?.totalPendingAmount ?? 0;
+  const todayIncome = analyticsData?.todayIncome?.netIncome ?? 0;
+  const monthlyIncome = analyticsData?.monthlyIncome?.totalMonthlyNetIncome ?? 0;
+  const todayAppointments = analyticsData?.todayStats?.totalAppointments ?? 0;
+  const serviceCharge = analyticsData?.serviceCharge ?? 50;
+
+  // Branch statistics for display
+  const branchStats = analyticsData?.todayStats?.branchStats ?? [];
+  const branchIncomeStats = analyticsData?.todayIncome?.branchIncomeStats ?? [];
+  const branchMonthlyStats = analyticsData?.monthlyIncome?.branchMonthlyStats ?? [];
+
+  // Legacy appointment charges for backward compatibility
+  const pendingCharges = totalPendingAmount > 0 ? [{
+    id: 'pending-total',
+    salonId: salon?.salonId?.toString() || '',
+    date: new Date().toISOString().split('T')[0],
+    appointmentCount: todayAppointments,
+    chargePerAppointment: serviceCharge,
+    totalCharge: totalPendingAmount,
+    status: 'pending' as const,
+    scheduledAt: new Date(),
+  }] : [];
+
+  const todayCharges = [{
+    id: 'today-total',
+    salonId: salon?.salonId?.toString() || '',
+    date: new Date().toISOString().split('T')[0],
+    appointmentCount: todayAppointments,
+    chargePerAppointment: serviceCharge,
+    totalCharge: todayIncome,
+    status: 'paid' as const,
+    scheduledAt: new Date(),
+    paidAt: new Date(),
+    paymentMethod: 'Various'
+  }];
 
   // CRUD Functions
   const handleAddCard = async () => {
@@ -469,6 +559,27 @@ const PaymentBilling: React.FC = () => {
       return;
     }
 
+    // If cards are still loading, wait for them to load first
+    if (loadingCards) {
+      showToast('info', 'Loading Payment Methods', 'Please wait while we load your saved payment methods...');
+      
+      // Wait for cards to finish loading (with timeout)
+      let waitTime = 0;
+      const maxWaitTime = 10000; // 10 seconds max
+      const checkInterval = 500; // Check every 500ms
+      
+      while (loadingCards && waitTime < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, checkInterval));
+        waitTime += checkInterval;
+      }
+      
+      if (loadingCards) {
+        showToast('warning', 'Loading Timeout', 'Payment methods are taking too long to load. Proceeding with new card payment.');
+        await handlePayWithNewCard();
+        return;
+      }
+    }
+
     // Check if there are saved cards
     const activeCards = savedCards.filter(card => card.tokenStatus === 'SUCCESS');
     if (activeCards.length > 0) {
@@ -497,7 +608,7 @@ const PaymentBilling: React.FC = () => {
         amount: totalAmount,
         currencyCode: 'LKR',
         invoiceId,
-        orderDescription: `Salon Appointment Charges - ${pendingCharges.length} charges`,
+        orderDescription: `Salon Service Charges - Rs. ${totalPendingAmount.toFixed(2)}`,
         customerFirstName: salon?.ownerFirstName || 'Salon',
         customerLastName: salon?.ownerLastName || 'Owner',
         customerEmail: salon?.ownerEmail || 'owner@salon.com',
@@ -516,7 +627,9 @@ const PaymentBilling: React.FC = () => {
         console.log('🔔 [PAYMENT] Payment status update via WebSocket:', status);
         
         if (status.status === 'SUCCESS') {
-          showToast('success', 'Payment Successful', `Successfully paid Rs. ${totalAmount} for appointment charges.`);
+          showToast('success', 'Payment Successful', `Successfully paid Rs. ${totalAmount} for service charges.`);
+          // Refresh analytics data after successful payment
+          setTimeout(() => loadAnalyticsData(), 2000);
         } else if (status.status === 'FAILED') {
           showToast('error', 'Payment Failed', 'Unable to process payment. Please try again.');
         }
@@ -557,25 +670,16 @@ const PaymentBilling: React.FC = () => {
       setRedirectingToIPG(true);
       
       const invoiceId = paymentService.generateInvoiceId();
-      const orderDescription = `Salon Appointment Charges - ${pendingCharges.length} charges`;
+      const orderDescription = `Salon Service Charges - Rs. ${totalPendingAmount.toFixed(2)}`;
       
       // Subscribe to payment status via WebSocket
       webSocketPaymentService.subscribeToPayment(invoiceId, (status: PaymentStatusEvent) => {
         console.log('🔔 [PAYMENT] Saved card payment status update via WebSocket:', status);
         
         if (status.status === 'SUCCESS') {
-          showToast('success', 'Payment Successful', `Successfully paid Rs. ${totalAmount} for appointment charges.`);
-          // Update charges to paid status
-          setAppointmentCharges(appointmentCharges.map(charge =>
-            charge.status === 'pending'
-              ? {
-                  ...charge,
-                  status: 'paid' as const,
-                  paidAt: new Date(),
-                  paymentMethod: 'Payable IPG'
-                }
-              : charge
-          ));
+          showToast('success', 'Payment Successful', `Successfully paid Rs. ${totalAmount} for service charges.`);
+          // Refresh analytics data after successful payment
+          setTimeout(() => loadAnalyticsData(), 2000);
         } else if (status.status === 'FAILED') {
           showToast('error', 'Payment Failed', 'Unable to process payment with saved card.');
         }
@@ -652,10 +756,10 @@ const PaymentBilling: React.FC = () => {
               <p className="text-lg text-gray-600">Manage your payment methods and billing efficiently</p>
             </div>
             <div className="flex flex-col sm:flex-row gap-3">
-              {pendingCharges.length > 0 && (
+              {totalPendingAmount > 0 ? (
                 <button
                   onClick={handlePayPendingCharges}
-                  disabled={processingPayment}
+                  disabled={processingPayment || loadingCards}
                   className="flex items-center justify-center space-x-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white hover:from-amber-600 hover:to-amber-700 disabled:from-gray-400 disabled:to-gray-500 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
                 >
                   {processingPayment ? (
@@ -670,6 +774,13 @@ const PaymentBilling: React.FC = () => {
                     </>
                   )}
                 </button>
+              ) : (
+                <div className="flex items-center justify-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl shadow-lg">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  <span className="font-semibold">All Payments Paid</span>
+                </div>
               )}
               <button
                 onClick={handleAddCard}
@@ -699,7 +810,7 @@ const PaymentBilling: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600 mb-1">Today's Income</p>
                 <p className="text-3xl font-bold text-green-600">Rs. {todayIncome.toFixed(2)}</p>
-                <p className="text-xs text-gray-500 mt-1">From appointment charges</p>
+                <p className="text-xs text-gray-500 mt-1">From service charges</p>
               </div>
               <div className="p-3 bg-green-50 rounded-xl">
                 <TrendingUp className="w-8 h-8 text-green-500" />
@@ -725,7 +836,9 @@ const PaymentBilling: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600 mb-1">Pending Payments</p>
                 <p className="text-3xl font-bold text-amber-600">Rs. {totalPendingAmount.toFixed(2)}</p>
-                <p className="text-xs text-gray-500 mt-1">{pendingCharges.length} charges pending</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {totalPendingAmount > 0 ? `Rs. ${totalPendingAmount.toFixed(2)} pending` : 'All paid up'}
+                </p>
               </div>
               <div className="p-3 bg-amber-50 rounded-xl">
                 <AlertTriangle className="w-8 h-8 text-amber-500" />
@@ -746,6 +859,94 @@ const PaymentBilling: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Branch-wise Analytics */}
+        {analyticsData && (branchIncomeStats.length > 0 || branchMonthlyStats.length > 0) && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+            <div className="mb-8">
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">Branch Performance</h3>
+              <p className="text-gray-600">Today's and monthly income breakdown by branch</p>
+            </div>
+            
+            {/* Today's Income by Branch */}
+            {branchIncomeStats.length > 0 && (
+              <div className="mb-8">
+                <h4 className="text-lg font-semibold text-gray-800 mb-4">Today's Income by Branch</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {branchIncomeStats.map((branch) => (
+                    <div key={`today-${branch.branchId}`} className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <h5 className="font-medium text-gray-900 truncate">{branch.branchName}</h5>
+                        <div className="p-2 bg-green-100 rounded-lg">
+                          <TrendingUp className="w-4 h-4 text-green-600" />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Revenue:</span>
+                          <span className="font-semibold text-green-700">Rs. {branch.appointmentRevenue.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Service Charges:</span>
+                          <span className="font-semibold text-green-700">Rs. {branch.serviceCharges.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-t pt-2">
+                          <span className="text-sm font-medium text-gray-800">Net Income:</span>
+                          <span className="font-bold text-green-800">Rs. {branch.netIncome.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* Monthly Income by Branch */}
+            {branchMonthlyStats.length > 0 && (
+              <div>
+                <h4 className="text-lg font-semibold text-gray-800 mb-4">Monthly Income by Branch</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {branchMonthlyStats.map((branch) => (
+                    <div key={`monthly-${branch.branchId}`} className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <h5 className="font-medium text-gray-900 truncate">{branch.branchName}</h5>
+                        <div className="p-2 bg-blue-100 rounded-lg">
+                          <Calendar className="w-4 h-4 text-blue-600" />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Appointments:</span>
+                          <span className="font-semibold text-blue-700">{branch.monthlyAppointments}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Revenue:</span>
+                          <span className="font-semibold text-blue-700">Rs. {branch.monthlyRevenue.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Service Charges:</span>
+                          <span className="font-semibold text-blue-700">Rs. {branch.monthlyServiceCharges.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Paid Charges:</span>
+                          <span className="font-semibold text-green-600">Rs. {branch.paidServiceCharges.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Pending Charges:</span>
+                          <span className="font-semibold text-amber-600">Rs. {branch.pendingServiceCharges.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-t pt-2">
+                          <span className="text-sm font-medium text-gray-800">Net Income:</span>
+                          <span className="font-bold text-blue-800">Rs. {branch.monthlyNetIncome.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Saved Cards Section */}
         {payableConfig.isConfigured && (
@@ -924,20 +1125,26 @@ const PaymentBilling: React.FC = () => {
               <div className="flex justify-between items-center p-4 bg-gray-50 rounded-xl">
                 <span className="text-gray-600 font-medium">Today's Appointments</span>
                 <span className="font-bold text-gray-900 text-lg">
-                  {todayCharges.reduce((sum, charge) => sum + charge.appointmentCount, 0)}
+                  {todayAppointments}
                 </span>
               </div>
               <div className="flex justify-between items-center p-4 bg-gray-50 rounded-xl">
-                <span className="text-gray-600 font-medium">Charge per Appointment</span>
-                <span className="font-bold text-gray-900 text-lg">Rs. 50.00</span>
+                <span className="text-gray-600 font-medium">Service Charge per Appointment</span>
+                <span className="font-bold text-gray-900 text-lg">Rs. {serviceCharge.toFixed(2)}</span>
               </div>
               <div className="flex justify-between items-center p-4 bg-green-50 rounded-xl">
                 <span className="text-green-700 font-medium">Today's Income</span>
                 <span className="font-bold text-green-600 text-lg">Rs. {todayIncome.toFixed(2)}</span>
               </div>
+              <div className="flex justify-between items-center p-4 bg-blue-50 rounded-xl">
+                <span className="text-blue-700 font-medium">Monthly Income</span>
+                <span className="font-bold text-blue-600 text-lg">Rs. {monthlyIncome.toFixed(2)}</span>
+              </div>
               <div className="pt-4 border-t border-gray-200 flex justify-between items-center">
-                <span className="text-gray-600 font-medium">Scheduler Time</span>
-                <span className="font-semibold text-gray-900">10:00 PM Daily</span>
+                <span className="text-gray-600 font-medium">Data Updated</span>
+                <span className="font-semibold text-gray-900">
+                  {analyticsData?.analyticsDate || new Date().toISOString().split('T')[0]}
+                </span>
               </div>
             </div>
           </div>
@@ -987,7 +1194,7 @@ const PaymentBilling: React.FC = () => {
                   onClick={() => setShowPaymentOptions(false)}
                   className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors"
                 >
-                  <AlertCircle className="w-6 h-6" />
+                  <X className="w-6 h-6" />
                 </button>
               </div>
             </div>
