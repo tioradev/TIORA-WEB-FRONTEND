@@ -391,22 +391,25 @@ export class PaymentService {
         ? 'https://sandboxipgpayment.payable.lk' 
         : 'https://ipgpayment.payable.lk';
 
-      // Generate checkValue using the correct format
+      // Generate checkValue using the correct Payable ID values
       // UPPERCASE(SHA512[merchantId|invoiceId|amount|currencyCode|customerId|tokenId|UPPERCASE(SHA512[merchantToken])])
       const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
-      const checkValueString = `${payableConfig.merchantKey}|${invoiceId}|${amount}|LKR|${customerId}|${tokenId}|${merchantToken}`;
+      const merchantId = 'ce2cb8ee-6076-11f0-b4da-9ff2e85b9b44';
+      const customerId = '4bc90b4b-9470-11f0-9628-7bdb5498779c';
+      const checkValueString = `${merchantId}|${invoiceId}|${amount}|LKR|${customerId}|${tokenId}|${merchantToken}`;
       const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();
 
       console.log('🔐 [PAYMENT] CheckValue generation:');
-      console.log('🔐 [PAYMENT] Merchant Key:', payableConfig.merchantKey);
+      console.log('🔐 [PAYMENT] Merchant ID:', merchantId);
+      console.log('🔐 [PAYMENT] Customer ID:', customerId);
       console.log('🔐 [PAYMENT] Merchant Token (SHA512):', merchantToken.substring(0, 20) + '...');
       console.log('🔐 [PAYMENT] CheckValue string:', checkValueString);
       console.log('🔐 [PAYMENT] CheckValue (SHA512):', checkValue.substring(0, 20) + '...');
 
-      // Process payment with saved card token
+      // Process payment with saved card token using correct Payable values
       const paymentData: any = {
-        merchantId: payableConfig.merchantKey,  // Use merchantKey as merchantId
-        customerId,
+        merchantId: 'ce2cb8ee-6076-11f0-b4da-9ff2e85b9b44', // Use correct Payable merchant ID value
+        customerId: '4bc90b4b-9470-11f0-9628-7bdb5498779c', // Use correct Payable customer ID value
         tokenId,
         invoiceId,
         amount,
@@ -431,32 +434,30 @@ export class PaymentService {
       console.log('📋 [PAYMENT] - Custom1:', paymentData.custom1);
       console.log('📋 [PAYMENT] - Custom2:', paymentData.custom2);
 
-      // For saved card payments, use traditional merchant token authentication instead of JWT
-      // The /tokenize/pay endpoint appears to require merchant token auth, not JWT Bearer
-      const merchantTokenAuth = CryptoJS.SHA512(payableConfig.merchantToken).toString();
-      const authorizationHeader = merchantTokenAuth; // Use merchant token directly
-      console.log('🔑 [PAYMENT] Using merchant token authentication for /tokenize/pay endpoint');
-      console.log('🔑 [PAYMENT] Merchant token (SHA512):', authorizationHeader.substring(0, 30) + '...');
+      // Use Bearer token authentication as required by the API
+      const authorizationHeader = `Bearer ${jwtToken}`;
+      console.log('🔑 [PAYMENT] Using Bearer token authentication for /tokenize/pay endpoint');
+      console.log('🔑 [PAYMENT] Bearer token:', authorizationHeader.substring(0, 50) + '...');
 
-      // For saved card payments, use /tokenize/pay endpoint with merchant token authentication
-      console.log('🔍 [PAYMENT] Making saved card payment with merchant token auth (TRADITIONAL METHOD)...');
+      // For saved card payments, use /tokenize/pay endpoint with Bearer token authentication
+      console.log('🔍 [PAYMENT] Making saved card payment with Bearer token auth (CORRECT METHOD)...');
       
       let paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
         method: 'POST',
         mode: 'cors',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authorizationHeader, // Use merchant token, not JWT Bearer
+          'Authorization': authorizationHeader, // Use Bearer token
           'Accept': 'application/json'
         },
         body: JSON.stringify(paymentData)
       });
 
-      console.log('📤 [PAYMENT] Request sent to (MERCHANT TOKEN AUTH):', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
-      console.log('📤 [PAYMENT] Authentication method used: Merchant Token (TRADITIONAL)');
+      console.log('📤 [PAYMENT] Request sent to (BEARER TOKEN AUTH):', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
+      console.log('📤 [PAYMENT] Authentication method used: Bearer Token (CORRECT)');
       console.log('📤 [PAYMENT] Request headers:', {
         'Content-Type': 'application/json',
-        'Authorization': authorizationHeader.substring(0, 30) + '...',
+        'Authorization': authorizationHeader.substring(0, 50) + '...',
         'Accept': 'application/json'
       });
       console.log('📤 [PAYMENT] Full request payload:', JSON.stringify(paymentData, null, 2));
