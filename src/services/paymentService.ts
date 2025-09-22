@@ -368,6 +368,7 @@ export class PaymentService {
    * Pay with saved card using existing JWT token (bypasses auth step)
    */
   public async payWithSavedCardUsingToken(
+    payableMerchantId: string,
     customerId: string,
     tokenId: string,
     amount: string,
@@ -396,16 +397,14 @@ export class PaymentService {
         ? 'https://sandboxipgpayment.payable.lk' 
         : 'https://ipgpayment.payable.lk';
 
-      // Generate checkValue using the correct Payable ID values
+      // Generate checkValue using the passed Payable ID values
       // UPPERCASE(SHA512[merchantId|invoiceId|amount|currencyCode|customerId|tokenId|UPPERCASE(SHA512[merchantToken])])
       const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
-      const merchantId = 'ce2cb8ee-6076-11f0-b4da-9ff2e85b9b44';
-      const customerId = '4bc90b4b-9470-11f0-9628-7bdb5498779c';
-      const checkValueString = `${merchantId}|${invoiceId}|${amount}|LKR|${customerId}|${cleanTokenId}|${merchantToken}`;
+      const checkValueString = `${payableMerchantId}|${invoiceId}|${amount}|LKR|${customerId}|${cleanTokenId}|${merchantToken}`;
       const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();
 
       console.log('🔐 [PAYMENT] Payment details (for logging only, not sent to API):');
-      console.log('🔐 [PAYMENT] - Merchant ID:', merchantId);
+      console.log('🔐 [PAYMENT] - Merchant ID:', payableMerchantId);
       console.log('🔐 [PAYMENT] - Customer ID:', customerId);
       console.log('🔐 [PAYMENT] - Token ID (cleaned):', cleanTokenId);
       console.log('🔐 [PAYMENT] - Invoice ID:', invoiceId);
@@ -419,8 +418,8 @@ export class PaymentService {
 
       // Prepare payment data with required fields as per API error response
       const paymentData: any = {
-        merchantId: merchantId, // Use correct Payable merchant ID value  
-        customerId: customerId, // Use correct Payable customer ID value
+        merchantId: payableMerchantId, // Use passed Payable merchant ID value  
+        customerId: customerId, // Use passed Payable customer ID value
         tokenId: cleanTokenId, // Use cleaned tokenId without whitespace
         invoiceId,
         amount,
@@ -1006,6 +1005,89 @@ export class PaymentService {
       
     } catch (error) {
       console.error('❌ [PAYMENT] Failed to process one-time payment:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * List saved cards for a customer using JWT token
+   */
+  public async listSavedCards(payableMerchantId: string, payableCustomerId: string, jwtToken: string): Promise<any> {
+    try {
+      console.log('📋 [PAYMENT] Listing saved cards from Payable API');
+      console.log('📋 [PAYMENT] - Merchant ID:', payableMerchantId);
+      console.log('📋 [PAYMENT] - Customer ID:', payableCustomerId);
+      
+      // Verify credentials are loaded for checkValue generation
+      if (!payableConfig.merchantKey || !payableConfig.merchantToken) {
+        throw new Error('Merchant credentials not configured. Please check environment variables.');
+      }
+      
+      const apiBaseUrl = payableConfig.testMode 
+        ? 'https://sandboxipgpayment.payable.lk' 
+        : 'https://ipgpayment.payable.lk';
+
+      // Generate checkValue for listCard API
+      // UPPERCASE(SHA512[merchantId|customerId|UPPERCASE(SHA512[merchantToken])])
+      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
+      const checkValueString = `${payableMerchantId}|${payableCustomerId}|${merchantToken}`;
+      const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();
+
+      console.log('🔐 [PAYMENT] ListCard API details:');
+      console.log('🔐 [PAYMENT] - Merchant ID:', payableMerchantId);
+      console.log('🔐 [PAYMENT] - Customer ID:', payableCustomerId);
+      console.log('🔐 [PAYMENT] - CheckValue String:', checkValueString);
+
+      // Prepare request data for listCard API
+      const requestData = {
+        merchantId: payableMerchantId,
+        customerId: payableCustomerId,
+        checkValue
+      };
+
+      // Use Bearer token authentication
+      const authorizationHeader = `Bearer ${jwtToken}`;
+      console.log('🔑 [PAYMENT] Using Bearer token for /tokenize/listCard endpoint');
+
+      const response = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/listCard`, {
+        method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authorizationHeader,
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(requestData)
+      });
+
+      console.log('📤 [PAYMENT] ListCard request sent to:', `${apiBaseUrl}/ipg/v2/tokenize/listCard`);
+      console.log('📤 [PAYMENT] Request body:', JSON.stringify(requestData, null, 2));
+      console.log('📥 [PAYMENT] ListCard response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        let errorData;
+        try {
+          const responseText = await response.text();
+          try {
+            errorData = JSON.parse(responseText);
+            console.error('❌ [PAYMENT] ListCard error (JSON):', errorData);
+          } catch (e) {
+            errorData = { error: responseText };
+            console.error('❌ [PAYMENT] ListCard error (Text):', responseText);
+          }
+        } catch (e) {
+          errorData = { error: 'Could not read response body' };
+          console.error('❌ [PAYMENT] Could not read ListCard response:', e);
+        }
+        throw new Error(`ListCard API failed: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ [PAYMENT] ListCard API successful:', result);
+      return result;
+      
+    } catch (error) {
+      console.error('❌ [PAYMENT] Error listing saved cards:', error);
       throw error;
     }
   }

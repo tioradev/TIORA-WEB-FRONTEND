@@ -31,6 +31,8 @@ interface SavedCard {
   createdAt: string;
   updatedAt: string;
   lastUsedAt: string | null;
+  payableMerchantId: string; // Added Payable Merchant ID
+  payableCustomerId: string; // Added Payable Customer ID
 }
 
 interface AppointmentCharge {
@@ -479,7 +481,7 @@ const PaymentBilling: React.FC = () => {
       setLoadingPayment(false);
     }
   };  // Function to pay with saved card
-  const handlePayWithSavedCard = async (tokenId: string) => {
+  const handlePayWithSavedCard = async (selectedTokenId: string) => {
     if (!payableConfig.isConfigured) {
       showToast('warning', 'Payment Gateway Not Configured', 'Please configure Payable IPG first.');
       return;
@@ -523,22 +525,35 @@ const PaymentBilling: React.FC = () => {
 
       showToast('info', 'Processing Payment with Saved Card', 'Please wait while we process your payment...');
 
-      // Step 1: Get JWT token first
-      console.log('🔑 [PAYMENT] Getting JWT token for saved card payment...');
-      const jwtToken = await paymentService.getJwtToken();
-      console.log('✅ [PAYMENT] JWT token obtained, proceeding with payment...');
+      console.log('� [PAYMENT] Starting saved card payment with selected tokenId:', selectedTokenId);
+      
+      // Use the updated method that follows the correct flow:
+      // Step 1: Get JWT token
+      // Step 2: Call /listCard API to get current cards
+      // Step 3: Find matching card and use current tokenId
+      // Step 4: Make payment with current tokenId
+      // Find the selected card to get the Payable IDs
+      const selectedCard = savedCards.find(card => card.tokenId === selectedTokenId);
+      if (!selectedCard) {
+        throw new Error('Selected card not found. Please refresh and try again.');
+      }
 
-      // Step 2: Use the new method that accepts existing JWT token
+      console.log('💳 [PAYMENT] Using dynamic Payable IDs from selected card:');
+      console.log('💳 [PAYMENT] - Payable Merchant ID:', selectedCard.payableMerchantId);
+      console.log('💳 [PAYMENT] - Payable Customer ID:', selectedCard.payableCustomerId);
+      console.log('💳 [PAYMENT] - Token ID:', selectedTokenId);
+
       await paymentService.payWithSavedCardUsingToken(
-        selectedCustomer, // customerId
-        tokenId,         // tokenId
-        totalAmount,     // amount
-        invoiceId,       // invoiceId
+        selectedCard.payableMerchantId, // Use dynamic Payable Merchant ID from card
+        selectedCard.payableCustomerId, // Use dynamic Payable Customer ID from card
+        selectedTokenId,  // tokenId
+        totalAmount,      // amount  
+        invoiceId,        // invoiceId
         orderDescription, // orderDescription
-        jwtToken,        // JWT token from tokenize API
+        await paymentService.getJwtToken(), // jwtToken
         'https://salon.run.place:8090/api/v1/payments/webhook', // webhookUrl
-        'PAYMENT',       // custom1 - alphanumeric only
-        'SALONCHARGES'   // custom2 - alphanumeric only, no underscores
+        'PAYMENT',        // custom1
+        'SALONCHARGES'    // custom2
       );
       
     } catch (error) {
