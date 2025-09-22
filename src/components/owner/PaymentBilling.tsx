@@ -17,22 +17,17 @@ import Toast from '../shared/Toast';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface SavedCard {
-  id: number;
   tokenId: string;
-  customerRefNo: string;
-  salonId: number;
   maskedCardNo: string;
-  cardExpiry: string | null;
+  exp: string;
+  reference: string;
+  nickname: string;
   cardScheme: string;
-  cardHolderName: string;
-  nickname: string | null;
-  isDefaultCard: boolean;
   tokenStatus: string;
-  createdAt: string;
-  updatedAt: string;
-  lastUsedAt: string | null;
-  payableMerchantId: string; // Added Payable Merchant ID
-  payableCustomerId: string; // Added Payable Customer ID
+  defaultCard: number;
+  // Additional fields for UI display
+  cardHolderName?: string; // We can derive or set a default
+  isDefaultCard?: boolean; // Convert from defaultCard number
 }
 
 interface AppointmentCharge {
@@ -55,6 +50,8 @@ const PaymentBilling: React.FC = () => {
   // Payable IPG Integration States
   const [payableConfig] = useState(paymentService.getConfigStatus());
   const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
+  const [payableMerchantId, setPayableMerchantId] = useState<string>('');
+  const [payableCustomerId, setPayableCustomerId] = useState<string>('');
   const [processingPayment, setProcessingPayment] = useState(false);
   const [loadingCards, setLoadingCards] = useState(false);
   const [loadingPayment, setLoadingPayment] = useState(false);
@@ -184,7 +181,7 @@ const PaymentBilling: React.FC = () => {
     setError(null);
     
     try {
-      console.log('🔄 [PAYMENT] Loading saved cards from backend API for salon:', salon.salonId);
+      console.log('🔄 [PAYMENT] Loading Payable customer info and saved cards for salon:', salon.salonId);
       
       // Get the authentication token
       const token = localStorage.getItem('authToken');
@@ -194,8 +191,9 @@ const PaymentBilling: React.FC = () => {
       
       console.log('🔐 [PAYMENT] Using auth token:', token.substring(0, 20) + '...');
       
-      // Call the new API endpoint with authentication and salonId as path variable
-      const response = await fetch(`${getCurrentConfig().API_BASE_URL}/payments/tokens/salon/${salon.salonId}`, {
+      // Step 1: Get Payable Merchant ID and Customer ID from backend
+      console.log('📋 [PAYMENT] Step 1: Getting Payable customer info from backend...');
+      const customerInfoResponse = await fetch(`${getCurrentConfig().API_BASE_URL}/payments/tokens/salon/${salon.salonId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -203,22 +201,65 @@ const PaymentBilling: React.FC = () => {
         }
       });
 
-      if (!response.ok) {
-        if (response.status === 401) {
+      if (!customerInfoResponse.ok) {
+        if (customerInfoResponse.status === 401) {
           throw new Error('Authentication failed. Please log in again.');
         }
-        throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+        throw new Error(`HTTP Error: ${customerInfoResponse.status} ${customerInfoResponse.statusText}`);
       }
 
-      const data = await response.json();
-      // Clean tokenIds from backend data to remove any whitespace characters
-      const cleanedTokens = (data.tokens || []).map((card: SavedCard) => ({
-        ...card,
-        tokenId: card.tokenId.trim() // Remove any whitespace including tabs
-      }));
-      setSavedCards(cleanedTokens);
-      console.log('✅ [PAYMENT] Successfully loaded', cleanedTokens.length, 'saved cards from backend API');
-      console.log('✅ [PAYMENT] Cleaned tokenIds:', cleanedTokens.map((card: SavedCard) => `"${card.tokenId}"`));
+      const customerInfo = await customerInfoResponse.json();
+      console.log('✅ [PAYMENT] Backend customer info response:', customerInfo);
+      
+      if (!customerInfo.success || !customerInfo.payableMerchantId || !customerInfo.payableCustomerId) {
+        throw new Error('Invalid customer information received from backend.');
+      }
+
+      // Store Payable IDs for later use
+      setPayableMerchantId(customerInfo.payableMerchantId);
+      setPayableCustomerId(customerInfo.payableCustomerId);
+      
+      console.log('🔑 [PAYMENT] Retrieved Payable IDs:');
+      console.log('🔑 [PAYMENT] - Merchant ID:', customerInfo.payableMerchantId);
+      console.log('🔑 [PAYMENT] - Customer ID:', customerInfo.payableCustomerId);
+
+      // Step 2: Get JWT token for Payable API
+      console.log('📋 [PAYMENT] Step 2: Getting JWT token for Payable API...');
+      const jwtToken = await paymentService.getJwtToken();
+      
+      // Step 3: Get saved cards from Payable API
+      console.log('📋 [PAYMENT] Step 3: Getting saved cards from Payable API...');
+      const payableCardsResponse = await paymentService.listSavedCards(
+        customerInfo.payableMerchantId,
+        customerInfo.payableCustomerId,
+        jwtToken
+      );
+      
+      console.log('✅ [PAYMENT] Payable API response:', payableCardsResponse);
+
+      if (payableCardsResponse && payableCardsResponse.tokenizedCardList && Array.isArray(payableCardsResponse.tokenizedCardList)) {
+        // Transform Payable API response to our SavedCard interface
+        const transformedCards: SavedCard[] = payableCardsResponse.tokenizedCardList.map((card: any) => ({
+          tokenId: card.tokenId.trim(),
+          maskedCardNo: card.maskedCardNo,
+          exp: card.exp,
+          reference: card.reference || '',
+          nickname: card.nickname || '',
+          cardScheme: card.cardScheme,
+          tokenStatus: card.tokenStatus,
+          defaultCard: card.defaultCard,
+          cardHolderName: card.nickname || 'Card Holder', // Use nickname as cardholder name or default
+          isDefaultCard: card.defaultCard === 1
+        }));
+
+        setSavedCards(transformedCards);
+        console.log('✅ [PAYMENT] Successfully loaded', transformedCards.length, 'saved cards from Payable API');
+        console.log('✅ [PAYMENT] Card token IDs:', transformedCards.map((card: SavedCard) => `"${card.tokenId}"`));
+      } else {
+        console.log('⚠️ [PAYMENT] No saved cards found in Payable API response');
+        setSavedCards([]);
+      }
+      
     } catch (error) {
       console.error('Failed to load saved cards:', error);
       
@@ -241,9 +282,17 @@ const PaymentBilling: React.FC = () => {
       return;
     }
 
+    // Validate that we have the required Payable IDs
+    if (!payableMerchantId || !payableCustomerId) {
+      showToast('error', 'Missing Information', 'Payable IDs not available. Please refresh the page.');
+      return;
+    }
+
     try {
       setProcessingPayment(true);
-      const success = await paymentService.deleteSavedCard(tokenId);
+      console.log('🗑️ [PAYMENT] Deleting card with token ID:', tokenId);
+      
+      const success = await paymentService.deleteSavedCard(payableMerchantId, payableCustomerId, tokenId);
       
       if (success) {
         showToast('success', 'Card Deleted', 'Saved card deleted successfully.');
@@ -265,9 +314,19 @@ const PaymentBilling: React.FC = () => {
     nickname?: string, 
     setAsDefault?: boolean
   ) => {
+    // Validate that we have the required Payable IDs
+    if (!payableMerchantId || !payableCustomerId) {
+      showToast('error', 'Missing Information', 'Payable IDs not available. Please refresh the page.');
+      return;
+    }
+
     try {
       setProcessingPayment(true);
+      console.log('✏️ [PAYMENT] Editing card with token ID:', tokenId);
+      
       const success = await paymentService.editSavedCard(
+        payableMerchantId,
+        payableCustomerId,
         tokenId, 
         nickname, 
         setAsDefault ? 1 : 0
@@ -314,7 +373,7 @@ const PaymentBilling: React.FC = () => {
   ]);
 
   // Calculate active cards from saved cards
-  const activeCards = savedCards.filter(card => card.tokenStatus === 'ACTIVE').length;
+  const activeCards = savedCards.filter(card => card.tokenStatus === 'SUCCESS').length;
   
   // Appointment charge metrics
   const pendingCharges = appointmentCharges.filter(charge => charge.status === 'pending');
@@ -411,7 +470,7 @@ const PaymentBilling: React.FC = () => {
     }
 
     // Check if there are saved cards
-    const activeCards = savedCards.filter(card => card.tokenStatus === 'ACTIVE');
+    const activeCards = savedCards.filter(card => card.tokenStatus === 'SUCCESS');
     if (activeCards.length > 0) {
       setShowPaymentOptions(true);
       return;
@@ -539,56 +598,35 @@ const PaymentBilling: React.FC = () => {
         throw new Error('Selected card not found. Please refresh and try again.');
       }
 
-      console.log('💳 [PAYMENT] Using dynamic Payable IDs from selected card:');
-      console.log('💳 [PAYMENT] - Payable Merchant ID:', selectedCard.payableMerchantId);
-      console.log('💳 [PAYMENT] - Payable Customer ID:', selectedCard.payableCustomerId);
+      console.log('💳 [PAYMENT] Using stored Payable IDs:');
+      console.log('💳 [PAYMENT] - Payable Merchant ID:', payableMerchantId);
+      console.log('💳 [PAYMENT] - Payable Customer ID:', payableCustomerId);
       console.log('💳 [PAYMENT] - Database Token ID (may be outdated):', selectedTokenId);
 
-      // Step 1: Get JWT token
-      console.log('🔑 [PAYMENT] Step 1: Getting JWT token...');
-      const jwtToken = await paymentService.getJwtToken();
-      
-      // Step 2: Get current saved cards from Payable API to get valid token IDs
-      console.log('📋 [PAYMENT] Step 2: Getting current saved cards from Payable API...');
-      const payableSavedCardsResponse = await paymentService.listSavedCards(
-        selectedCard.payableMerchantId,
-        selectedCard.payableCustomerId,
-        jwtToken
-      );
-      
-      // Step 3: Find the current valid token ID
-      let currentValidTokenId = selectedTokenId;
-      if (payableSavedCardsResponse && payableSavedCardsResponse.savedCards && Array.isArray(payableSavedCardsResponse.savedCards)) {
-        // Find card that matches by card details (masked card number, cardholder name, etc.)
-        const matchingCard = payableSavedCardsResponse.savedCards.find((payableCard: any) => 
-          payableCard.maskedCardNo === selectedCard.maskedCardNo &&
-          payableCard.cardHolderName === selectedCard.cardHolderName &&
-          payableCard.cardScheme === selectedCard.cardScheme
-        );
-        
-        if (matchingCard) {
-          currentValidTokenId = matchingCard.tokenId.trim();
-          console.log('✅ [PAYMENT] Found matching card in Payable API with current valid token ID:', currentValidTokenId);
-          console.log('✅ [PAYMENT] Card details match - Masked Number:', matchingCard.maskedCardNo, 'Holder:', matchingCard.cardHolderName);
-        } else {
-          console.log('⚠️ [PAYMENT] No matching card found in Payable API, this may cause payment failure');
-          showToast('warning', 'Card May Be Outdated', 'This card may no longer be valid. Payment may fail.');
-        }
-      } else {
-        console.log('⚠️ [PAYMENT] No saved cards found in Payable API response');
-        showToast('warning', 'No Cards Found', 'No saved cards found in payment gateway. Payment may fail.');
+      // Validate that we have the required Payable IDs
+      if (!payableMerchantId || !payableCustomerId) {
+        throw new Error('Payable IDs not available. Please refresh the page and try again.');
       }
 
-      // Step 4: Make payment with current valid token ID
-      console.log('💰 [PAYMENT] Step 4: Making payment with current valid token ID:', currentValidTokenId);
+      console.log('� [PAYMENT] Starting saved card payment - using existing card data');
+      console.log('� [PAYMENT] - Payable Merchant ID:', payableMerchantId);
+      console.log('💳 [PAYMENT] - Payable Customer ID:', payableCustomerId);
+      console.log('💳 [PAYMENT] - Selected Token ID:', selectedTokenId);
+
+      // Get JWT token for payment
+      console.log('🔑 [PAYMENT] Getting JWT token for payment...');
+      const jwtToken = await paymentService.getJwtToken();
+
+      // Make payment directly with the selected token ID (no need to re-fetch cards)
+      console.log('💰 [PAYMENT] Making payment with selected token ID:', selectedTokenId);
       await paymentService.payWithSavedCardUsingToken(
-        selectedCard.payableMerchantId, // Use dynamic Payable Merchant ID from card
-        selectedCard.payableCustomerId, // Use dynamic Payable Customer ID from card
-        currentValidTokenId,  // Use current valid token ID from Payable API
+        payableMerchantId, // Use stored Payable Merchant ID
+        payableCustomerId, // Use stored Payable Customer ID
+        selectedTokenId,  // Use selected token ID from cards list
         totalAmount,      // amount  
         invoiceId,        // invoiceId
         orderDescription, // orderDescription
-        jwtToken,         // Use already obtained JWT token
+        jwtToken,         // JWT token
         'https://salon.run.place:8090/api/v1/payments/webhook', // webhookUrl
         'PAYMENT',        // custom1
         'SALONCHARGES'    // custom2
@@ -803,7 +841,7 @@ const PaymentBilling: React.FC = () => {
                             Expires
                           </div>
                           <div className="text-sm font-semibold text-white/95">
-                            {card.cardExpiry}
+                            {card.exp}
                           </div>
                         </div>
                       </div>
@@ -985,7 +1023,7 @@ const PaymentBilling: React.FC = () => {
                     <span>Your Saved Cards</span>
                   </h4>
                   <div className="space-y-4">
-                    {savedCards.filter(card => card.tokenStatus === 'ACTIVE').map((card) => (
+                    {savedCards.filter(card => card.tokenStatus === 'SUCCESS').map((card) => (
                       <div key={card.tokenId} className="group border border-gray-200 rounded-xl p-6 hover:border-purple-300 hover:shadow-lg transition-all duration-300 bg-gradient-to-r from-white to-gray-50">
                         <div className="flex items-center justify-between">
                           {/* Card Info */}
@@ -1007,7 +1045,7 @@ const PaymentBilling: React.FC = () => {
                               </div>
                               <div className="flex items-center space-x-4 text-sm text-gray-600">
                                 <span className="font-medium">{card.cardHolderName}</span>
-                                <span>Expires {card.cardExpiry}</span>
+                                <span>Expires {card.exp}</span>
                               </div>
                             </div>
                           </div>

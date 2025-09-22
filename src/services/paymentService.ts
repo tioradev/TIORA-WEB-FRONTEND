@@ -741,54 +741,6 @@ export class PaymentService {
   /**
    * Delete a saved card - Now uses backend API
    */
-  public async deleteSavedCard(tokenId: string): Promise<boolean> {
-    try {
-      console.log('🗑️ [PAYMENT] Deleting saved card via backend API');
-      
-      const response = await apiService.deletePaymentToken(tokenId);
-      
-      if (response.success) {
-        console.log('✅ [PAYMENT] Card deleted successfully');
-        return true;
-      } else {
-        console.error('❌ [PAYMENT] Failed to delete card:', response.error);
-        return false;
-      }
-    } catch (error) {
-      console.error('❌ [PAYMENT] Error deleting saved card:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Edit saved card (nickname, default status) - Now uses backend API
-   */
-  public async editSavedCard(
-    tokenId: string, 
-    nickName?: string, 
-    isDefaultCard?: number
-  ): Promise<boolean> {
-    try {
-      console.log('✏️ [PAYMENT] Editing saved card via backend API');
-      
-      const response = await apiService.updatePaymentToken(tokenId, {
-        nickName: nickName || '',
-        isDefaultCard: isDefaultCard || 0
-      });
-      
-      if (response.success) {
-        console.log('✅ [PAYMENT] Card updated successfully');
-        return true;
-      } else {
-        console.error('❌ [PAYMENT] Failed to update card:', response.error);
-        return false;
-      }
-    } catch (error) {
-      console.error('❌ [PAYMENT] Error editing saved card:', error);
-      return false;
-    }
-  }
-
   /**
    * Validate webhook response
    */
@@ -1088,6 +1040,170 @@ export class PaymentService {
       
     } catch (error) {
       console.error('❌ [PAYMENT] Error listing saved cards:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a saved card using Payable API
+   */
+  public async deleteSavedCard(payableMerchantId: string, payableCustomerId: string, tokenId: string): Promise<boolean> {
+    try {
+      console.log('🗑️ [PAYMENT] Deleting saved card with token ID:', tokenId);
+      
+      // Verify credentials are loaded for checkValue generation
+      if (!payableConfig.merchantKey || !payableConfig.merchantToken) {
+        throw new Error('Merchant credentials not configured. Please check environment variables.');
+      }
+      
+      const apiBaseUrl = payableConfig.testMode 
+        ? 'https://sandboxipgpayment.payable.lk' 
+        : 'https://ipgpayment.payable.lk';
+
+      // Generate checkValue for deleteCard API
+      // UPPERCASE(SHA512[merchantId|customerId|tokenId|UPPERCASE(SHA512[merchantToken])])
+      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
+      const cleanTokenId = tokenId.trim();
+      const checkValueString = `${payableMerchantId}|${payableCustomerId}|${cleanTokenId}|${merchantToken}`;
+      const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();
+
+      console.log('🔐 [PAYMENT] DeleteCard API details:');
+      console.log('🔐 [PAYMENT] - Merchant ID:', payableMerchantId);
+      console.log('🔐 [PAYMENT] - Customer ID:', payableCustomerId);
+      console.log('🔐 [PAYMENT] - Token ID:', cleanTokenId);
+
+      // Prepare request data for deleteCard API
+      const requestData = {
+        merchantId: payableMerchantId,
+        customerId: payableCustomerId,
+        tokenId: cleanTokenId,
+        checkValue
+      };
+
+      const response = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/deleteCard`, {
+        method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestData)
+      });
+
+      console.log('📤 [PAYMENT] DeleteCard request sent to:', `${apiBaseUrl}/ipg/v2/tokenize/deleteCard`);
+      console.log('📤 [PAYMENT] Request body:', JSON.stringify(requestData, null, 2));
+      console.log('📥 [PAYMENT] DeleteCard response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        let errorData;
+        try {
+          const responseText = await response.text();
+          try {
+            errorData = JSON.parse(responseText);
+            console.error('❌ [PAYMENT] DeleteCard error (JSON):', errorData);
+          } catch (e) {
+            errorData = { error: responseText };
+            console.error('❌ [PAYMENT] DeleteCard error (Text):', responseText);
+          }
+        } catch (e) {
+          errorData = { error: 'Could not read response body' };
+          console.error('❌ [PAYMENT] Could not read DeleteCard response:', e);
+        }
+        throw new Error(`DeleteCard API failed: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ [PAYMENT] DeleteCard API successful:', result);
+      return true;
+      
+    } catch (error) {
+      console.error('❌ [PAYMENT] Error deleting saved card:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Edit a saved card using Payable API
+   */
+  public async editSavedCard(payableMerchantId: string, payableCustomerId: string, tokenId: string, nickname?: string, isDefaultCard?: number): Promise<boolean> {
+    try {
+      console.log('✏️ [PAYMENT] Editing saved card with token ID:', tokenId);
+      console.log('✏️ [PAYMENT] - Nickname:', nickname || 'No change');
+      console.log('✏️ [PAYMENT] - Is Default:', isDefaultCard !== undefined ? isDefaultCard : 'No change');
+      
+      // Verify credentials are loaded for checkValue generation
+      if (!payableConfig.merchantKey || !payableConfig.merchantToken) {
+        throw new Error('Merchant credentials not configured. Please check environment variables.');
+      }
+      
+      const apiBaseUrl = payableConfig.testMode 
+        ? 'https://sandboxipgpayment.payable.lk' 
+        : 'https://ipgpayment.payable.lk';
+
+      // Get JWT token for edit API
+      const jwtToken = await this.getJwtToken();
+
+      // Generate checkValue for editCard API
+      // UPPERCASE(SHA512[merchantId|customerId|tokenId|UPPERCASE(SHA512[merchantToken])])
+      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
+      const cleanTokenId = tokenId.trim();
+      const checkValueString = `${payableMerchantId}|${payableCustomerId}|${cleanTokenId}|${merchantToken}`;
+      const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();
+
+      console.log('🔐 [PAYMENT] EditCard API details:');
+      console.log('🔐 [PAYMENT] - Merchant ID:', payableMerchantId);
+      console.log('🔐 [PAYMENT] - Customer ID:', payableCustomerId);
+      console.log('🔐 [PAYMENT] - Token ID:', cleanTokenId);
+
+      // Prepare request data for editCard API
+      const requestData: any = {
+        merchantId: payableMerchantId,
+        customerId: payableCustomerId,
+        tokenId: cleanTokenId,
+        checkValue
+      };
+
+      // Add optional fields
+      if (nickname !== undefined) requestData.nickName = nickname;
+      if (isDefaultCard !== undefined) requestData.isDefaultCard = isDefaultCard;
+
+      const response = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/editCard`, {
+        method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${jwtToken}`
+        },
+        body: JSON.stringify(requestData)
+      });
+
+      console.log('📤 [PAYMENT] EditCard request sent to:', `${apiBaseUrl}/ipg/v2/tokenize/editCard`);
+      console.log('📤 [PAYMENT] Request body:', JSON.stringify(requestData, null, 2));
+      console.log('📥 [PAYMENT] EditCard response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        let errorData;
+        try {
+          const responseText = await response.text();
+          try {
+            errorData = JSON.parse(responseText);
+            console.error('❌ [PAYMENT] EditCard error (JSON):', errorData);
+          } catch (e) {
+            errorData = { error: responseText };
+            console.error('❌ [PAYMENT] EditCard error (Text):', responseText);
+          }
+        } catch (e) {
+          errorData = { error: 'Could not read response body' };
+          console.error('❌ [PAYMENT] Could not read EditCard response:', e);
+        }
+        throw new Error(`EditCard API failed: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ [PAYMENT] EditCard API successful:', result);
+      return true;
+      
+    } catch (error) {
+      console.error('❌ [PAYMENT] Error editing saved card:', error);
       throw error;
     }
   }
