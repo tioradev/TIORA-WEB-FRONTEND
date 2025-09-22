@@ -84,7 +84,7 @@ const ENDPOINTS = {
     DEFAULT_TOKEN: '/payments/tokens/default/salon',
   },
   ANALYTICS: {
-    PAYMENT_STATS: '/analytics/payment-stats', // GET /analytics/payment-stats?salonId={salonId}
+    PAYMENT_STATS: '/payments/analytics', // GET /payments/analytics/{salonId}
   },
 };
 
@@ -1458,7 +1458,7 @@ class ApiService {
   // Analytics methods
   async getPaymentAnalytics(salonId: number): Promise<any> {
     try {
-      const response = await this.request<any>(`${ENDPOINTS.ANALYTICS.PAYMENT_STATS}?salonId=${salonId}`, {
+      const response = await this.request<any>(`${ENDPOINTS.ANALYTICS.PAYMENT_STATS}/${salonId}`, {
         method: 'GET'
       });
       envLog.info('✅ [ANALYTICS] Retrieved payment analytics');

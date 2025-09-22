@@ -114,6 +114,15 @@ const PaymentBilling: React.FC = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<string>(''); // Will be set based on salon data
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+  const [deleteCardModal, setDeleteCardModal] = useState<{
+    isOpen: boolean;
+    cardInfo: string;
+    tokenId: string;
+  }>({
+    isOpen: false,
+    cardInfo: '',
+    tokenId: ''
+  });
   
   // Toast states
   const [toasts, setToasts] = useState<Array<{
@@ -359,25 +368,28 @@ const PaymentBilling: React.FC = () => {
     const selectedCard = savedCards.find(card => card.tokenId === tokenId);
     const cardInfo = selectedCard ? `${selectedCard.cardScheme} ending in ${selectedCard.maskedCardNo.slice(-4)}` : 'this card';
     
-    const confirmed = window.confirm(
-      `⚠️ DELETE PAYMENT CARD\n\n` +
-      `Are you sure you want to permanently delete ${cardInfo}?\n\n` +
-      `This action cannot be undone and you will need to add the card again if you want to use it for future payments.\n\n` +
-      `Click OK to delete or Cancel to keep the card.`
-    );
-    
-    if (!confirmed) {
-      return;
-    }
+    // Open delete confirmation modal
+    setDeleteCardModal({
+      isOpen: true,
+      cardInfo,
+      tokenId
+    });
+  };
 
+  // Function to confirm card deletion
+  const confirmDeleteCard = async () => {
+    const { tokenId, cardInfo } = deleteCardModal;
+    
     // Validate that we have the required Payable IDs
     if (!payableMerchantId || !payableCustomerId) {
       showToast('error', 'Missing Information', 'Payable IDs not available. Please refresh the page.');
+      setDeleteCardModal({ isOpen: false, cardInfo: '', tokenId: '' });
       return;
     }
 
     try {
       setProcessingPayment(true);
+      setDeleteCardModal({ isOpen: false, cardInfo: '', tokenId: '' });
       console.log('🗑️ [PAYMENT] Deleting card with token ID:', tokenId);
       
       const success = await paymentService.deleteSavedCard(payableMerchantId, payableCustomerId, tokenId);
@@ -394,6 +406,11 @@ const PaymentBilling: React.FC = () => {
     } finally {
       setProcessingPayment(false);
     }
+  };
+
+  // Function to cancel card deletion
+  const cancelDeleteCard = () => {
+    setDeleteCardModal({ isOpen: false, cardInfo: '', tokenId: '' });
   };
 
   // Function to edit saved card
@@ -445,7 +462,6 @@ const PaymentBilling: React.FC = () => {
   const serviceCharge = analyticsData?.serviceCharge ?? 50;
 
   // Branch statistics for display
-  const branchStats = analyticsData?.todayStats?.branchStats ?? [];
   const branchIncomeStats = analyticsData?.todayIncome?.branchIncomeStats ?? [];
   const branchMonthlyStats = analyticsData?.monthlyIncome?.branchMonthlyStats ?? [];
 
@@ -1321,6 +1337,76 @@ const PaymentBilling: React.FC = () => {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Delete Card Confirmation Modal */}
+      {deleteCardModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-red-100 rounded-full">
+                    <AlertTriangle className="w-6 h-6 text-red-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Delete Payment Card</h3>
+                </div>
+                <button
+                  onClick={cancelDeleteCard}
+                  disabled={processingPayment}
+                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              
+              {/* Content */}
+              <div className="mb-6">
+                <p className="text-gray-700 mb-3">
+                  Are you sure you want to permanently delete <strong>{deleteCardModal.cardInfo}</strong>?
+                </p>
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-start space-x-3">
+                    <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-red-700">
+                      <p className="font-medium mb-1">This action cannot be undone</p>
+                      <p>You will need to add the card again if you want to use it for future payments.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Actions */}
+              <div className="flex space-x-3">
+                <button
+                  onClick={cancelDeleteCard}
+                  disabled={processingPayment}
+                  className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:bg-gray-300 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteCard}
+                  disabled={processingPayment}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-red-400 transition-colors font-medium flex items-center justify-center space-x-2"
+                >
+                  {processingPayment ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete Card</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>
