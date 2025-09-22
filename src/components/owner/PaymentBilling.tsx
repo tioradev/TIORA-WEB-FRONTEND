@@ -209,8 +209,14 @@ const PaymentBilling: React.FC = () => {
       }
 
       const data = await response.json();
-      setSavedCards(data.tokens || []);
-      console.log('✅ [PAYMENT] Successfully loaded', data.tokens?.length || 0, 'saved cards from backend API');
+      // Clean tokenIds from backend data to remove any whitespace characters
+      const cleanedTokens = (data.tokens || []).map((card: SavedCard) => ({
+        ...card,
+        tokenId: card.tokenId.trim() // Remove any whitespace including tabs
+      }));
+      setSavedCards(cleanedTokens);
+      console.log('✅ [PAYMENT] Successfully loaded', cleanedTokens.length, 'saved cards from backend API');
+      console.log('✅ [PAYMENT] Cleaned tokenIds:', cleanedTokens.map((card: SavedCard) => `"${card.tokenId}"`));
     } catch (error) {
       console.error('Failed to load saved cards:', error);
       

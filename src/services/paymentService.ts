@@ -379,7 +379,12 @@ export class PaymentService {
     custom2?: string
   ): Promise<void> {
     try {
+      // Clean up tokenId to remove any whitespace characters (including tabs)
+      const cleanTokenId = tokenId.trim();
+      
       console.log('💳 [PAYMENT] Paying with saved card using existing JWT token');
+      console.log('🔑 [PAYMENT] Raw tokenId received:', JSON.stringify(tokenId));
+      console.log('🔑 [PAYMENT] Cleaned tokenId:', JSON.stringify(cleanTokenId));
       console.log('🔑 [PAYMENT] Using provided JWT token:', jwtToken.substring(0, 20) + '...');
       
       // Verify credentials are loaded for checkValue generation
@@ -396,13 +401,13 @@ export class PaymentService {
       const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
       const merchantId = 'ce2cb8ee-6076-11f0-b4da-9ff2e85b9b44';
       const customerId = '4bc90b4b-9470-11f0-9628-7bdb5498779c';
-      const checkValueString = `${merchantId}|${invoiceId}|${amount}|LKR|${customerId}|${tokenId}|${merchantToken}`;
+      const checkValueString = `${merchantId}|${invoiceId}|${amount}|LKR|${customerId}|${cleanTokenId}|${merchantToken}`;
       const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();
 
       console.log('🔐 [PAYMENT] Payment details (for logging only, not sent to API):');
       console.log('🔐 [PAYMENT] - Merchant ID:', merchantId);
       console.log('🔐 [PAYMENT] - Customer ID:', customerId);
-      console.log('🔐 [PAYMENT] - Token ID:', tokenId);
+      console.log('🔐 [PAYMENT] - Token ID (cleaned):', cleanTokenId);
       console.log('🔐 [PAYMENT] - Invoice ID:', invoiceId);
       console.log('🔐 [PAYMENT] - Amount:', amount);
       console.log('🔐 [PAYMENT] - Order Description:', orderDescription);
@@ -416,7 +421,7 @@ export class PaymentService {
       const paymentData: any = {
         merchantId: merchantId, // Use correct Payable merchant ID value  
         customerId: customerId, // Use correct Payable customer ID value
-        tokenId,
+        tokenId: cleanTokenId, // Use cleaned tokenId without whitespace
         invoiceId,
         amount,
         currencyCode: 'LKR',
