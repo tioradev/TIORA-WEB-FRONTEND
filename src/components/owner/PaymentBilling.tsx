@@ -527,11 +527,12 @@ const PaymentBilling: React.FC = () => {
 
       console.log('� [PAYMENT] Starting saved card payment with selected tokenId:', selectedTokenId);
       
-      // Use the updated method that follows the correct flow:
-      // Step 1: Get JWT token
-      // Step 2: Call /listCard API to get current cards
-      // Step 3: Find matching card and use current tokenId
-      // Step 4: Make payment with current tokenId
+      // Use the correct flow to get current valid token ID:
+      // Step 1: Get JWT token  
+      // Step 2: Call Payable /listCard API to get current valid cards
+      // Step 3: Find matching card and use current valid tokenId
+      // Step 4: Make payment with current valid tokenId
+      
       // Find the selected card to get the Payable IDs
       const selectedCard = savedCards.find(card => card.tokenId === selectedTokenId);
       if (!selectedCard) {
@@ -541,16 +542,53 @@ const PaymentBilling: React.FC = () => {
       console.log('💳 [PAYMENT] Using dynamic Payable IDs from selected card:');
       console.log('💳 [PAYMENT] - Payable Merchant ID:', selectedCard.payableMerchantId);
       console.log('💳 [PAYMENT] - Payable Customer ID:', selectedCard.payableCustomerId);
-      console.log('💳 [PAYMENT] - Token ID:', selectedTokenId);
+      console.log('💳 [PAYMENT] - Database Token ID (may be outdated):', selectedTokenId);
 
+      // Step 1: Get JWT token
+      console.log('🔑 [PAYMENT] Step 1: Getting JWT token...');
+      const jwtToken = await paymentService.getJwtToken();
+      
+      // Step 2: Get current saved cards from Payable API to get valid token IDs
+      console.log('📋 [PAYMENT] Step 2: Getting current saved cards from Payable API...');
+      const payableSavedCardsResponse = await paymentService.listSavedCards(
+        selectedCard.payableMerchantId,
+        selectedCard.payableCustomerId,
+        jwtToken
+      );
+      
+      // Step 3: Find the current valid token ID
+      let currentValidTokenId = selectedTokenId;
+      if (payableSavedCardsResponse && payableSavedCardsResponse.savedCards && Array.isArray(payableSavedCardsResponse.savedCards)) {
+        // Find card that matches by card details (masked card number, cardholder name, etc.)
+        const matchingCard = payableSavedCardsResponse.savedCards.find((payableCard: any) => 
+          payableCard.maskedCardNo === selectedCard.maskedCardNo &&
+          payableCard.cardHolderName === selectedCard.cardHolderName &&
+          payableCard.cardScheme === selectedCard.cardScheme
+        );
+        
+        if (matchingCard) {
+          currentValidTokenId = matchingCard.tokenId.trim();
+          console.log('✅ [PAYMENT] Found matching card in Payable API with current valid token ID:', currentValidTokenId);
+          console.log('✅ [PAYMENT] Card details match - Masked Number:', matchingCard.maskedCardNo, 'Holder:', matchingCard.cardHolderName);
+        } else {
+          console.log('⚠️ [PAYMENT] No matching card found in Payable API, this may cause payment failure');
+          showToast('warning', 'Card May Be Outdated', 'This card may no longer be valid. Payment may fail.');
+        }
+      } else {
+        console.log('⚠️ [PAYMENT] No saved cards found in Payable API response');
+        showToast('warning', 'No Cards Found', 'No saved cards found in payment gateway. Payment may fail.');
+      }
+
+      // Step 4: Make payment with current valid token ID
+      console.log('💰 [PAYMENT] Step 4: Making payment with current valid token ID:', currentValidTokenId);
       await paymentService.payWithSavedCardUsingToken(
         selectedCard.payableMerchantId, // Use dynamic Payable Merchant ID from card
         selectedCard.payableCustomerId, // Use dynamic Payable Customer ID from card
-        selectedTokenId,  // tokenId
+        currentValidTokenId,  // Use current valid token ID from Payable API
         totalAmount,      // amount  
         invoiceId,        // invoiceId
         orderDescription, // orderDescription
-        await paymentService.getJwtToken(), // jwtToken
+        jwtToken,         // Use already obtained JWT token
         'https://salon.run.place:8090/api/v1/payments/webhook', // webhookUrl
         'PAYMENT',        // custom1
         'SALONCHARGES'    // custom2
