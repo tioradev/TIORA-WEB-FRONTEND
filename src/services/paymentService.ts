@@ -399,40 +399,21 @@ export class PaymentService {
       const checkValueString = `${merchantId}|${invoiceId}|${amount}|LKR|${customerId}|${tokenId}|${merchantToken}`;
       const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();
 
-      console.log('🔐 [PAYMENT] CheckValue generation:');
-      console.log('🔐 [PAYMENT] Merchant ID:', merchantId);
-      console.log('🔐 [PAYMENT] Customer ID:', customerId);
-      console.log('🔐 [PAYMENT] Merchant Token (SHA512):', merchantToken.substring(0, 20) + '...');
-      console.log('🔐 [PAYMENT] CheckValue string:', checkValueString);
-      console.log('🔐 [PAYMENT] CheckValue (SHA512):', checkValue.substring(0, 20) + '...');
+      console.log('🔐 [PAYMENT] Payment details (for logging only, not sent to API):');
+      console.log('🔐 [PAYMENT] - Merchant ID:', merchantId);
+      console.log('🔐 [PAYMENT] - Customer ID:', customerId);
+      console.log('🔐 [PAYMENT] - Token ID:', tokenId);
+      console.log('🔐 [PAYMENT] - Invoice ID:', invoiceId);
+      console.log('🔐 [PAYMENT] - Amount:', amount);
+      console.log('🔐 [PAYMENT] - Order Description:', orderDescription);
+      console.log('🔐 [PAYMENT] - Webhook URL:', webhookUrl || 'Default webhook');
+      console.log('� [PAYMENT] - Custom1:', custom1 || 'Not provided');
+      console.log('� [PAYMENT] - Custom2:', custom2 || 'Not provided');
+      console.log('� [PAYMENT] - CheckValue String (for reference):', checkValueString);
+      console.log('� [PAYMENT] - CheckValue (for reference):', checkValue.substring(0, 20) + '...');
 
-      // Process payment with saved card token using correct Payable values
-      const paymentData: any = {
-        merchantId: 'ce2cb8ee-6076-11f0-b4da-9ff2e85b9b44', // Use correct Payable merchant ID value
-        customerId: '4bc90b4b-9470-11f0-9628-7bdb5498779c', // Use correct Payable customer ID value
-        tokenId,
-        invoiceId,
-        amount,
-        currencyCode: 'LKR',
-        checkValue,
-        webhookUrl: webhookUrl || 'https://salon.run.place:8090/api/v1/payments/webhook'
-      };
-
-      // Add optional custom fields
-      if (custom1) paymentData.custom1 = custom1;
-      if (custom2) paymentData.custom2 = custom2;
-
-      console.log('📋 [PAYMENT] Payment data prepared:');
-      console.log('📋 [PAYMENT] - Merchant ID:', paymentData.merchantId);
-      console.log('📋 [PAYMENT] - Customer ID:', paymentData.customerId);
-      console.log('📋 [PAYMENT] - Token ID:', paymentData.tokenId);
-      console.log('📋 [PAYMENT] - Invoice ID:', paymentData.invoiceId);
-      console.log('📋 [PAYMENT] - Amount:', paymentData.amount);
-      console.log('📋 [PAYMENT] - Currency:', paymentData.currencyCode);
-      console.log('📋 [PAYMENT] - CheckValue:', paymentData.checkValue?.substring(0, 20) + '...');
-      console.log('📋 [PAYMENT] - Webhook URL:', paymentData.webhookUrl);
-      console.log('📋 [PAYMENT] - Custom1:', paymentData.custom1);
-      console.log('📋 [PAYMENT] - Custom2:', paymentData.custom2);
+      // NOTE: The API specification requires NO REQUEST BODY for /tokenize/pay endpoint
+      // All payment details are managed through the JWT token authentication only
 
       // Use Bearer token authentication as required by the API
       const authorizationHeader = `Bearer ${jwtToken}`;
@@ -440,7 +421,8 @@ export class PaymentService {
       console.log('🔑 [PAYMENT] Bearer token:', authorizationHeader.substring(0, 50) + '...');
 
       // For saved card payments, use /tokenize/pay endpoint with Bearer token authentication
-      console.log('🔍 [PAYMENT] Making saved card payment with Bearer token auth (CORRECT METHOD)...');
+      // API specification requires EMPTY REQUEST BODY
+      console.log('🔍 [PAYMENT] Making saved card payment with Bearer token auth and EMPTY REQUEST BODY...');
       
       let paymentResponse = await fetch(`${apiBaseUrl}/ipg/v2/tokenize/pay`, {
         method: 'POST',
@@ -449,8 +431,8 @@ export class PaymentService {
           'Content-Type': 'application/json',
           'Authorization': authorizationHeader, // Use Bearer token
           'Accept': 'application/json'
-        },
-        body: JSON.stringify(paymentData)
+        }
+        // NO BODY - API specification requires empty request body
       });
 
       console.log('📤 [PAYMENT] Request sent to (BEARER TOKEN AUTH):', `${apiBaseUrl}/ipg/v2/tokenize/pay`);
@@ -460,7 +442,7 @@ export class PaymentService {
         'Authorization': authorizationHeader.substring(0, 50) + '...',
         'Accept': 'application/json'
       });
-      console.log('📤 [PAYMENT] Full request payload:', JSON.stringify(paymentData, null, 2));
+      console.log('📤 [PAYMENT] Request body: EMPTY (as required by API specification)');
       
       console.log('📥 [PAYMENT] Payment response status:', paymentResponse.status, paymentResponse.statusText);
       console.log('📥 [PAYMENT] Payment response headers:', Object.fromEntries(paymentResponse.headers.entries()));
