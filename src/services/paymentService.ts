@@ -1,7 +1,6 @@
 import CryptoJS from 'crypto-js';
 import { payablePayment } from 'payable-ipg-js';
 import { payableConfig, validatePayableConfig } from './payableConfig';
-import { webhookHandler } from './webhookHandler';
 import { apiService } from './api';
 import { getCurrentConfig } from '../config/environment';
 
@@ -521,7 +520,7 @@ export class PaymentService {
     tokenId: string,
     amount: string,
     invoiceId: string,
-    orderDescription: string,
+    _orderDescription: string,
     webhookUrl?: string,
     custom1?: string,
     custom2?: string
@@ -864,9 +863,9 @@ export class PaymentService {
         checkValue,
         orderDescription: request.orderDescription || 'Card tokenization',
         invoiceId: request.invoiceId,
-        logoUrl: 'https://salon.run.place/images/logo.png', // Default logo
+        logoUrl: 'https://firebasestorage.googleapis.com/v0/b/tiora-firebase.firebasestorage.app/o/logo%2FTiora%20gold.png?alt=media&token=2814af13-f96a-40e9-a3a5-6ba02ae0c3e3', // Default logo
         notifyUrl: 'https://salon.run.place:8090/api/v1/payments/webhook', // Fixed: Use main webhook endpoint
-        returnUrl: `${window.location.origin}/payment/success`, // Frontend success page
+        returnUrl: `${window.location.origin}/#/payment-billing`, // Redirect to Payment & Billing page
         merchantKey: payableConfig.merchantKey,
         customerFirstName: request.customerFirstName,
         customerLastName: request.customerLastName,
@@ -926,7 +925,7 @@ export class PaymentService {
         invoiceId: request.invoiceId,
         logoUrl: 'https://salon.run.place/images/logo.png', // Default logo
         notifyUrl: 'https://salon.run.place:8090/api/v1/payments/webhook', // Fixed: Use main webhook endpoint
-        returnUrl: `${window.location.origin}/payment/success`, // Frontend success page
+        returnUrl: `${window.location.origin}/#/payment-billing`, // Redirect to Payment & Billing page
         merchantKey: payableConfig.merchantKey,
         customerFirstName: request.customerFirstName,
         customerLastName: request.customerLastName,

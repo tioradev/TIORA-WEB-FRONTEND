@@ -1006,8 +1006,61 @@ const PaymentBilling: React.FC = () => {
               <p>Loading your payment cards...</p>
             </div>
           ) : null}
+          
+          {/* Payment Action Buttons */}
+          {totalPendingAmount > 0 && (
+            <div className="mt-6 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-2xl p-6">
+              <div className="text-center mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Ready to Pay?</h3>
+                <p className="text-gray-600">Choose how you'd like to pay your pending amount of <span className="font-semibold text-purple-600">Rs. {totalPendingAmount.toFixed(2)}</span></p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Pay One Time Button */}
+                <button
+                  onClick={() => {
+                    setSaveCardOption(false);
+                    handlePayWithNewCard();
+                  }}
+                  disabled={processingPayment}
+                  className="flex flex-col items-center justify-center p-6 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-300 hover:shadow-md transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed group"
+                >
+                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-3 group-hover:bg-blue-200 transition-colors">
+                    <CreditCard className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-1">Pay One Time</h4>
+                  <p className="text-sm text-gray-600 text-center mb-3">Quick payment without saving card details</p>
+                  <span className="text-blue-600 font-medium">Rs. {totalPendingAmount.toFixed(2)}</span>
+                </button>
+                
+                {/* Pay & Save Card Button */}
+                <button
+                  onClick={() => {
+                    setSaveCardOption(true);
+                    handlePayWithNewCard();
+                  }}
+                  disabled={processingPayment}
+                  className="flex flex-col items-center justify-center p-6 bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl hover:from-purple-600 hover:to-purple-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed group shadow-lg"
+                >
+                  <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mb-3 group-hover:bg-white/30 transition-colors">
+                    <Plus className="w-6 h-6 text-white" />
+                  </div>
+                  <h4 className="text-lg font-semibold mb-1">Pay & Save Card</h4>
+                  <p className="text-sm text-purple-100 text-center mb-3">Pay now and save for future payments</p>
+                  <span className="text-white font-medium">Rs. {totalPendingAmount.toFixed(2)}</span>
+                </button>
+              </div>
+              
+              {processingPayment && (
+                <div className="mt-4 flex items-center justify-center space-x-2 text-purple-600">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-600"></div>
+                  <span className="font-medium">Processing payment...</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      )}
+        )}
 
         {/* Overview Content */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1196,60 +1249,6 @@ const PaymentBilling: React.FC = () => {
                         </div>
                       </div>
                     ))}
-                  </div>
-                </div>
-
-                {/* New Card Payment Option */}
-                <div className="pt-6 border-t border-gray-200">
-                  <div>
-                    <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
-                      <Plus className="w-5 h-5 text-purple-600" />
-                      <span>Pay with New Card</span>
-                    </h4>
-                    <div className="border border-dashed border-gray-300 rounded-xl p-6 hover:border-purple-300 hover:bg-purple-50/30 transition-all duration-300">
-                      <div className="text-center">
-                        <div className="mx-auto w-16 h-16 bg-gradient-to-r from-purple-100 to-purple-200 rounded-2xl flex items-center justify-center mb-4">
-                          <Plus className="w-8 h-8 text-purple-600" />
-                        </div>
-                        <h5 className="text-lg font-semibold text-gray-900 mb-2">Add New Payment Card</h5>
-                        <p className="text-gray-600 mb-4">Securely add and use a new payment method</p>
-                        
-                        {/* Save Card Option */}
-                        <div className="flex items-center justify-center space-x-2 mb-6">
-                          <input
-                            type="checkbox"
-                            id="saveCard"
-                            checked={saveCardOption}
-                            onChange={(e) => setSaveCardOption(e.target.checked)}
-                            className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
-                          />
-                          <label htmlFor="saveCard" className="text-sm font-medium text-gray-700 cursor-pointer">
-                            Save this card for future payments
-                          </label>
-                        </div>
-                        
-                        <button
-                          onClick={() => {
-                            setShowPaymentOptions(false);
-                            handlePayWithNewCard();
-                          }}
-                          disabled={processingPayment}
-                          className="w-full px-6 py-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white font-semibold rounded-xl hover:from-purple-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg"
-                        >
-                          {processingPayment ? (
-                            <div className="flex items-center justify-center space-x-2">
-                              <Clock className="w-4 h-4 animate-spin" />
-                              <span>Processing...</span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-center space-x-2">
-                              <Plus className="w-5 h-5" />
-                              <span>Pay Rs. {totalPendingAmount.toFixed(2)} with New Card</span>
-                            </div>
-                          )}
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
