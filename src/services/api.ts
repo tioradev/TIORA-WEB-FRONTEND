@@ -1458,11 +1458,30 @@ class ApiService {
   // Analytics methods
   async getPaymentAnalytics(salonId: number): Promise<any> {
     try {
-      const response = await this.request<any>(`${ENDPOINTS.ANALYTICS.PAYMENT_STATS}/${salonId}`, {
-        method: 'GET'
-      });
+      // Use direct URL without /v1 prefix for analytics endpoint
+      const baseUrl = getCurrentConfig().API_BASE_URL.replace('/api/v1', '');
+      const url = `${baseUrl}/api/payments/analytics/${salonId}`;
+      
+      const config: RequestInit = {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.authToken && { 'Authorization': `Bearer ${this.authToken}` }),
+        },
+      };
+
+      envLog.info('🌐 [ANALYTICS] Making analytics request to:', url);
+      const response = await fetch(url, config);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        envLog.error('❌ [ANALYTICS] Error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      }
+
+      const data = await response.json();
       envLog.info('✅ [ANALYTICS] Retrieved payment analytics');
-      return response;
+      return data;
     } catch (error) {
       envLog.error('❌ [ANALYTICS] Error retrieving payment analytics:', error);
       throw error;

@@ -1074,6 +1074,7 @@ export class PaymentService {
 
       // Prepare request data for deleteCard API
       const requestData = {
+        merchantId: payableMerchantId,
         customerId: payableCustomerId,
         tokenId: cleanTokenId,
         checkValue
