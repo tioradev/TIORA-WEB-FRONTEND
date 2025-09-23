@@ -1,14 +1,90 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  TrendingUp, DollarSign, Users, Calendar, 
-  BarChart3, PieChart, Target, Award,
-  ArrowUp, ArrowDown, Filter, Download
+  TrendingUp, DollarSign, Users,
+  BarChart3, Target, Award,
+  ArrowUp, ArrowDown, Download
 } from 'lucide-react';
 import { RevenueAnalytics, CustomerAnalytics } from '../../types';
+import { apiService } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+
+// Branch analytics interfaces
+interface BranchIncomeStats {
+  branchId: number;
+  branchName: string;
+  appointmentRevenue: number;
+  serviceCharges: number;
+  netIncome: number;
+}
+
+interface BranchMonthlyStats {
+  branchId: number;
+  branchName: string;
+  monthlyAppointments: number;
+  monthlyRevenue: number;
+  monthlyServiceCharges: number;
+  monthlyNetIncome: number;
+  paidServiceCharges: number;
+  pendingServiceCharges: number;
+}
+
+interface AnalyticsData {
+  salonId: number;
+  analyticsDate: string;
+  totalPendingAmount: number;
+  todayStats: {
+    totalAppointments: number;
+    branchStats: any[];
+  };
+  todayIncome: {
+    totalAppointmentRevenue: number;
+    totalServiceCharges: number;
+    netIncome: number;
+    branchIncomeStats: BranchIncomeStats[];
+  };
+  monthlyIncome: {
+    monthYear: string;
+    totalMonthlyRevenue: number;
+    totalMonthlyServiceCharges: number;
+    totalMonthlyNetIncome: number;
+    branchMonthlyStats: BranchMonthlyStats[];
+  };
+  serviceCharge: number;
+}
 
 const AdvancedAnalytics: React.FC = () => {
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | '1y'>('30d');
-  const [activeTab, setActiveTab] = useState<'revenue' | 'customers' | 'services' | 'forecasting'>('revenue');
+  const [activeTab, setActiveTab] = useState<'revenue' | 'customers' | 'services' | 'forecasting' | 'branches'>('revenue');
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { getSalonId } = useAuth();
+
+  useEffect(() => {
+    fetchAnalyticsData();
+  }, []);
+
+  const fetchAnalyticsData = async () => {
+    const salonId = getSalonId();
+    if (!salonId) {
+      setError('Salon information not available');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const data = await apiService.getPaymentAnalytics(salonId);
+      setAnalyticsData(data);
+      console.log('Analytics data loaded:', data);
+    } catch (error) {
+      console.error('Error loading analytics data:', error);
+      setError('Failed to load analytics data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Mock analytics data
   const revenueAnalytics: RevenueAnalytics = {
@@ -51,19 +127,9 @@ const AdvancedAnalytics: React.FC = () => {
     { id: 'revenue', label: 'Revenue Analytics', icon: DollarSign },
     { id: 'customers', label: 'Customer Analytics', icon: Users },
     { id: 'services', label: 'Service Performance', icon: BarChart3 },
+    { id: 'branches', label: 'Branch Performance', icon: Target },
     { id: 'forecasting', label: 'Forecasting', icon: TrendingUp },
   ];
-
-  const getGrowthIndicator = (current: number, previous: number) => {
-    const growth = ((current - previous) / previous) * 100;
-    const isPositive = growth > 0;
-    return {
-      value: Math.abs(growth).toFixed(1),
-      isPositive,
-      icon: isPositive ? ArrowUp : ArrowDown,
-      color: isPositive ? 'text-green-600' : 'text-red-600',
-    };
-  };
 
   return (
     <div className="space-y-6">
@@ -317,7 +383,7 @@ const AdvancedAnalytics: React.FC = () => {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Service Popularity</h3>
               <div className="space-y-4">
-                {revenueAnalytics.topServices.map((service, index) => (
+                {revenueAnalytics.topServices.map((service) => (
                   <div key={service.serviceId} className="space-y-2">
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-medium text-gray-700">{service.serviceName}</span>
@@ -395,6 +461,125 @@ const AdvancedAnalytics: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Branch Performance Tab */}
+      {activeTab === 'branches' && (
+        <div className="space-y-6">
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex">
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">Error Loading Data</h3>
+                  <p className="mt-1 text-sm text-red-700">{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {isLoading ? (
+            <div className="text-center py-8">
+              <div className="inline-flex items-center px-4 py-2 font-semibold leading-6 text-sm shadow rounded-md text-white bg-purple-500 hover:bg-purple-400 transition ease-in-out duration-150 cursor-not-allowed">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Loading analytics data...
+              </div>
+            </div>
+          ) : analyticsData ? (
+            <div>
+              {/* Today's Performance by Branch */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Today's Performance by Branch</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {analyticsData.todayIncome.branchIncomeStats.map((branch) => (
+                    <div key={branch.branchId} className="border border-gray-200 rounded-lg p-4">
+                      <h4 className="font-medium text-gray-900 mb-2">{branch.branchName}</h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Appointment Revenue</span>
+                          <span className="font-medium text-green-600">
+                            ${branch.appointmentRevenue.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Service Charges</span>
+                          <span className="font-medium text-red-600">
+                            -${branch.serviceCharges.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm font-semibold border-t pt-2">
+                          <span className="text-gray-900">Net Income</span>
+                          <span className="text-blue-600">
+                            ${branch.netIncome.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Monthly Performance by Branch */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Monthly Performance by Branch ({analyticsData.monthlyIncome.monthYear})
+                </h3>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {analyticsData.monthlyIncome.branchMonthlyStats.map((branch) => (
+                    <div key={branch.branchId} className="border border-gray-200 rounded-lg p-4">
+                      <h4 className="font-medium text-gray-900 mb-3">{branch.branchName}</h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Appointments</span>
+                          <span className="font-medium text-gray-900">
+                            {branch.monthlyAppointments}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Revenue</span>
+                          <span className="font-medium text-green-600">
+                            ${branch.monthlyRevenue.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Service Charges</span>
+                          <span className="font-medium text-red-600">
+                            -${branch.monthlyServiceCharges.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600 ml-2">Paid</span>
+                          <span className="text-green-600">
+                            ${branch.paidServiceCharges.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600 ml-2">Pending</span>
+                          <span className="text-orange-600">
+                            ${branch.pendingServiceCharges.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm font-semibold border-t pt-2">
+                          <span className="text-gray-900">Net Income</span>
+                          <span className="text-blue-600">
+                            ${branch.monthlyNetIncome.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <Target className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+              <p>No branch performance data available</p>
+            </div>
+          )}
         </div>
       )}
     </div>

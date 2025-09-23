@@ -83,19 +83,6 @@ interface AnalyticsData {
   serviceCharge: number;
 }
 
-interface AppointmentCharge {
-  id: string;
-  salonId: string;
-  date: string;
-  appointmentCount: number;
-  chargePerAppointment: number;
-  totalCharge: number;
-  status: 'pending' | 'paid' | 'failed';
-  scheduledAt: Date;
-  paidAt?: Date;
-  paymentMethod?: string;
-}
-
 const PaymentBilling: React.FC = () => {
   // Get salon owner data from auth context
   const { salon } = useAuth();
@@ -113,7 +100,8 @@ const PaymentBilling: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<string>(''); // Will be set based on salon data
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
-  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+  const [, setIsLoadingAnalytics] = useState(false);
+  const [saveCardOption, setSaveCardOption] = useState(false);
   const [deleteCardModal, setDeleteCardModal] = useState<{
     isOpen: boolean;
     cardInfo: string;
@@ -195,6 +183,7 @@ const PaymentBilling: React.FC = () => {
     // Listen for webhook events (fallback for direct Payable events)
     const handleTokenizationSuccess = () => {
       console.log('🔔 [PAYMENT] Tokenization successful, refreshing cards...');
+      showToast('success', 'Card Saved', 'Your payment card has been securely saved for future use.');
       setTimeout(() => loadSavedCards(), 2000); // Small delay to ensure backend processing
     };
     
@@ -461,11 +450,6 @@ const PaymentBilling: React.FC = () => {
   const todayAppointments = analyticsData?.todayStats?.totalAppointments ?? 0;
   const serviceCharge = analyticsData?.serviceCharge ?? 50;
 
-  // Branch statistics for display
-  const branchIncomeStats = analyticsData?.todayIncome?.branchIncomeStats ?? [];
-  const branchMonthlyStats = analyticsData?.monthlyIncome?.branchMonthlyStats ?? [];
-
-  // Legacy appointment charges for backward compatibility
   const pendingCharges = totalPendingAmount > 0 ? [{
     id: 'pending-total',
     salonId: salon?.salonId?.toString() || '',
@@ -630,7 +614,8 @@ const PaymentBilling: React.FC = () => {
         customerEmail: salon?.ownerEmail || 'owner@salon.com',
         customerMobilePhone: salon?.ownerPhone?.startsWith('+') ? salon.ownerPhone : `+94${salon?.ownerPhone?.replace(/^0/, '') || '771234567'}`,
         customerRefNo: selectedCustomer || `SALON${Date.now()}`,
-        paymentType: '1',
+        paymentType: saveCardOption ? '3' : '1', // '3' for tokenize (save card), '1' for one-time
+        isSaveCard: saveCardOption ? '1' : '0', // Save card option
         billingAddressStreet: 'N/A',
         billingAddressCity: salon?.district || 'Colombo',
         billingAddressCountry: 'LKA',
@@ -656,7 +641,13 @@ const PaymentBilling: React.FC = () => {
       
       // Add a small delay before redirecting
       setTimeout(async () => {
-        await paymentService.processOneTimePayment(paymentRequest);
+        if (saveCardOption) {
+          // Use tokenize payment to save card during payment
+          await paymentService.processTokenizePayment(paymentRequest);
+        } else {
+          // Use regular one-time payment
+          await paymentService.processOneTimePayment(paymentRequest);
+        }
       }, 1500);
       
     } catch (error) {
@@ -876,94 +867,6 @@ const PaymentBilling: React.FC = () => {
           </div>
         </div>
 
-        {/* Branch-wise Analytics */}
-        {analyticsData && (branchIncomeStats.length > 0 || branchMonthlyStats.length > 0) && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-            <div className="mb-8">
-              <h3 className="text-2xl font-bold text-gray-900 mb-3">Branch Performance</h3>
-              <p className="text-gray-600">Today's and monthly income breakdown by branch</p>
-            </div>
-            
-            {/* Today's Income by Branch */}
-            {branchIncomeStats.length > 0 && (
-              <div className="mb-8">
-                <h4 className="text-lg font-semibold text-gray-800 mb-4">Today's Income by Branch</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {branchIncomeStats.map((branch) => (
-                    <div key={`today-${branch.branchId}`} className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
-                      <div className="flex items-center justify-between mb-3">
-                        <h5 className="font-medium text-gray-900 truncate">{branch.branchName}</h5>
-                        <div className="p-2 bg-green-100 rounded-lg">
-                          <TrendingUp className="w-4 h-4 text-green-600" />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Revenue:</span>
-                          <span className="font-semibold text-green-700">Rs. {branch.appointmentRevenue.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Service Charges:</span>
-                          <span className="font-semibold text-green-700">Rs. {branch.serviceCharges.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between items-center border-t pt-2">
-                          <span className="text-sm font-medium text-gray-800">Net Income:</span>
-                          <span className="font-bold text-green-800">Rs. {branch.netIncome.toFixed(2)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {/* Monthly Income by Branch */}
-            {branchMonthlyStats.length > 0 && (
-              <div>
-                <h4 className="text-lg font-semibold text-gray-800 mb-4">Monthly Income by Branch</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {branchMonthlyStats.map((branch) => (
-                    <div key={`monthly-${branch.branchId}`} className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
-                      <div className="flex items-center justify-between mb-3">
-                        <h5 className="font-medium text-gray-900 truncate">{branch.branchName}</h5>
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                          <Calendar className="w-4 h-4 text-blue-600" />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Appointments:</span>
-                          <span className="font-semibold text-blue-700">{branch.monthlyAppointments}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Revenue:</span>
-                          <span className="font-semibold text-blue-700">Rs. {branch.monthlyRevenue.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Service Charges:</span>
-                          <span className="font-semibold text-blue-700">Rs. {branch.monthlyServiceCharges.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Paid Charges:</span>
-                          <span className="font-semibold text-green-600">Rs. {branch.paidServiceCharges.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Pending Charges:</span>
-                          <span className="font-semibold text-amber-600">Rs. {branch.pendingServiceCharges.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between items-center border-t pt-2">
-                          <span className="text-sm font-medium text-gray-800">Net Income:</span>
-                          <span className="font-bold text-blue-800">Rs. {branch.monthlyNetIncome.toFixed(2)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Saved Cards Section */}
         {payableConfig.isConfigured && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
@@ -1030,9 +933,6 @@ const PaymentBilling: React.FC = () => {
                           <span className="text-sm font-medium text-white/90">
                             {card.cardScheme}
                           </span>
-                        </div>
-                        <div className="text-xs bg-white/10 px-2 py-1 rounded">
-                          {card.tokenStatus}
                         </div>
                       </div>
                       
@@ -1312,7 +1212,22 @@ const PaymentBilling: React.FC = () => {
                           <Plus className="w-8 h-8 text-purple-600" />
                         </div>
                         <h5 className="text-lg font-semibold text-gray-900 mb-2">Add New Payment Card</h5>
-                        <p className="text-gray-600 mb-6">Securely add and use a new payment method</p>
+                        <p className="text-gray-600 mb-4">Securely add and use a new payment method</p>
+                        
+                        {/* Save Card Option */}
+                        <div className="flex items-center justify-center space-x-2 mb-6">
+                          <input
+                            type="checkbox"
+                            id="saveCard"
+                            checked={saveCardOption}
+                            onChange={(e) => setSaveCardOption(e.target.checked)}
+                            className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
+                          />
+                          <label htmlFor="saveCard" className="text-sm font-medium text-gray-700 cursor-pointer">
+                            Save this card for future payments
+                          </label>
+                        </div>
+                        
                         <button
                           onClick={() => {
                             setShowPaymentOptions(false);
@@ -1345,7 +1260,7 @@ const PaymentBilling: React.FC = () => {
       
       {/* Delete Card Confirmation Modal */}
       {deleteCardModal.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-xl max-w-md w-full mx-4">
             <div className="p-6">
               {/* Header */}
