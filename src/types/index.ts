@@ -203,6 +203,7 @@ export interface LeaveRequest {
 
 // API Response types for Leave Management
 export interface LeaveDetailApiResponse {
+  id: number; // Leave request ID (not employee ID)
   employeeId: number;
   employeeName: string;
   duration: number;

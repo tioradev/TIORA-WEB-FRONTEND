@@ -63,6 +63,7 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
         totalElements: response.totalElements,
         contentCount: response.content.length,
         statuses: response.content.map(item => ({
+          id: item.id, // Leave request ID
           employeeId: item.employeeId,
           status: item.status || 'NO_STATUS_FIELD'
         }))
@@ -124,7 +125,7 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
     }
     
     return {
-      id: apiLeave.employeeId.toString(),
+      id: apiLeave.id.toString(), // Use the actual leave ID, not employeeId
       salonId: salonId?.toString() || '',
       barberId: apiLeave.employeeId.toString(),
       barberName: apiLeave.employeeName,
@@ -149,6 +150,7 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
       const isProcessed = !apiLeave.status || (apiLeave.status === 'APPROVED' || apiLeave.status === 'REJECTED');
       if (!isProcessed) {
         console.log('🚫 [SUMMARY] Filtering out pending leave from summary:', {
+          id: apiLeave.id, // Leave request ID
           employeeId: apiLeave.employeeId,
           status: apiLeave.status
         });
@@ -439,7 +441,7 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button
                           onClick={() => {
-                            const apiLeave = apiResponse?.content.find(l => l.employeeId.toString() === leave.id);
+                            const apiLeave = apiResponse?.content.find(l => l.id.toString() === leave.id);
                             setSelectedLeave(apiLeave || null);
                           }}
                           className="inline-flex items-center space-x-1 px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 transition-colors duration-200"

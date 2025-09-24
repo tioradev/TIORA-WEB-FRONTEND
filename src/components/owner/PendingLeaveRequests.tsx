@@ -57,6 +57,7 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
         totalElements: response.totalElements,
         content: response.content,
         contentWithStatus: response.content.map(item => ({
+          id: item.id, // Leave request ID
           employeeId: item.employeeId,
           employeeName: item.employeeName,
           status: item.status || 'NO_STATUS_FIELD'
@@ -120,7 +121,7 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
     }
     
     return {
-      id: apiLeave.employeeId.toString(),
+      id: apiLeave.id.toString(), // Use the actual leave ID, not employeeId
       salonId: salonId?.toString() || '',
       barberId: apiLeave.employeeId.toString(),
       barberName: apiLeave.employeeName,
@@ -142,6 +143,7 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
       const isPending = !apiLeave.status || apiLeave.status === 'PENDING';
       if (!isPending) {
         console.log('🚫 [DEBUG] Filtering out non-pending leave:', {
+          id: apiLeave.id, // Leave request ID
           employeeId: apiLeave.employeeId,
           employeeName: apiLeave.employeeName,
           status: apiLeave.status

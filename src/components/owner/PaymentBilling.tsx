@@ -10,6 +10,8 @@ import {
   Clock,
   AlertCircle,
   X,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { paymentService, PaymentRequest } from '../../services/paymentService';
 import { webSocketPaymentService, PaymentStatusEvent, TokenSavedEvent } from '../../services/webSocketPaymentService';
@@ -102,6 +104,8 @@ const PaymentBilling: React.FC = () => {
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [, setIsLoadingAnalytics] = useState(false);
   const [saveCardOption, setSaveCardOption] = useState(false);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [wsConnecting, setWsConnecting] = useState(false);
   const [deleteCardModal, setDeleteCardModal] = useState<{
     isOpen: boolean;
     cardInfo: string;
@@ -111,6 +115,26 @@ const PaymentBilling: React.FC = () => {
     cardInfo: '',
     tokenId: ''
   });
+
+  // Retry WebSocket connection
+  const handleRetryConnection = () => {
+    console.log('🔄 [PAYMENT] Retrying WebSocket connection...');
+    if (salon?.salonId) {
+      setWsConnecting(true);
+      webSocketPaymentService.connect(salon.salonId.toString())
+        .then(() => {
+          console.log('✅ [PAYMENT] WebSocket reconnected successfully');
+          setWsConnected(true);
+        })
+        .catch((error) => {
+          console.error('❌ [PAYMENT] Failed to reconnect WebSocket:', error);
+          setWsConnected(false);
+        })
+        .finally(() => {
+          setWsConnecting(false);
+        });
+    }
+  };
   
   // Toast states
   const [toasts, setToasts] = useState<Array<{
@@ -165,8 +189,10 @@ const PaymentBilling: React.FC = () => {
       }
       
       try {
+        setWsConnecting(true);
         await webSocketPaymentService.connect(salon.salonId.toString());
         console.log('✅ [PAYMENT] WebSocket connected for real-time notifications');
+        setWsConnected(true);
         
         // Subscribe to token saved events for automatic card refresh
         webSocketPaymentService.subscribeToTokenEvents((event: TokenSavedEvent) => {
@@ -176,7 +202,9 @@ const PaymentBilling: React.FC = () => {
         
       } catch (error) {
         console.error('❌ [PAYMENT] Failed to connect WebSocket:', error);
-        showToast('warning', 'Real-time notifications unavailable', 'You may need to refresh manually');
+        setWsConnected(false);
+      } finally {
+        setWsConnecting(false);
       }
     };
     
@@ -762,7 +790,34 @@ const PaymentBilling: React.FC = () => {
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Payment & Billing</h1>
               <p className="text-lg text-gray-600">Manage your payment methods and billing efficiently</p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col sm:flex-row gap-3 items-end sm:items-center">
+              {/* Live Updates Status Indicator */}
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50">
+                {wsConnected ? (
+                  <>
+                    <Wifi className="w-4 h-4 text-green-500" />
+                    <span className="text-sm text-green-600 font-medium">Live Updates</span>
+                  </>
+                ) : wsConnecting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-sm text-blue-600 font-medium">Connecting...</span>
+                  </>
+                ) : (
+                  <>
+                    <WifiOff className="w-4 h-4 text-red-500" />
+                    <span className="text-sm text-red-600 font-medium">Disconnected</span>
+                    <button
+                      onClick={handleRetryConnection}
+                      className="text-xs text-blue-600 hover:text-blue-700 ml-2 underline"
+                      title="Reconnect to live updates"
+                    >
+                      Retry
+                    </button>
+                  </>
+                )}
+              </div>
+              
               {totalPendingAmount > 0 ? (
                 <button
                   onClick={handlePayPendingCharges}
@@ -1006,59 +1061,6 @@ const PaymentBilling: React.FC = () => {
               <p>Loading your payment cards...</p>
             </div>
           ) : null}
-          
-          {/* Payment Action Buttons */}
-          {totalPendingAmount > 0 && (
-            <div className="mt-6 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-2xl p-6">
-              <div className="text-center mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Ready to Pay?</h3>
-                <p className="text-gray-600">Choose how you'd like to pay your pending amount of <span className="font-semibold text-purple-600">Rs. {totalPendingAmount.toFixed(2)}</span></p>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Pay One Time Button */}
-                <button
-                  onClick={() => {
-                    setSaveCardOption(false);
-                    handlePayWithNewCard();
-                  }}
-                  disabled={processingPayment}
-                  className="flex flex-col items-center justify-center p-6 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-300 hover:shadow-md transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed group"
-                >
-                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-3 group-hover:bg-blue-200 transition-colors">
-                    <CreditCard className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <h4 className="text-lg font-semibold text-gray-900 mb-1">Pay One Time</h4>
-                  <p className="text-sm text-gray-600 text-center mb-3">Quick payment without saving card details</p>
-                  <span className="text-blue-600 font-medium">Rs. {totalPendingAmount.toFixed(2)}</span>
-                </button>
-                
-                {/* Pay & Save Card Button */}
-                <button
-                  onClick={() => {
-                    setSaveCardOption(true);
-                    handlePayWithNewCard();
-                  }}
-                  disabled={processingPayment}
-                  className="flex flex-col items-center justify-center p-6 bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl hover:from-purple-600 hover:to-purple-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed group shadow-lg"
-                >
-                  <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mb-3 group-hover:bg-white/30 transition-colors">
-                    <Plus className="w-6 h-6 text-white" />
-                  </div>
-                  <h4 className="text-lg font-semibold mb-1">Pay & Save Card</h4>
-                  <p className="text-sm text-purple-100 text-center mb-3">Pay now and save for future payments</p>
-                  <span className="text-white font-medium">Rs. {totalPendingAmount.toFixed(2)}</span>
-                </button>
-              </div>
-              
-              {processingPayment && (
-                <div className="mt-4 flex items-center justify-center space-x-2 text-purple-600">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-600"></div>
-                  <span className="font-medium">Processing payment...</span>
-                </div>
-              )}
-            </div>
-          )}
         </div>
         )}
 
@@ -1249,6 +1251,61 @@ const PaymentBilling: React.FC = () => {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                {/* Payment Action Buttons */}
+                <div className="mt-8 pt-6 border-t border-gray-200">
+                  <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-2xl p-6">
+                    <div className="text-center mb-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Ready to Pay?</h3>
+                      <p className="text-gray-600">Choose how you'd like to pay your pending amount of <span className="font-semibold text-purple-600">Rs. {totalPendingAmount.toFixed(2)}</span></p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Pay One Time Button */}
+                      <button
+                        onClick={() => {
+                          setSaveCardOption(false);
+                          setShowPaymentOptions(false);
+                          handlePayWithNewCard();
+                        }}
+                        disabled={processingPayment}
+                        className="flex flex-col items-center justify-center p-6 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-300 hover:shadow-md transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed group"
+                      >
+                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-3 group-hover:bg-blue-200 transition-colors">
+                          <CreditCard className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <h4 className="text-lg font-semibold text-gray-900 mb-1">Pay One Time</h4>
+                        <p className="text-sm text-gray-600 text-center mb-3">Quick payment without saving card details</p>
+                        <span className="text-blue-600 font-medium">Rs. {totalPendingAmount.toFixed(2)}</span>
+                      </button>
+                      
+                      {/* Pay & Save Card Button */}
+                      <button
+                        onClick={() => {
+                          setSaveCardOption(true);
+                          setShowPaymentOptions(false);
+                          handlePayWithNewCard();
+                        }}
+                        disabled={processingPayment}
+                        className="flex flex-col items-center justify-center p-6 bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl hover:from-purple-600 hover:to-purple-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed group shadow-lg"
+                      >
+                        <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mb-3 group-hover:bg-white/30 transition-colors">
+                          <Plus className="w-6 h-6 text-white" />
+                        </div>
+                        <h4 className="text-lg font-semibold mb-1">Pay & Save Card</h4>
+                        <p className="text-sm text-purple-100 text-center mb-3">Pay now and save for future payments</p>
+                        <span className="text-white font-medium">Rs. {totalPendingAmount.toFixed(2)}</span>
+                      </button>
+                    </div>
+                    
+                    {processingPayment && (
+                      <div className="mt-4 flex items-center justify-center space-x-2 text-purple-600">
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-600"></div>
+                        <span className="font-medium">Processing payment...</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
