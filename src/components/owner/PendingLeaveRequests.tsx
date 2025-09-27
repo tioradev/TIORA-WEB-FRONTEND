@@ -45,22 +45,35 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
   // WebSocket connection for real-time leave request updates
   const { isConnected, isConnecting, retry } = useLeaveWebSocket({
     onLeaveRequestSubmitted: (notification) => {
+      console.log('🎯 [PENDING-LEAVES] ======= CALLBACK TRIGGERED =======');
       console.log('🔔 [PENDING-LEAVES] New leave request submitted:', notification);
+      console.log('🔔 [PENDING-LEAVES] Current component state:', { currentPage, searchTerm });
       // Refresh the data to show new request
       refreshCurrentData();
+      console.log('🎯 [PENDING-LEAVES] ======= REFRESH CALLED =======');
     },
     onLeaveRequestApproved: (notification) => {
+      console.log('🎯 [PENDING-LEAVES] ======= CALLBACK TRIGGERED =======');
       console.log('🔔 [PENDING-LEAVES] Leave request approved:', notification);
+      console.log('🔔 [PENDING-LEAVES] Current component state:', { currentPage, searchTerm });
       // Refresh the data to remove approved request from pending list
       refreshCurrentData();
+      console.log('🎯 [PENDING-LEAVES] ======= REFRESH CALLED =======');
     },
     onLeaveRequestRejected: (notification) => {
+      console.log('🎯 [PENDING-LEAVES] ======= CALLBACK TRIGGERED =======');
       console.log('🔔 [PENDING-LEAVES] Leave request rejected:', notification);
+      console.log('🔔 [PENDING-LEAVES] Current component state:', { currentPage, searchTerm });
       // Refresh the data to remove rejected request from pending list
       refreshCurrentData();
+      console.log('🎯 [PENDING-LEAVES] ======= REFRESH CALLED =======');
     },
     onAnyLeaveNotification: (notification) => {
+      console.log('🎯 [PENDING-LEAVES] ======= ANY NOTIFICATION CALLBACK =======');
       console.log('🔔 [PENDING-LEAVES] Any leave notification:', notification);
+      console.log('🔔 [PENDING-LEAVES] Notification type:', notification.type);
+      console.log('🔔 [PENDING-LEAVES] Employee:', notification.employeeName);
+      console.log('🔔 [PENDING-LEAVES] Current component state:', { currentPage, searchTerm });
     }
   });
 

@@ -83,11 +83,62 @@ class WebSocketLeaveService {
         try {
           const data = JSON.parse(event.data);
           console.log('📨 [WEBSOCKET-LEAVE] Received message:', data);
+          console.log('🔍 [WEBSOCKET-LEAVE] Message analysis:', {
+            hasType: !!data.type,
+            type: data.type,
+            hasMessage: !!data.message,
+            message: data.message,
+            hasEmployeeLeave: !!data.employeeLeave,
+            hasLeaveRequest: !!data.leaveRequest,
+            allKeys: Object.keys(data)
+          });
 
           // Check if this is a leave-related notification
-          if (this.isLeaveNotification(data)) {
+          const isLeaveMsg = this.isLeaveNotification(data);
+          console.log('🔍 [WEBSOCKET-LEAVE] Is leave notification?', isLeaveMsg);
+          
+          if (isLeaveMsg) {
+            console.log('✅ [WEBSOCKET-LEAVE] Processing leave notification');
             const notification = this.transformToLeaveNotification(data);
-            this.callbacks.forEach(callback => callback(notification));
+            console.log('🔔 [WEBSOCKET-LEAVE] Transformed notification:', notification);
+            this.callbacks.forEach((callback, index) => {
+              console.log(`🔔 [WEBSOCKET-LEAVE] Calling callback ${index + 1}/${this.callbacks.length}`);
+              callback(notification);
+            });
+          } else {
+            console.log('❌ [WEBSOCKET-LEAVE] Message not recognized as leave notification');
+            
+            // TEMPORARY: For debugging, try to process any message that might be leave-related
+            // This helps identify if the issue is with message detection vs callback execution
+            if (data && typeof data === 'object') {
+              console.log('🧪 [WEBSOCKET-LEAVE] DEBUGGING: Attempting to process as leave notification anyway...');
+              try {
+                const debugNotification = this.transformToLeaveNotification(data);
+                console.log('🧪 [WEBSOCKET-LEAVE] DEBUG: Transformed notification:', debugNotification);
+                
+                // Only call callbacks if the transformation looks valid
+                if (debugNotification.employeeId && debugNotification.employeeName) {
+                  console.log('🧪 [WEBSOCKET-LEAVE] DEBUG: Calling callbacks for debug notification');
+                  this.callbacks.forEach((callback, index) => {
+                    console.log(`🧪 [WEBSOCKET-LEAVE] DEBUG: Calling callback ${index + 1}/${this.callbacks.length}`);
+                    callback(debugNotification);
+                  });
+                } else {
+                  console.log('🧪 [WEBSOCKET-LEAVE] DEBUG: Transformed notification invalid, skipping callbacks');
+                }
+              } catch (debugError) {
+                console.error('🧪 [WEBSOCKET-LEAVE] DEBUG: Error in debug transformation:', debugError);
+              }
+            }
+            
+            // Log all messages for debugging - remove this in production
+            if (data.type || data.message) {
+              console.log('📝 [WEBSOCKET-LEAVE] Non-leave message details:', {
+                type: data.type,
+                message: data.message,
+                fullData: data
+              });
+            }
           }
         } catch (error) {
           console.error('❌ [WEBSOCKET-LEAVE] Error parsing message:', error);
@@ -127,30 +178,40 @@ class WebSocketLeaveService {
    * Check if the received message is a leave-related notification
    */
   private isLeaveNotification(data: any): boolean {
-    // Look for leave-related keywords in the message
-    return (
-      data.type && (
-        data.type.includes('LEAVE') || 
-        data.type.includes('leave') ||
-        data.employeeLeave ||
-        data.leaveRequest
-      )
-    ) || (
-      data.message && (
-        data.message.includes('leave') ||
-        data.message.includes('Leave')
-      )
-    );
+    console.log('🔍 [WEBSOCKET-LEAVE] Checking if message is leave-related:', data);
+    
+    // More flexible leave detection - check various possible formats
+    const checks = {
+      typeContainsLeave: data.type && (data.type.toUpperCase().includes('LEAVE') || data.type.toLowerCase().includes('leave')),
+      hasEmployeeLeave: !!data.employeeLeave,
+      hasLeaveRequest: !!data.leaveRequest,
+      messageContainsLeave: data.message && (data.message.includes('leave') || data.message.includes('Leave')),
+      dataContainsLeaveKeys: Object.keys(data).some(key => key.toLowerCase().includes('leave')),
+      // Check for common leave-related fields
+      hasLeaveFields: data.startDate && data.endDate && data.reason && (data.employeeId || data.barberId),
+      // Check if it's a general notification about leave (even without 'leave' keyword)
+      looksLikeLeaveData: data.employeeId && data.employeeName && data.startDate && data.endDate
+    };
+    
+    console.log('🔍 [WEBSOCKET-LEAVE] Leave detection checks:', checks);
+    
+    const isLeave = Object.values(checks).some(Boolean);
+    console.log('🔍 [WEBSOCKET-LEAVE] Final decision - is leave notification:', isLeave);
+    
+    return isLeave;
   }
 
   /**
    * Transform generic WebSocket message to LeaveRequestNotification
    */
   private transformToLeaveNotification(data: any): LeaveRequestNotification {
+    console.log('🔄 [WEBSOCKET-LEAVE] Transforming message to leave notification:', data);
+    
     // Handle different possible message formats from the backend
     const leaveData = data.employeeLeave || data.leaveRequest || data;
+    console.log('🔄 [WEBSOCKET-LEAVE] Extracted leave data:', leaveData);
     
-    return {
+    const notification = {
       type: this.mapNotificationType(data.type || data.action),
       leaveId: leaveData.id || leaveData.leaveId,
       employeeId: leaveData.employeeId || leaveData.barberId,
@@ -164,6 +225,9 @@ class WebSocketLeaveService {
       comment: leaveData.comment,
       timestamp: data.timestamp || new Date().toISOString()
     };
+    
+    console.log('🔄 [WEBSOCKET-LEAVE] Final notification:', notification);
+    return notification;
   }
 
   /**
