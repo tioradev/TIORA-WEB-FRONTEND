@@ -139,20 +139,26 @@ export const useLeaveWebSocket = (options: UseLeaveWebSocketOptions = {}): UseLe
     // Subscribe to connection status changes
     const unsubscribeStatus = webSocketLeaveService.onConnectionStatusChange(handleConnectionStatus);
 
-    // Auto-connect if enabled
+    // Cleanup on unmount only
+    return () => {
+      unsubscribeNotifications();
+      unsubscribeStatus();
+    };
+  }, []); // Empty dependency array to prevent re-subscription
+
+  // Separate effect for auto-connect to prevent disconnection on callback changes
+  useEffect(() => {
     if (autoConnect) {
       connect();
     }
 
-    // Cleanup on unmount
+    // Only disconnect on unmount, not on dependency changes
     return () => {
-      unsubscribeNotifications();
-      unsubscribeStatus();
       if (autoConnect) {
         disconnect();
       }
     };
-  }, [autoConnect, connect, disconnect, handleLeaveNotification, handleConnectionStatus]);
+  }, [autoConnect, connect, disconnect]);
 
   return {
     isConnected,

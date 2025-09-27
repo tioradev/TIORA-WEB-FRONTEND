@@ -29,11 +29,13 @@ class WebSocketLeaveService {
   private maxReconnectAttempts = 5;
   private reconnectInterval = 3000;
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private currentSalonId: number | null = null;
+  private isConnecting = false;
 
   // Leave WebSocket endpoint - using appointments endpoint as specified
   private getWebSocketUrl(salonId: number): string {
     const WS_BASE = import.meta.env.PROD 
-      ? 'wss://salon.run.place' 
+      ? 'wss://salon.run.place:8090' 
       : 'ws://localhost:8090';
     return `${WS_BASE}/ws/appointments/${salonId}`;
   }
@@ -42,21 +44,38 @@ class WebSocketLeaveService {
    * Initialize WebSocket connection for leave request notifications
    */
   connect(salonId: number): void {
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      console.log('🔌 [WEBSOCKET-LEAVE] Already connected');
+    // Prevent duplicate connections
+    if (this.isConnecting) {
+      console.log('🔌 [WEBSOCKET-LEAVE] Connection already in progress');
       return;
     }
 
+    if (this.socket?.readyState === WebSocket.OPEN && this.currentSalonId === salonId) {
+      console.log('🔌 [WEBSOCKET-LEAVE] Already connected to salon:', salonId);
+      return;
+    }
+
+    // Disconnect existing connection if connecting to different salon
+    if (this.socket && this.currentSalonId !== salonId) {
+      console.log('🔌 [WEBSOCKET-LEAVE] Switching salon connection from', this.currentSalonId, 'to', salonId);
+      this.disconnect();
+    }
+
+    this.currentSalonId = salonId;
+    this.isConnecting = true;
     const wsUrl = this.getWebSocketUrl(salonId);
     console.log('🔌 [WEBSOCKET-LEAVE] Connecting to:', wsUrl);
+    console.log('🔌 [WEBSOCKET-LEAVE] Environment:', import.meta.env.PROD ? 'production' : 'development');
+    console.log('🔌 [WEBSOCKET-LEAVE] Salon ID:', salonId);
 
     try {
       this.notifyStatusChange(false, true); // connecting
       this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {
-        console.log('🔌 [WEBSOCKET-LEAVE] Connected successfully');
+        console.log('🔌 [WEBSOCKET-LEAVE] Connected successfully to salon:', this.currentSalonId);
         this.reconnectAttempts = 0;
+        this.isConnecting = false;
         this.notifyStatusChange(true, false); // connected
       };
 
@@ -77,26 +96,29 @@ class WebSocketLeaveService {
 
       this.socket.onclose = (event) => {
         console.log('🔌 [WEBSOCKET-LEAVE] Connection closed. Code:', event.code, 'Reason:', event.reason);
+        this.isConnecting = false;
         this.notifyStatusChange(false, false); // disconnected
         
-        // Attempt to reconnect if not a normal closure
-        if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
-          this.scheduleReconnect(salonId);
+        // Only attempt to reconnect if not a normal closure and we have a salon ID
+        if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts && this.currentSalonId) {
+          this.scheduleReconnect(this.currentSalonId);
         }
       };
 
       this.socket.onerror = (error) => {
         console.error('❌ [WEBSOCKET-LEAVE] Connection error:', error);
+        this.isConnecting = false;
         this.notifyStatusChange(false, false); // disconnected
         
-        // Attempt to reconnect
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
-          this.scheduleReconnect(salonId);
+        // Only attempt to reconnect if we have a salon ID
+        if (this.reconnectAttempts < this.maxReconnectAttempts && this.currentSalonId) {
+          this.scheduleReconnect(this.currentSalonId);
         }
       };
 
     } catch (error) {
       console.error('❌ [WEBSOCKET-LEAVE] Failed to create connection:', error);
+      this.isConnecting = false;
       this.notifyStatusChange(false, false); // disconnected
     }
   }
@@ -191,6 +213,36 @@ class WebSocketLeaveService {
   }
 
   /**
+   * Test WebSocket endpoint connectivity
+   */
+  async testConnectivity(salonId: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const wsUrl = this.getWebSocketUrl(salonId);
+      console.log('🧪 [WEBSOCKET-LEAVE] Testing connectivity to:', wsUrl);
+      const testSocket = new WebSocket(wsUrl);
+      
+      const timeout = setTimeout(() => {
+        testSocket.close();
+        console.log('❌ [WEBSOCKET-LEAVE] Connectivity test timeout');
+        resolve(false);
+      }, 5000); // 5 second timeout
+      
+      testSocket.onopen = () => {
+        clearTimeout(timeout);
+        testSocket.close();
+        console.log('✅ [WEBSOCKET-LEAVE] Connectivity test successful');
+        resolve(true);
+      };
+      
+      testSocket.onerror = (error) => {
+        clearTimeout(timeout);
+        console.log('❌ [WEBSOCKET-LEAVE] Connectivity test failed:', error);
+        resolve(false);
+      };
+    });
+  }
+
+  /**
    * Subscribe to leave request notifications
    */
   onLeaveNotification(callback: LeaveNotificationCallback): () => void {
@@ -235,6 +287,15 @@ class WebSocketLeaveService {
   }
 
   /**
+   * Get current connection state
+   */
+  getConnectionState(): 'connected' | 'connecting' | 'disconnected' {
+    if (this.isConnecting) return 'connecting';
+    if (this.socket?.readyState === WebSocket.OPEN) return 'connected';
+    return 'disconnected';
+  }
+
+  /**
    * Disconnect WebSocket
    */
   disconnect(): void {
@@ -250,6 +311,8 @@ class WebSocketLeaveService {
       this.socket = null;
     }
     
+    this.currentSalonId = null;
+    this.isConnecting = false;
     this.callbacks.length = 0;
     this.statusCallbacks.length = 0;
     this.reconnectAttempts = 0;
