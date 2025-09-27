@@ -3,27 +3,20 @@
  * Real-time leave request updates using native WebSocket
  */
 
-export interface LeaveRequestNotification {
-  type: 'LEAVE_REQUEST_SUBMITTED' | 'LEAVE_REQUEST_APPROVED' | 'LEAVE_REQUEST_REJECTED' | 'LEAVE_REQUEST_UPDATED';
-  leaveId?: number;
-  employeeId: number;
-  employeeName: string;
-  salonId: number;
-  startDate: string;
-  endDate: string;
-  reason: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  approvedBy?: string;
-  comment?: string;
-  timestamp: string;
+import { LeaveRequest } from '../types';
+
+export interface WebSocketLeaveCallbacks {
+  onLeaveRequestSubmitted?: (leaveRequest: LeaveRequest) => void;
+  onLeaveRequestApproved?: (leaveRequest: LeaveRequest) => void;
+  onLeaveRequestRejected?: (leaveRequest: LeaveRequest) => void;
+  onAnyLeaveNotification?: (rawMessage: any) => void;
 }
 
-type LeaveNotificationCallback = (notification: LeaveRequestNotification) => void;
 type ConnectionStatusCallback = (connected: boolean, connecting: boolean) => void;
 
 class WebSocketLeaveService {
   private socket: WebSocket | null = null;
-  private callbacks: LeaveNotificationCallback[] = [];
+  private callbacks: WebSocketLeaveCallbacks = {};
   private statusCallbacks: ConnectionStatusCallback[] = [];
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
@@ -82,66 +75,17 @@ class WebSocketLeaveService {
       this.socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('📨 [WEBSOCKET-LEAVE] Received message:', data);
-          console.log('🔍 [WEBSOCKET-LEAVE] Message analysis:', {
-            hasType: !!data.type,
-            type: data.type,
-            hasMessage: !!data.message,
-            message: data.message,
-            hasEmployeeLeave: !!data.employeeLeave,
-            hasLeaveRequest: !!data.leaveRequest,
-            allKeys: Object.keys(data)
-          });
-
-          // Check if this is a leave-related notification
-          const isLeaveMsg = this.isLeaveNotification(data);
-          console.log('🔍 [WEBSOCKET-LEAVE] Is leave notification?', isLeaveMsg);
+          console.log('📨 [WS-LEAVE] Received raw message:', JSON.stringify(data, null, 2));
           
-          if (isLeaveMsg) {
-            console.log('✅ [WEBSOCKET-LEAVE] Processing leave notification');
-            const notification = this.transformToLeaveNotification(data);
-            console.log('🔔 [WEBSOCKET-LEAVE] Transformed notification:', notification);
-            this.callbacks.forEach((callback, index) => {
-              console.log(`🔔 [WEBSOCKET-LEAVE] Calling callback ${index + 1}/${this.callbacks.length}`);
-              callback(notification);
-            });
+          // Check if this is a leave-related notification
+          if (this.isLeaveNotification(data)) {
+            console.log('✅ [WS-LEAVE] Identified as leave notification, processing...');
+            this.processLeaveMessage(data);
           } else {
-            console.log('❌ [WEBSOCKET-LEAVE] Message not recognized as leave notification');
-            
-            // TEMPORARY: For debugging, try to process any message that might be leave-related
-            // This helps identify if the issue is with message detection vs callback execution
-            if (data && typeof data === 'object') {
-              console.log('🧪 [WEBSOCKET-LEAVE] DEBUGGING: Attempting to process as leave notification anyway...');
-              try {
-                const debugNotification = this.transformToLeaveNotification(data);
-                console.log('🧪 [WEBSOCKET-LEAVE] DEBUG: Transformed notification:', debugNotification);
-                
-                // Only call callbacks if the transformation looks valid
-                if (debugNotification.employeeId && debugNotification.employeeName) {
-                  console.log('🧪 [WEBSOCKET-LEAVE] DEBUG: Calling callbacks for debug notification');
-                  this.callbacks.forEach((callback, index) => {
-                    console.log(`🧪 [WEBSOCKET-LEAVE] DEBUG: Calling callback ${index + 1}/${this.callbacks.length}`);
-                    callback(debugNotification);
-                  });
-                } else {
-                  console.log('🧪 [WEBSOCKET-LEAVE] DEBUG: Transformed notification invalid, skipping callbacks');
-                }
-              } catch (debugError) {
-                console.error('🧪 [WEBSOCKET-LEAVE] DEBUG: Error in debug transformation:', debugError);
-              }
-            }
-            
-            // Log all messages for debugging - remove this in production
-            if (data.type || data.message) {
-              console.log('📝 [WEBSOCKET-LEAVE] Non-leave message details:', {
-                type: data.type,
-                message: data.message,
-                fullData: data
-              });
-            }
+            console.log('❌ [WS-LEAVE] Not a leave notification, ignoring');
           }
         } catch (error) {
-          console.error('❌ [WEBSOCKET-LEAVE] Error parsing message:', error);
+          console.error('❌ [WS-LEAVE] Error parsing message:', error);
         }
       };
 
@@ -202,51 +146,150 @@ class WebSocketLeaveService {
   }
 
   /**
-   * Transform generic WebSocket message to LeaveRequestNotification
+   * Process leave message and trigger appropriate callbacks
    */
-  private transformToLeaveNotification(data: any): LeaveRequestNotification {
-    console.log('🔄 [WEBSOCKET-LEAVE] Transforming message to leave notification:', data);
-    
-    // Handle different possible message formats from the backend
-    const leaveData = data.employeeLeave || data.leaveRequest || data;
-    console.log('🔄 [WEBSOCKET-LEAVE] Extracted leave data:', leaveData);
-    
-    const notification = {
-      type: this.mapNotificationType(data.type || data.action),
-      leaveId: leaveData.id || leaveData.leaveId,
-      employeeId: leaveData.employeeId || leaveData.barberId,
-      employeeName: leaveData.employeeName || leaveData.barberName || 'Unknown Employee',
-      salonId: leaveData.salonId || data.salonId,
-      startDate: leaveData.startDate,
-      endDate: leaveData.endDate,
-      reason: leaveData.reason || '',
-      status: leaveData.status || 'PENDING',
-      approvedBy: leaveData.approvedBy,
-      comment: leaveData.comment,
-      timestamp: data.timestamp || new Date().toISOString()
-    };
-    
-    console.log('🔄 [WEBSOCKET-LEAVE] Final notification:', notification);
-    return notification;
+  private processLeaveMessage(data: any): void {
+    try {
+      console.log('🔄 [WS-LEAVE] Processing leave message:', data);
+      console.log('🔍 [WS-LEAVE] Message type received:', data.type);
+      
+      const messageType = this.mapNotificationType(data.type);
+      console.log('📝 [WS-LEAVE] Mapped message type:', messageType, 'from original:', data.type);
+      
+      const leaveData = this.extractLeaveData(data);
+      if (!leaveData) {
+        console.warn('⚠️ [WS-LEAVE] Could not extract leave data, triggering generic callback only');
+        this.callbacks.onAnyLeaveNotification?.(data);
+        return;
+      }
+      
+      console.log('🎯 [WS-LEAVE] About to trigger callbacks for type:', messageType);
+      console.log('📋 [WS-LEAVE] Available callbacks:', Object.keys(this.callbacks));
+      
+      // Execute specific callback based on message type
+      switch (messageType) {
+        case 'LEAVE_REQUESTED':
+          console.log('📞 [WS-LEAVE] Executing onLeaveRequestSubmitted callback');
+          if (this.callbacks.onLeaveRequestSubmitted) {
+            this.callbacks.onLeaveRequestSubmitted(leaveData);
+            console.log('✅ [WS-LEAVE] onLeaveRequestSubmitted callback executed');
+          } else {
+            console.warn('❌ [WS-LEAVE] onLeaveRequestSubmitted callback not available');
+          }
+          break;
+        case 'LEAVE_APPROVED':
+          console.log('📞 [WS-LEAVE] Executing onLeaveRequestApproved callback');
+          if (this.callbacks.onLeaveRequestApproved) {
+            this.callbacks.onLeaveRequestApproved(leaveData);
+            console.log('✅ [WS-LEAVE] onLeaveRequestApproved callback executed');
+          } else {
+            console.warn('❌ [WS-LEAVE] onLeaveRequestApproved callback not available');
+          }
+          break;
+        case 'LEAVE_REJECTED':
+          console.log('📞 [WS-LEAVE] Executing onLeaveRequestRejected callback');
+          if (this.callbacks.onLeaveRequestRejected) {
+            this.callbacks.onLeaveRequestRejected(leaveData);
+            console.log('✅ [WS-LEAVE] onLeaveRequestRejected callback executed');
+          } else {
+            console.warn('❌ [WS-LEAVE] onLeaveRequestRejected callback not available');
+          }
+          break;
+        default:
+          console.log('📞 [WS-LEAVE] Unknown message type, using generic callback');
+      }
+      
+      // Always call the generic callback as well
+      console.log('📞 [WS-LEAVE] Executing onAnyLeaveNotification callback');
+      if (this.callbacks.onAnyLeaveNotification) {
+        this.callbacks.onAnyLeaveNotification(data);
+        console.log('✅ [WS-LEAVE] onAnyLeaveNotification callback executed');
+      } else {
+        console.warn('❌ [WS-LEAVE] onAnyLeaveNotification callback not available');
+      }
+      
+    } catch (error) {
+      console.error('❌ [WS-LEAVE] Error processing leave message:', error);
+    }
+  }
+
+  /**
+   * Extract leave data from the message format
+   * Message format: { type, salonId, customerName, appointmentData: { leaveId, barberId, barberName, startDate, endDate, reason, status } }
+   */
+  private extractLeaveData(data: any): LeaveRequest | null {
+    try {
+      console.log('🔍 [WS-LEAVE] Extracting leave data from:', JSON.stringify(data, null, 2));
+      
+      // Extract data from appointmentData based on your message format
+      const appointmentData = data.appointmentData;
+      if (!appointmentData) {
+        console.warn('❌ [WS-LEAVE] Missing appointmentData in message');
+        return null;
+      }
+      
+      const leaveId = appointmentData.leaveId;
+      const barberId = appointmentData.barberId;
+      const barberName = appointmentData.barberName || data.customerName;
+      const startDate = appointmentData.startDate;
+      const endDate = appointmentData.endDate;
+      const reason = appointmentData.reason;
+      const status = appointmentData.status;
+      
+      if (!leaveId || !barberId) {
+        console.warn('❌ [WS-LEAVE] Missing required leave data:', { leaveId, barberId });
+        return null;
+      }
+      
+      const extractedData: LeaveRequest = {
+        id: leaveId.toString(),
+        salonId: data.salonId?.toString() || '',
+        barberId: barberId.toString(),
+        barberName: barberName || 'Unknown',
+        startDate: startDate || '',
+        endDate: endDate || '',
+        reason: reason || '',
+        leaveType: 'other', // Default since not provided in message
+        status: (status || 'PENDING').toLowerCase() as 'pending' | 'approved' | 'rejected',
+        createdAt: new Date()
+      };
+      
+      console.log('✅ [WS-LEAVE] Successfully extracted leave data:', extractedData);
+      return extractedData;
+    } catch (error) {
+      console.error('❌ [WS-LEAVE] Error extracting leave data:', error);
+      return null;
+    }
   }
 
   /**
    * Map backend notification types to our standard types
    */
-  private mapNotificationType(type: string): LeaveRequestNotification['type'] {
-    const lowerType = (type || '').toLowerCase();
+  private mapNotificationType(type: string): 'LEAVE_REQUESTED' | 'LEAVE_APPROVED' | 'LEAVE_REJECTED' | 'LEAVE_UPDATED' {
+    console.log('🏷️ [WS-LEAVE] Mapping notification type:', type);
     
-    if (lowerType.includes('submit') || lowerType.includes('create') || lowerType.includes('new')) {
-      return 'LEAVE_REQUEST_SUBMITTED';
-    } else if (lowerType.includes('approve')) {
-      return 'LEAVE_REQUEST_APPROVED';
-    } else if (lowerType.includes('reject') || lowerType.includes('decline')) {
-      return 'LEAVE_REQUEST_REJECTED';
-    } else if (lowerType.includes('update') || lowerType.includes('modify')) {
-      return 'LEAVE_REQUEST_UPDATED';
+    let mappedType: 'LEAVE_REQUESTED' | 'LEAVE_APPROVED' | 'LEAVE_REJECTED' | 'LEAVE_UPDATED';
+    
+    switch (type) {
+      case 'LEAVE_REQUESTED':
+        mappedType = 'LEAVE_REQUESTED';
+        break;
+      case 'LEAVE_APPROVED':
+        mappedType = 'LEAVE_APPROVED';
+        break;
+      case 'LEAVE_REJECTED':
+        mappedType = 'LEAVE_REJECTED';
+        break;
+      case 'LEAVE_UPDATED':
+        mappedType = 'LEAVE_UPDATED';
+        break;
+      default:
+        console.warn('⚠️ [WS-LEAVE] Unknown message type:', type, 'defaulting to LEAVE_REQUESTED');
+        mappedType = 'LEAVE_REQUESTED';
     }
     
-    return 'LEAVE_REQUEST_UPDATED'; // Default
+    console.log('🏷️ [WS-LEAVE] Type mapping result:', { original: type, mapped: mappedType });
+    return mappedType;
   }
 
   /**
@@ -307,18 +350,11 @@ class WebSocketLeaveService {
   }
 
   /**
-   * Subscribe to leave request notifications
+   * Set callbacks for leave notifications
    */
-  onLeaveNotification(callback: LeaveNotificationCallback): () => void {
-    this.callbacks.push(callback);
-    
-    // Return unsubscribe function
-    return () => {
-      const index = this.callbacks.indexOf(callback);
-      if (index > -1) {
-        this.callbacks.splice(index, 1);
-      }
-    };
+  setCallbacks(callbacks: WebSocketLeaveCallbacks): void {
+    console.log('🔧 [WS-LEAVE] Setting callbacks:', Object.keys(callbacks));
+    this.callbacks = { ...callbacks };
   }
 
   /**
@@ -377,7 +413,7 @@ class WebSocketLeaveService {
     
     this.currentSalonId = null;
     this.isConnecting = false;
-    this.callbacks.length = 0;
+    this.callbacks = {};
     this.statusCallbacks.length = 0;
     this.reconnectAttempts = 0;
     this.notifyStatusChange(false, false);

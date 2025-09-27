@@ -4,17 +4,17 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { webSocketLeaveService, LeaveRequestNotification } from '../services/webSocketLeaveService';
+import { webSocketLeaveService, WebSocketLeaveCallbacks } from '../services/webSocketLeaveService';
+import { LeaveRequest } from '../types';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
 
 interface UseLeaveWebSocketOptions {
   autoConnect?: boolean;
-  onLeaveRequestSubmitted?: (notification: LeaveRequestNotification) => void;
-  onLeaveRequestApproved?: (notification: LeaveRequestNotification) => void;
-  onLeaveRequestRejected?: (notification: LeaveRequestNotification) => void;
-  onLeaveRequestUpdated?: (notification: LeaveRequestNotification) => void;
-  onAnyLeaveNotification?: (notification: LeaveRequestNotification) => void;
+  onLeaveRequestSubmitted?: (leaveRequest: LeaveRequest) => void;
+  onLeaveRequestApproved?: (leaveRequest: LeaveRequest) => void;
+  onLeaveRequestRejected?: (leaveRequest: LeaveRequest) => void;
+  onAnyLeaveNotification?: (rawMessage: any) => void;
 }
 
 interface UseLeaveWebSocketReturn {
@@ -31,7 +31,6 @@ export const useLeaveWebSocket = (options: UseLeaveWebSocketOptions = {}): UseLe
     onLeaveRequestSubmitted,
     onLeaveRequestApproved,
     onLeaveRequestRejected,
-    onLeaveRequestUpdated,
     onAnyLeaveNotification
   } = options;
 
@@ -40,67 +39,52 @@ export const useLeaveWebSocket = (options: UseLeaveWebSocketOptions = {}): UseLe
   const { addNotification } = useNotifications();
   const { getSalonId } = useAuth();
 
-  // Handle leave request notifications
-  const handleLeaveNotification = useCallback((notification: LeaveRequestNotification) => {
-    console.log('🔔 [LEAVE-WEBSOCKET] Received leave notification:', notification);
+  // Stable callback functions
+  const stableOnLeaveRequestSubmitted = useCallback((leaveRequest: LeaveRequest) => {
+    console.log('🎯 [LEAVE-WS] ======= onLeaveRequestSubmitted TRIGGERED =======');
+    console.log('� [LEAVE-WS] Leave request data:', leaveRequest);
+    
+    onLeaveRequestSubmitted?.(leaveRequest);
+    
+    addNotification({
+      type: 'info',
+      title: 'New Leave Request',
+      message: `${leaveRequest.barberName} has submitted a leave request from ${leaveRequest.startDate} to ${leaveRequest.endDate}`,
+    });
+  }, [onLeaveRequestSubmitted, addNotification]);
 
-    // Call specific handler based on notification type
-    switch (notification.type) {
-      case 'LEAVE_REQUEST_SUBMITTED':
-        onLeaveRequestSubmitted?.(notification);
-        // Add system notification
-        addNotification({
-          type: 'info',
-          title: 'New Leave Request',
-          message: `${notification.employeeName} has submitted a leave request from ${notification.startDate} to ${notification.endDate}`,
-          action: {
-            label: 'View Request',
-            onClick: () => {
-              // Navigate to leave requests page
-              console.log('Navigate to leave request:', notification.leaveId);
-            }
-          }
-        });
-        break;
+  const stableOnLeaveRequestApproved = useCallback((leaveRequest: LeaveRequest) => {
+    console.log('🎯 [LEAVE-WS] ======= onLeaveRequestApproved TRIGGERED =======');
+    console.log('� [LEAVE-WS] Leave request data:', leaveRequest);
+    
+    onLeaveRequestApproved?.(leaveRequest);
+    
+    addNotification({
+      type: 'success',
+      title: 'Leave Request Approved',
+      message: `Leave request for ${leaveRequest.barberName} has been approved`,
+    });
+  }, [onLeaveRequestApproved, addNotification]);
 
-      case 'LEAVE_REQUEST_APPROVED':
-        onLeaveRequestApproved?.(notification);
-        addNotification({
-          type: 'success',
-          title: 'Leave Request Approved',
-          message: `Leave request for ${notification.employeeName} has been approved`,
-        });
-        break;
+  const stableOnLeaveRequestRejected = useCallback((leaveRequest: LeaveRequest) => {
+    console.log('🎯 [LEAVE-WS] ======= onLeaveRequestRejected TRIGGERED =======');
+    console.log('� [LEAVE-WS] Leave request data:', leaveRequest);
+    
+    onLeaveRequestRejected?.(leaveRequest);
+    
+    addNotification({
+      type: 'warning',
+      title: 'Leave Request Rejected',
+      message: `Leave request for ${leaveRequest.barberName} has been rejected`,
+    });
+  }, [onLeaveRequestRejected, addNotification]);
 
-      case 'LEAVE_REQUEST_REJECTED':
-        onLeaveRequestRejected?.(notification);
-        addNotification({
-          type: 'warning',
-          title: 'Leave Request Rejected',
-          message: `Leave request for ${notification.employeeName} has been rejected`,
-        });
-        break;
-
-      case 'LEAVE_REQUEST_UPDATED':
-        onLeaveRequestUpdated?.(notification);
-        addNotification({
-          type: 'info',
-          title: 'Leave Request Updated',
-          message: `Leave request for ${notification.employeeName} has been updated`,
-        });
-        break;
-    }
-
-    // Call general handler if provided
-    onAnyLeaveNotification?.(notification);
-  }, [
-    onLeaveRequestSubmitted,
-    onLeaveRequestApproved,
-    onLeaveRequestRejected,
-    onLeaveRequestUpdated,
-    onAnyLeaveNotification,
-    addNotification
-  ]);
+  const stableOnAnyLeaveNotification = useCallback((rawMessage: any) => {
+    console.log('🎯 [LEAVE-WS] ======= onAnyLeaveNotification TRIGGERED =======');
+    console.log('📝 [LEAVE-WS] Raw message:', rawMessage);
+    
+    onAnyLeaveNotification?.(rawMessage);
+  }, [onAnyLeaveNotification]);
 
   // Handle connection status changes
   const handleConnectionStatus = useCallback((connected: boolean, connecting: boolean) => {
@@ -133,18 +117,25 @@ export const useLeaveWebSocket = (options: UseLeaveWebSocketOptions = {}): UseLe
 
   // Setup WebSocket connection and listeners
   useEffect(() => {
-    // Subscribe to leave notifications
-    const unsubscribeNotifications = webSocketLeaveService.onLeaveNotification(handleLeaveNotification);
+    console.log('🔧 [LEAVE-WS] Setting up WebSocket callbacks...');
+    
+    // Set callbacks on the service
+    webSocketLeaveService.setCallbacks({
+      onLeaveRequestSubmitted: stableOnLeaveRequestSubmitted,
+      onLeaveRequestApproved: stableOnLeaveRequestApproved,
+      onLeaveRequestRejected: stableOnLeaveRequestRejected,
+      onAnyLeaveNotification: stableOnAnyLeaveNotification
+    });
     
     // Subscribe to connection status changes
     const unsubscribeStatus = webSocketLeaveService.onConnectionStatusChange(handleConnectionStatus);
 
-    // Cleanup on unmount only
+    // Cleanup on unmount
     return () => {
-      unsubscribeNotifications();
+      console.log('🧹 [LEAVE-WS] Cleaning up WebSocket callbacks...');
       unsubscribeStatus();
     };
-  }, []); // Empty dependency array to prevent re-subscription
+  }, [stableOnLeaveRequestSubmitted, stableOnLeaveRequestApproved, stableOnLeaveRequestRejected, stableOnAnyLeaveNotification, handleConnectionStatus]);
 
   // Separate effect for auto-connect to prevent disconnection on callback changes
   useEffect(() => {

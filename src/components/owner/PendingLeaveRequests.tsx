@@ -44,36 +44,40 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
 
   // WebSocket connection for real-time leave request updates
   const { isConnected, isConnecting, retry } = useLeaveWebSocket({
-    onLeaveRequestSubmitted: (notification) => {
+    onLeaveRequestSubmitted: (leaveRequest) => {
       console.log('🎯 [PENDING-LEAVES] ======= CALLBACK TRIGGERED =======');
-      console.log('🔔 [PENDING-LEAVES] New leave request submitted:', notification);
+      console.log('🔔 [PENDING-LEAVES] New leave request submitted:', leaveRequest);
       console.log('🔔 [PENDING-LEAVES] Current component state:', { currentPage, searchTerm });
       // Refresh the data to show new request
       refreshCurrentData();
       console.log('🎯 [PENDING-LEAVES] ======= REFRESH CALLED =======');
     },
-    onLeaveRequestApproved: (notification) => {
+    onLeaveRequestApproved: (leaveRequest) => {
       console.log('🎯 [PENDING-LEAVES] ======= CALLBACK TRIGGERED =======');
-      console.log('🔔 [PENDING-LEAVES] Leave request approved:', notification);
+      console.log('🔔 [PENDING-LEAVES] Leave request approved:', leaveRequest);
       console.log('🔔 [PENDING-LEAVES] Current component state:', { currentPage, searchTerm });
       // Refresh the data to remove approved request from pending list
       refreshCurrentData();
       console.log('🎯 [PENDING-LEAVES] ======= REFRESH CALLED =======');
     },
-    onLeaveRequestRejected: (notification) => {
+    onLeaveRequestRejected: (leaveRequest) => {
       console.log('🎯 [PENDING-LEAVES] ======= CALLBACK TRIGGERED =======');
-      console.log('🔔 [PENDING-LEAVES] Leave request rejected:', notification);
+      console.log('🔔 [PENDING-LEAVES] Leave request rejected:', leaveRequest);
       console.log('🔔 [PENDING-LEAVES] Current component state:', { currentPage, searchTerm });
       // Refresh the data to remove rejected request from pending list
       refreshCurrentData();
       console.log('🎯 [PENDING-LEAVES] ======= REFRESH CALLED =======');
     },
-    onAnyLeaveNotification: (notification) => {
+    onAnyLeaveNotification: (rawMessage) => {
       console.log('🎯 [PENDING-LEAVES] ======= ANY NOTIFICATION CALLBACK =======');
-      console.log('🔔 [PENDING-LEAVES] Any leave notification:', notification);
-      console.log('🔔 [PENDING-LEAVES] Notification type:', notification.type);
-      console.log('🔔 [PENDING-LEAVES] Employee:', notification.employeeName);
+      console.log('🔔 [PENDING-LEAVES] Any leave notification raw message:', rawMessage);
+      console.log('🔔 [PENDING-LEAVES] Message type:', rawMessage?.type);
       console.log('🔔 [PENDING-LEAVES] Current component state:', { currentPage, searchTerm });
+      
+      // FALLBACK: If specific callbacks didn't trigger, refresh anyway
+      console.log('🎯 [PENDING-LEAVES] ======= FALLBACK REFRESH =======');
+      refreshCurrentData();
+      console.log('🎯 [PENDING-LEAVES] ======= FALLBACK REFRESH CALLED =======');
     }
   });
 

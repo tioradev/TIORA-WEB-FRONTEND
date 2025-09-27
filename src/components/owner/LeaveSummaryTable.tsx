@@ -44,18 +44,18 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
 
   // WebSocket connection for real-time leave request updates
   const { isConnected, isConnecting, retry } = useLeaveWebSocket({
-    onLeaveRequestApproved: (notification) => {
-      console.log('🔔 [LEAVE-SUMMARY] Leave request approved:', notification);
+    onLeaveRequestApproved: (leaveRequest) => {
+      console.log('🔔 [LEAVE-SUMMARY] Leave request approved:', leaveRequest);
       // Refresh the data to show newly approved request
       refreshCurrentData();
     },
-    onLeaveRequestRejected: (notification) => {
-      console.log('🔔 [LEAVE-SUMMARY] Leave request rejected:', notification);
+    onLeaveRequestRejected: (leaveRequest) => {
+      console.log('🔔 [LEAVE-SUMMARY] Leave request rejected:', leaveRequest);
       // Refresh the data to show newly rejected request
       refreshCurrentData();
     },
-    onAnyLeaveNotification: (notification) => {
-      console.log('🔔 [LEAVE-SUMMARY] Any leave notification:', notification);
+    onAnyLeaveNotification: (rawMessage) => {
+      console.log('🔔 [LEAVE-SUMMARY] Any leave notification:', rawMessage);
     }
   });
   const [selectedLeave, setSelectedLeave] = useState<LeaveDetailApiResponse | null>(null);
