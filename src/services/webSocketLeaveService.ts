@@ -120,29 +120,34 @@ class WebSocketLeaveService {
 
   /**
    * Check if the received message is a leave-related notification
+   * Based on the message format: { type: "LEAVE_REQUESTED", appointment_data: { leaveId, barberId, ... } }
    */
   private isLeaveNotification(data: any): boolean {
-    console.log('🔍 [WEBSOCKET-LEAVE] Checking if message is leave-related:', data);
+    console.log('🔍 [WS-LEAVE] Checking if message is leave notification...');
+    console.log('🔍 [WS-LEAVE] Message type:', data.type);
+    console.log('🔍 [WS-LEAVE] Has appointment_data:', !!data.appointment_data);
+    console.log('🔍 [WS-LEAVE] Has appointmentData:', !!data.appointmentData);
     
-    // More flexible leave detection - check various possible formats
-    const checks = {
-      typeContainsLeave: data.type && (data.type.toUpperCase().includes('LEAVE') || data.type.toLowerCase().includes('leave')),
-      hasEmployeeLeave: !!data.employeeLeave,
-      hasLeaveRequest: !!data.leaveRequest,
-      messageContainsLeave: data.message && (data.message.includes('leave') || data.message.includes('Leave')),
-      dataContainsLeaveKeys: Object.keys(data).some(key => key.toLowerCase().includes('leave')),
-      // Check for common leave-related fields
-      hasLeaveFields: data.startDate && data.endDate && data.reason && (data.employeeId || data.barberId),
-      // Check if it's a general notification about leave (even without 'leave' keyword)
-      looksLikeLeaveData: data.employeeId && data.employeeName && data.startDate && data.endDate
-    };
+    // Check for the specific message format - handle both underscore and camelCase
+    const hasAppointmentData = !!(data.appointment_data || data.appointmentData);
+    const hasLeaveId = !!(data.appointment_data?.leaveId || data.appointmentData?.leaveId);
     
-    console.log('🔍 [WEBSOCKET-LEAVE] Leave detection checks:', checks);
+    const isLeaveMsg = (
+      data.type === 'LEAVE_REQUESTED' || 
+      data.type === 'LEAVE_APPROVED' || 
+      data.type === 'LEAVE_REJECTED' ||
+      data.type === 'LEAVE_UPDATED'
+    ) && hasAppointmentData && hasLeaveId;
     
-    const isLeave = Object.values(checks).some(Boolean);
-    console.log('🔍 [WEBSOCKET-LEAVE] Final decision - is leave notification:', isLeave);
+    console.log('🔍 [WS-LEAVE] Detection details:', {
+      hasCorrectType: ['LEAVE_REQUESTED', 'LEAVE_APPROVED', 'LEAVE_REJECTED', 'LEAVE_UPDATED'].includes(data.type),
+      hasAppointmentData,
+      hasLeaveId,
+      finalDecision: isLeaveMsg
+    });
     
-    return isLeave;
+    console.log('🔍 [WS-LEAVE] Final decision - is leave notification:', isLeaveMsg);
+    return isLeaveMsg;
   }
 
   /**
@@ -221,26 +226,33 @@ class WebSocketLeaveService {
 
   /**
    * Extract leave data from the message format
-   * Message format: { type, salonId, customerName, appointmentData: { leaveId, barberId, barberName, startDate, endDate, reason, status } }
+   * Message format: { appointment_data: { leaveId, barberId, barberName, startDate, endDate, status, ... } }
    */
   private extractLeaveData(data: any): LeaveRequest | null {
     try {
       console.log('🔍 [WS-LEAVE] Extracting leave data from:', JSON.stringify(data, null, 2));
       
-      // Extract data from appointmentData based on your message format
-      const appointmentData = data.appointmentData;
+      // Extract data from appointment_data (with underscore) based on the actual message format
+      const appointmentData = data.appointment_data || data.appointmentData;
       if (!appointmentData) {
-        console.warn('❌ [WS-LEAVE] Missing appointmentData in message');
+        console.warn('❌ [WS-LEAVE] Missing appointment_data in message');
         return null;
       }
       
+      console.log('🔍 [WS-LEAVE] Found appointment_data:', appointmentData);
+      
+      // Extract fields from appointment_data
       const leaveId = appointmentData.leaveId;
       const barberId = appointmentData.barberId;
-      const barberName = appointmentData.barberName || data.customerName;
+      const barberName = appointmentData.barberName || data.customer_name;
       const startDate = appointmentData.startDate;
       const endDate = appointmentData.endDate;
-      const reason = appointmentData.reason;
+      const reason = appointmentData.leaveReason || appointmentData.reason;
       const status = appointmentData.status;
+      
+      console.log('🔍 [WS-LEAVE] Extracted fields:', {
+        leaveId, barberId, barberName, startDate, endDate, reason, status
+      });
       
       if (!leaveId || !barberId) {
         console.warn('❌ [WS-LEAVE] Missing required leave data:', { leaveId, barberId });
@@ -249,7 +261,7 @@ class WebSocketLeaveService {
       
       const extractedData: LeaveRequest = {
         id: leaveId.toString(),
-        salonId: data.salonId?.toString() || '',
+        salonId: data.salon_id?.toString() || appointmentData.salonId?.toString() || '',
         barberId: barberId.toString(),
         barberName: barberName || 'Unknown',
         startDate: startDate || '',
