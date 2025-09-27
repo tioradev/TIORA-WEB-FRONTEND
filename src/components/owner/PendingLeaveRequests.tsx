@@ -3,8 +3,10 @@ import { Search, RefreshCw, AlertCircle, Clock, Users } from 'lucide-react';
 import { LeaveRequest, LeaveDetailApiResponse, LeaveDetailsPaginatedResponse } from '../../types';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLeaveWebSocket } from '../../hooks/useLeaveWebSocket';
 import LoadingSpinner from '../shared/LoadingSpinner';
 import LeaveRequestCard from './LeaveRequestCard';
+import LeaveUpdatesStatus from '../shared/LeaveUpdatesStatus';
 
 interface PendingLeaveRequestsProps {
   onAction: (requestId: string, action: 'approved' | 'rejected', comment?: string) => void;
@@ -18,6 +20,28 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
   const [apiResponse, setApiResponse] = useState<LeaveDetailsPaginatedResponse | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = 10;
+
+  // WebSocket connection for real-time leave request updates
+  const { isConnected, isConnecting, retry } = useLeaveWebSocket({
+    onLeaveRequestSubmitted: (notification) => {
+      console.log('🔔 [PENDING-LEAVES] New leave request submitted:', notification);
+      // Refresh the data to show new request
+      fetchPendingLeaves(currentPage, searchTerm);
+    },
+    onLeaveRequestApproved: (notification) => {
+      console.log('🔔 [PENDING-LEAVES] Leave request approved:', notification);
+      // Refresh the data to remove approved request from pending list
+      fetchPendingLeaves(currentPage, searchTerm);
+    },
+    onLeaveRequestRejected: (notification) => {
+      console.log('🔔 [PENDING-LEAVES] Leave request rejected:', notification);
+      // Refresh the data to remove rejected request from pending list
+      fetchPendingLeaves(currentPage, searchTerm);
+    },
+    onAnyLeaveNotification: (notification) => {
+      console.log('🔔 [PENDING-LEAVES] Any leave notification:', notification);
+    }
+  });
 
   // Debug information
   const debugInfo = {
@@ -57,7 +81,7 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
         totalElements: response.totalElements,
         content: response.content,
         contentWithStatus: response.content.map(item => ({
-          id: item.id, // Leave request ID
+          id: item.id || 'undefined', // Leave request ID (may be undefined)
           employeeId: item.employeeId,
           employeeName: item.employeeName,
           status: item.status || 'NO_STATUS_FIELD'
@@ -121,7 +145,7 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
     }
     
     return {
-      id: apiLeave.id.toString(), // Use the actual leave ID, not employeeId
+      id: (apiLeave.id || apiLeave.employeeId).toString(), // Use leave ID if available, fallback to employeeId
       salonId: salonId?.toString() || '',
       barberId: apiLeave.employeeId.toString(),
       barberName: apiLeave.employeeName,
@@ -143,7 +167,7 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
       const isPending = !apiLeave.status || apiLeave.status === 'PENDING';
       if (!isPending) {
         console.log('🚫 [DEBUG] Filtering out non-pending leave:', {
-          id: apiLeave.id, // Leave request ID
+          id: apiLeave.id || 'undefined', // Leave request ID (may be undefined)
           employeeId: apiLeave.employeeId,
           employeeName: apiLeave.employeeName,
           status: apiLeave.status
@@ -230,6 +254,13 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
           </div>
           
           <div className="flex items-center space-x-4">
+            <LeaveUpdatesStatus
+              isConnected={isConnected}
+              isConnecting={isConnecting}
+              onRetry={retry}
+              className="mr-2"
+            />
+            
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input

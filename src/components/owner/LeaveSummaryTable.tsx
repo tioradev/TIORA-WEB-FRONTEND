@@ -7,7 +7,9 @@ import {
 import { LeaveRequest, LeaveDetailApiResponse, LeaveDetailsPaginatedResponse } from '../../types';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLeaveWebSocket } from '../../hooks/useLeaveWebSocket';
 import LoadingSpinner from '../shared/LoadingSpinner';
+import LeaveUpdatesStatus from '../shared/LeaveUpdatesStatus';
 
 interface LeaveSummaryTableProps {
   // Remove prop dependency, will fetch data internally
@@ -18,6 +20,23 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'rejected'>('all');
   const [currentPage, setCurrentPage] = useState(0); // API uses 0-based indexing
+
+  // WebSocket connection for real-time leave request updates
+  const { isConnected, isConnecting, retry } = useLeaveWebSocket({
+    onLeaveRequestApproved: (notification) => {
+      console.log('🔔 [LEAVE-SUMMARY] Leave request approved:', notification);
+      // Refresh the data to show newly approved request
+      fetchLeaveData(currentPage, searchTerm || undefined);
+    },
+    onLeaveRequestRejected: (notification) => {
+      console.log('🔔 [LEAVE-SUMMARY] Leave request rejected:', notification);
+      // Refresh the data to show newly rejected request
+      fetchLeaveData(currentPage, searchTerm || undefined);
+    },
+    onAnyLeaveNotification: (notification) => {
+      console.log('🔔 [LEAVE-SUMMARY] Any leave notification:', notification);
+    }
+  });
   const [selectedLeave, setSelectedLeave] = useState<LeaveDetailApiResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +82,7 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
         totalElements: response.totalElements,
         contentCount: response.content.length,
         statuses: response.content.map(item => ({
-          id: item.id, // Leave request ID
+          id: item.id || 'undefined', // Leave request ID (may be undefined)
           employeeId: item.employeeId,
           status: item.status || 'NO_STATUS_FIELD'
         }))
@@ -125,7 +144,7 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
     }
     
     return {
-      id: apiLeave.id.toString(), // Use the actual leave ID, not employeeId
+      id: (apiLeave.id || apiLeave.employeeId).toString(), // Use leave ID if available, fallback to employeeId
       salonId: salonId?.toString() || '',
       barberId: apiLeave.employeeId.toString(),
       barberName: apiLeave.employeeName,
@@ -150,7 +169,7 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
       const isProcessed = !apiLeave.status || (apiLeave.status === 'APPROVED' || apiLeave.status === 'REJECTED');
       if (!isProcessed) {
         console.log('🚫 [SUMMARY] Filtering out pending leave from summary:', {
-          id: apiLeave.id, // Leave request ID
+          id: apiLeave.id || 'undefined', // Leave request ID (may be undefined)
           employeeId: apiLeave.employeeId,
           status: apiLeave.status
         });
@@ -301,13 +320,23 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
               Historical record of all approved and rejected leave requests
             </p>
           </div>
-          <button
-            onClick={exportToCSV}
-            className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white hover:bg-purple-700 rounded-lg transition-colors duration-200"
-          >
-            <Download className="w-4 h-4" />
-            <span>Export CSV</span>
-          </button>
+          
+          <div className="flex items-center space-x-4">
+            <LeaveUpdatesStatus
+              isConnected={isConnected}
+              isConnecting={isConnecting}
+              onRetry={retry}
+              className="mr-2"
+            />
+            
+            <button
+              onClick={exportToCSV}
+              className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white hover:bg-purple-700 rounded-lg transition-colors duration-200"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export CSV</span>
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -441,7 +470,10 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button
                           onClick={() => {
-                            const apiLeave = apiResponse?.content.find(l => l.id.toString() === leave.id);
+                            const apiLeave = apiResponse?.content.find(l => 
+                              (l.id && l.id.toString() === leave.id) || 
+                              l.employeeId.toString() === leave.id
+                            );
                             setSelectedLeave(apiLeave || null);
                           }}
                           className="inline-flex items-center space-x-1 px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 transition-colors duration-200"
