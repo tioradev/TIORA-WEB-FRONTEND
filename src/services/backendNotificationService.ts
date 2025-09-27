@@ -9,6 +9,24 @@ class BackendNotificationService {
   private baseUrl = import.meta.env.PROD ? 'https://salon.run.place:8090' : 'http://localhost:8090';
 
   /**
+   * Get authentication token from localStorage
+   */
+  private getAuthToken(): string | null {
+    return localStorage.getItem('authToken');
+  }
+
+  /**
+   * Get headers with authentication
+   */
+  private getHeaders(): HeadersInit {
+    const authToken = this.getAuthToken();
+    return {
+      'Content-Type': 'application/json',
+      ...(authToken && { 'Authorization': `Bearer ${authToken}` }),
+    };
+  }
+
+  /**
    * Get notifications for a salon
    */
   async getNotifications(salonId: number, page: number = 0, size: number = 20): Promise<BackendNotificationResponse> {
@@ -19,9 +37,7 @@ class BackendNotificationService {
         `${this.baseUrl}/api/v1/notifications?salonId=${salonId}&page=${page}&size=${size}`,
         {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: this.getHeaders(),
         }
       );
 
@@ -52,9 +68,7 @@ class BackendNotificationService {
         `${this.baseUrl}/api/v1/notifications/mark-read?salonId=${salonId}`,
         {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: this.getHeaders(),
           body: JSON.stringify(request)
         }
       );
