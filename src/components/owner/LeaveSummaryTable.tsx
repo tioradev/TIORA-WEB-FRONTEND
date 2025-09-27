@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Calendar, Search, Filter, ChevronLeft, ChevronRight, 
   CheckCircle, XCircle, Clock, Eye, Download, FileText, 
@@ -21,17 +21,38 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'rejected'>('all');
   const [currentPage, setCurrentPage] = useState(0); // API uses 0-based indexing
 
+  // Create stable refresh function to avoid stale closures in WebSocket callbacks
+  const refreshCurrentData = useCallback(() => {
+    console.log('🔄 [REFRESH] Refreshing leave summary data via WebSocket');
+    const salonId = getSalonId();
+    if (salonId) {
+      console.log('🔄 [REFRESH] Using current state:', { currentPage, searchTerm });
+      // Call API directly to avoid dependency issues
+      apiService.getEmployeeLeaveDetails(salonId, currentPage, 10, searchTerm || undefined)
+        .then(response => {
+          console.log('📊 [DEBUG] API Response for summary leaves (WebSocket refresh):', {
+            totalElements: response.totalElements,
+            content: response.content
+          });
+          setApiResponse(response);
+        })
+        .catch(err => {
+          console.error('Error refreshing leave summary via WebSocket:', err);
+        });
+    }
+  }, [getSalonId, currentPage, searchTerm]); // Use constant value instead of itemsPerPage
+
   // WebSocket connection for real-time leave request updates
   const { isConnected, isConnecting, retry } = useLeaveWebSocket({
     onLeaveRequestApproved: (notification) => {
       console.log('🔔 [LEAVE-SUMMARY] Leave request approved:', notification);
       // Refresh the data to show newly approved request
-      fetchLeaveData(currentPage, searchTerm || undefined);
+      refreshCurrentData();
     },
     onLeaveRequestRejected: (notification) => {
       console.log('🔔 [LEAVE-SUMMARY] Leave request rejected:', notification);
       // Refresh the data to show newly rejected request
-      fetchLeaveData(currentPage, searchTerm || undefined);
+      refreshCurrentData();
     },
     onAnyLeaveNotification: (notification) => {
       console.log('🔔 [LEAVE-SUMMARY] Any leave notification:', notification);
@@ -53,8 +74,8 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
   
   console.log('🔍 [DEBUG] LeaveSummaryTable context:', debugInfo);
 
-  // Fetch leave data from API
-  const fetchLeaveData = async (page: number = 0, search?: string) => {
+  // Fetch leave data from API (wrapped in useCallback for stability)
+  const fetchLeaveData = useCallback(async (page: number = 0, search?: string) => {
     const salonId = getSalonId();
     console.log('🔍 [DEBUG] Fetching leave data:', { salonId, page, search });
     
@@ -95,7 +116,7 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getSalonId, itemsPerPage]); // Dependencies for useCallback
 
   // Initial load
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, RefreshCw, AlertCircle, Clock, Users } from 'lucide-react';
 import { LeaveRequest, LeaveDetailApiResponse, LeaveDetailsPaginatedResponse } from '../../types';
 import { apiService } from '../../services/api';
@@ -21,22 +21,43 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
   const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = 10;
 
+  // Create stable refresh function to avoid stale closures in WebSocket callbacks
+  const refreshCurrentData = useCallback(() => {
+    console.log('🔄 [REFRESH] Refreshing pending leaves data via WebSocket');
+    const salonId = getSalonId();
+    if (salonId) {
+      console.log('🔄 [REFRESH] Using current state:', { currentPage, searchTerm });
+      // Call API directly to avoid dependency issues
+      apiService.getEmployeeLeaveDetails(salonId, currentPage, 10, searchTerm || undefined, 'PENDING')
+        .then(response => {
+          console.log('📊 [DEBUG] API Response for pending leaves (WebSocket refresh):', {
+            totalElements: response.totalElements,
+            content: response.content
+          });
+          setApiResponse(response);
+        })
+        .catch(err => {
+          console.error('Error refreshing pending leaves via WebSocket:', err);
+        });
+    }
+  }, [getSalonId, currentPage, searchTerm]); // Use constant value instead of itemsPerPage
+
   // WebSocket connection for real-time leave request updates
   const { isConnected, isConnecting, retry } = useLeaveWebSocket({
     onLeaveRequestSubmitted: (notification) => {
       console.log('🔔 [PENDING-LEAVES] New leave request submitted:', notification);
       // Refresh the data to show new request
-      fetchPendingLeaves(currentPage, searchTerm);
+      refreshCurrentData();
     },
     onLeaveRequestApproved: (notification) => {
       console.log('🔔 [PENDING-LEAVES] Leave request approved:', notification);
       // Refresh the data to remove approved request from pending list
-      fetchPendingLeaves(currentPage, searchTerm);
+      refreshCurrentData();
     },
     onLeaveRequestRejected: (notification) => {
       console.log('🔔 [PENDING-LEAVES] Leave request rejected:', notification);
       // Refresh the data to remove rejected request from pending list
-      fetchPendingLeaves(currentPage, searchTerm);
+      refreshCurrentData();
     },
     onAnyLeaveNotification: (notification) => {
       console.log('🔔 [PENDING-LEAVES] Any leave notification:', notification);
@@ -53,8 +74,8 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
   
   console.log('🔍 [DEBUG] PendingLeaveRequests context:', debugInfo);
 
-  // Fetch pending leave data from API
-  const fetchPendingLeaves = async (page: number = 0, search?: string) => {
+  // Fetch pending leave data from API (wrapped in useCallback for stability)
+  const fetchPendingLeaves = useCallback(async (page: number = 0, search?: string) => {
     const salonId = getSalonId();
     console.log('🔍 [DEBUG] Fetching pending leaves:', { salonId, page, search });
     
@@ -95,7 +116,7 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
     } finally {
       setLoading(false);
     }
-  };
+  }, [getSalonId, itemsPerPage]); // Dependencies for useCallback
 
   // Initial load
   useEffect(() => {
