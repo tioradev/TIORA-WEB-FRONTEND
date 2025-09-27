@@ -106,13 +106,21 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   ]);
 
   const addNotification = (notificationData: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
+    console.log('🔔 [NOTIFICATION-CTX] addNotification called with:', notificationData);
     const newNotification: Notification = {
       ...notificationData,
       id: Date.now().toString(),
       timestamp: new Date(),
       read: false
     };
-    setNotifications(prev => [newNotification, ...prev]);
+    console.log('🔔 [NOTIFICATION-CTX] Created new notification:', newNotification);
+    setNotifications(prev => {
+      const updated = [newNotification, ...prev];
+      console.log('🔔 [NOTIFICATION-CTX] Updated notifications count:', updated.length);
+      console.log('🔔 [NOTIFICATION-CTX] Unread count will be:', updated.filter(n => !n.read).length);
+      return updated;
+    });
+    console.log('✅ [NOTIFICATION-CTX] Notification added successfully');
   };
 
   const markAsRead = (id: string) => {

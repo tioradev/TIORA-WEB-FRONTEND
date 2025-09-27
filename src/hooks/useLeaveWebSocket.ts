@@ -1,6 +1,44 @@
 /**
- * Custom Hook for Leave Request WebSocket Management
- * Handles real-time leave request notifications and updates
+ * Custom Hook for Leave Request WebS  const stableOnLeaveRequestSubmitted = useCallback((leaveRequest: LeaveRequest) => {
+    console.log('🎯 [LEAVE-WS] ======= onLeaveRequestSubmitted TRIGGERED =======');
+    console.log('📝 [LEAVE-WS] Leave request data:', leaveRequest);
+    
+    onLeaveRequestSubmitted?.(leaveRequest);
+    
+    console.log('🔔 [LEAVE-WS] About to call addNotification for new leave request...');
+    addNotification({
+      type: 'info',
+      title: 'New Leave Request',
+      message: `${leaveRequest.barberName} has submitted a leave request from ${leaveRequest.startDate} to ${leaveRequest.endDate}`,
+    });
+    console.log('✅ [LEAVE-WS] addNotification called successfully');
+  }, [onLeaveRequestSubmitted, addNotification]);m  const stableOnLeaveRequestApproved = useCallback((leaveRequest: LeaveRequest) => {
+    console.log('🎯 [LEAVE-WS] ======= onLeaveRequestApproved TRIGGERED =======');
+    console.log('📝 [LEAVE-WS] Leave request data:', leaveRequest);
+    
+    onLeaveRequestApproved?.(leaveRequest);
+    
+    console.log('🔔 [LEAVE-WS] About to call addNotification for approved leave request...');
+    addNotification({
+      type: 'success',
+      title: 'Leave Request Approved',
+      message: `Leave request for ${leaveRequest.barberName} has been approved`,
+    });
+    console.log('✅ [LEAVE-WS] addNotification called successfully');
+  }, [onLeaveRequestApproved, addNotification]);l  const stableOnLeaveRequestRejected = useCallback((leaveRequest: LeaveRequest) => {
+    console.log('🎯 [LEAVE-WS] ======= onLeaveRequestRejected TRIGGERED =======');
+    console.log('📝 [LEAVE-WS] Leave request data:', leaveRequest);
+    
+    onLeaveRequestRejected?.(leaveRequest);
+    
+    console.log('🔔 [LEAVE-WS] About to call addNotification for rejected leave request...');
+    addNotification({
+      type: 'warning',
+      title: 'Leave Request Rejected',
+      message: `Leave request for ${leaveRequest.barberName} has been rejected`,
+    });
+    console.log('✅ [LEAVE-WS] addNotification called successfully');
+  }, [onLeaveRequestRejected, addNotification]); leave request notifications and updates
  */
 
 import { useEffect, useState, useCallback } from 'react';

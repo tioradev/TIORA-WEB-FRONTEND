@@ -170,7 +170,9 @@ class WebSocketLeaveService {
       switch (messageType) {
         case 'LEAVE_REQUESTED':
           console.log('📞 [WS-LEAVE] Executing onLeaveRequestSubmitted callback');
+          console.log('📞 [WS-LEAVE] Callback exists?', !!this.callbacks.onLeaveRequestSubmitted);
           if (this.callbacks.onLeaveRequestSubmitted) {
+            console.log('📞 [WS-LEAVE] About to call onLeaveRequestSubmitted...');
             this.callbacks.onLeaveRequestSubmitted(leaveData);
             console.log('✅ [WS-LEAVE] onLeaveRequestSubmitted callback executed');
           } else {
@@ -179,7 +181,9 @@ class WebSocketLeaveService {
           break;
         case 'LEAVE_APPROVED':
           console.log('📞 [WS-LEAVE] Executing onLeaveRequestApproved callback');
+          console.log('📞 [WS-LEAVE] Callback exists?', !!this.callbacks.onLeaveRequestApproved);
           if (this.callbacks.onLeaveRequestApproved) {
+            console.log('📞 [WS-LEAVE] About to call onLeaveRequestApproved...');
             this.callbacks.onLeaveRequestApproved(leaveData);
             console.log('✅ [WS-LEAVE] onLeaveRequestApproved callback executed');
           } else {
@@ -188,7 +192,9 @@ class WebSocketLeaveService {
           break;
         case 'LEAVE_REJECTED':
           console.log('📞 [WS-LEAVE] Executing onLeaveRequestRejected callback');
+          console.log('📞 [WS-LEAVE] Callback exists?', !!this.callbacks.onLeaveRequestRejected);
           if (this.callbacks.onLeaveRequestRejected) {
+            console.log('📞 [WS-LEAVE] About to call onLeaveRequestRejected...');
             this.callbacks.onLeaveRequestRejected(leaveData);
             console.log('✅ [WS-LEAVE] onLeaveRequestRejected callback executed');
           } else {
