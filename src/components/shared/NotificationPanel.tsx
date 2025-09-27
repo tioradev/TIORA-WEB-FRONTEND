@@ -3,10 +3,13 @@ import { Bell, CheckCircle, AlertTriangle, Info, X, AlertCircle } from 'lucide-r
 import { useNotifications } from '../../contexts/NotificationContext';
 
 const NotificationPanel: React.FC = () => {
-  const { notifications, markAsRead, removeNotification } = useNotifications();
+  const { 
+    notifications, 
+    markAsRead, 
+    removeNotification, 
+    totalUnreadCount
+  } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
-
-  const unreadCount = notifications.filter(n => !n.read).length;
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -50,9 +53,9 @@ const NotificationPanel: React.FC = () => {
         className="relative p-3 text-gray-500 hover:text-gray-700 bg-gray-50/50 hover:bg-gray-100/70 rounded-2xl transition-all duration-300 border border-gray-200/50 hover:border-gray-300/50 transform hover:scale-105 shadow-sm hover:shadow-md group"
       >
         <Bell className="w-5 h-5 group-hover:animate-pulse" />
-        {unreadCount > 0 && (
+        {totalUnreadCount > 0 && (
           <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-gradient-to-r from-red-500 to-red-600 rounded-full shadow-lg animate-pulse min-w-[20px]">
-            {unreadCount > 99 ? '99+' : unreadCount}
+            {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
           </span>
         )}
       </button>
@@ -76,8 +79,8 @@ const NotificationPanel: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-gray-900">Notifications</h3>
-                    {unreadCount > 0 && (
-                      <p className="text-sm text-gray-500">{unreadCount} unread</p>
+                    {totalUnreadCount > 0 && (
+                      <p className="text-sm text-gray-500">{totalUnreadCount} unread</p>
                     )}
                   </div>
                 </div>

@@ -1,4 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
+import { backendNotificationService } from '../services/backendNotificationService';
+import { BackendNotification } from '../types';
+import { useAuth } from './AuthContext';
 
 export interface Notification {
   id: string;
@@ -11,16 +14,28 @@ export interface Notification {
     label: string;
     onClick: () => void;
   };
+  // Backend notification fields
+  backendId?: number;
+  appointmentId?: number;
+  customerName?: string;
+  amount?: number;
+  sessionTime?: string;
 }
 
 interface NotificationContextType {
   notifications: Notification[];
+  backendNotifications: BackendNotification[];
   addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   removeNotification: (id: string) => void;
   clearAll: () => void;
   unreadCount: number;
+  backendUnreadCount: number;
+  totalUnreadCount: number;
+  refreshBackendNotifications: () => Promise<void>;
+  markBackendNotificationAsRead: (notificationId: number) => Promise<void>;
+  markAllBackendNotificationsAsRead: () => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -38,72 +53,9 @@ interface NotificationProviderProps {
 }
 
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({ children }) => {
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: '1',
-      type: 'info',
-      title: 'Welcome!',
-      message: 'Welcome to Salon Manager. Your workspace is ready.',
-      timestamp: new Date(Date.now() - 30000),
-      read: false
-    },
-    {
-      id: '2',
-      type: 'success',
-      title: 'Appointment Confirmed',
-      message: 'John Doe\'s appointment has been confirmed for 2:00 PM.',
-      timestamp: new Date(Date.now() - 300000),
-      read: false
-    },
-    {
-      id: '3',
-      type: 'warning',
-      title: 'Low Inventory Alert',
-      message: 'Hair shampoo stock is running low. Only 3 bottles remaining.',
-      timestamp: new Date(Date.now() - 600000),
-      read: false
-    },
-    {
-      id: '4',
-      type: 'success',
-      title: 'Monthly Revenue Target',
-      message: 'Congratulations! You\'ve achieved 95% of monthly revenue target.',
-      timestamp: new Date(Date.now() - 900000),
-      read: false
-    },
-    {
-      id: '5',
-      type: 'info',
-      title: 'Staff Schedule Update',
-      message: 'Sarah Johnson has requested a schedule change for next week.',
-      timestamp: new Date(Date.now() - 1200000),
-      read: true
-    },
-    {
-      id: '6',
-      type: 'error',
-      title: 'Payment Failed',
-      message: 'Payment processing failed for customer Emma Wilson. Please retry.',
-      timestamp: new Date(Date.now() - 1800000),
-      read: false
-    },
-    {
-      id: '7',
-      type: 'success',
-      title: 'New Customer Registration',
-      message: '5 new customers registered this week. Great job team!',
-      timestamp: new Date(Date.now() - 2400000),
-      read: true
-    },
-    {
-      id: '8',
-      type: 'warning',
-      title: 'System Maintenance',
-      message: 'Scheduled system maintenance tonight from 2:00 AM to 4:00 AM.',
-      timestamp: new Date(Date.now() - 3600000),
-      read: false
-    }
-  ]);
+  const { getSalonId } = useAuth();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [backendNotifications, setBackendNotifications] = useState<BackendNotification[]>([]);
 
   const addNotification = (notificationData: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
     console.log('🔔 [NOTIFICATION-CTX] addNotification called with:', notificationData);
@@ -145,18 +97,82 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     setNotifications([]);
   };
 
+  // Backend notification methods
+  const refreshBackendNotifications = useCallback(async () => {
+    const salonId = getSalonId();
+    if (!salonId) return;
+    
+    try {
+      console.log('🔄 [NOTIFICATION-CTX] Refreshing backend notifications...');
+      const response = await backendNotificationService.getNotifications(salonId);
+      setBackendNotifications(response.notifications);
+      console.log('✅ [NOTIFICATION-CTX] Backend notifications refreshed:', response);
+    } catch (error) {
+      console.error('❌ [NOTIFICATION-CTX] Error refreshing backend notifications:', error);
+    }
+  }, [getSalonId]);
+
+  const markBackendNotificationAsRead = useCallback(async (notificationId: number) => {
+    const salonId = getSalonId();
+    if (!salonId) return;
+    
+    try {
+      console.log('📝 [NOTIFICATION-CTX] Marking backend notification as read:', notificationId);
+      await backendNotificationService.markNotificationAsRead(salonId, notificationId);
+      
+      // Update local state
+      setBackendNotifications(prev => 
+        prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
+      );
+      console.log('✅ [NOTIFICATION-CTX] Backend notification marked as read');
+    } catch (error) {
+      console.error('❌ [NOTIFICATION-CTX] Error marking backend notification as read:', error);
+    }
+  }, [getSalonId]);
+
+  const markAllBackendNotificationsAsRead = useCallback(async () => {
+    const salonId = getSalonId();
+    if (!salonId) return;
+    
+    try {
+      console.log('📝 [NOTIFICATION-CTX] Marking all backend notifications as read...');
+      await backendNotificationService.markAllNotificationsAsRead(salonId);
+      
+      // Update local state
+      setBackendNotifications(prev => 
+        prev.map(n => ({ ...n, isRead: true }))
+      );
+      console.log('✅ [NOTIFICATION-CTX] All backend notifications marked as read');
+    } catch (error) {
+      console.error('❌ [NOTIFICATION-CTX] Error marking all backend notifications as read:', error);
+    }
+  }, [getSalonId]);
+
+  // Load backend notifications on mount
+  useEffect(() => {
+    refreshBackendNotifications();
+  }, [refreshBackendNotifications]);
+
   const unreadCount = notifications.filter(n => !n.read).length;
+  const backendUnreadCount = backendNotifications.filter(n => !n.isRead).length;
+  const totalUnreadCount = unreadCount + backendUnreadCount;
 
   return (
     <NotificationContext.Provider
       value={{
         notifications,
+        backendNotifications,
         addNotification,
         markAsRead,
         markAllAsRead,
         removeNotification,
         clearAll,
-        unreadCount
+        unreadCount,
+        backendUnreadCount,
+        totalUnreadCount,
+        refreshBackendNotifications,
+        markBackendNotificationAsRead,
+        markAllBackendNotificationsAsRead
       }}
     >
       {children}

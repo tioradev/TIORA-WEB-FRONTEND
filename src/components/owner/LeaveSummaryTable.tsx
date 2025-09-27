@@ -99,10 +99,16 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
         // Note: Not filtering by status here, will filter client-side
       );
       
+      // Handle both new (with page) and old (direct) API response structures
+      const pageData = response.page || response;
+      const content = pageData.content || response.content || [];
+      
       console.log('📊 [DEBUG] API Response for summary leaves:', {
-        totalElements: response.totalElements,
-        contentCount: response.content.length,
-        statuses: response.content.map(item => ({
+        totalElements: pageData.totalElements || response.totalElements,
+        contentCount: content.length,
+        totalApproved: response.totalApprovedCount || 0,
+        totalRejected: response.totalRejectedCount || 0,
+        statuses: content.map(item => ({
           id: item.id || 'undefined', // Leave request ID (may be undefined)
           employeeId: item.employeeId,
           status: item.status || 'NO_STATUS_FIELD'
@@ -395,19 +401,19 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
             <div className="flex items-center space-x-2">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
               <span className="text-gray-600">
-                Approved: {filteredLeaves.filter(l => l.status === 'approved').length}
+                Approved: {apiResponse?.totalApprovedCount || 0}
               </span>
             </div>
             <div className="flex items-center space-x-2">
               <div className="w-3 h-3 bg-red-500 rounded-full"></div>
               <span className="text-gray-600">
-                Rejected: {filteredLeaves.filter(l => l.status === 'rejected').length}
+                Rejected: {apiResponse?.totalRejectedCount || 0}
               </span>
             </div>
             <div className="flex items-center space-x-2">
               <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
               <span className="text-gray-600">
-                Total: {apiResponse?.totalElements || 0}
+                Total: {(apiResponse?.totalApprovedCount || 0) + (apiResponse?.totalRejectedCount || 0)}
               </span>
             </div>
           </div>
@@ -491,7 +497,8 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button
                           onClick={() => {
-                            const apiLeave = apiResponse?.content.find(l => 
+                            const content = apiResponse?.page?.content || apiResponse?.content || [];
+                            const apiLeave = content.find(l => 
                               (l.id && l.id.toString() === leave.id) || 
                               l.employeeId.toString() === leave.id
                             );
@@ -510,11 +517,11 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
             </div>
 
             {/* Pagination */}
-            {apiResponse && apiResponse.totalPages > 1 && (
+            {apiResponse && (apiResponse.page?.totalPages || apiResponse.totalPages || 0) > 1 && (
               <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-gray-700">
-                    Showing {(currentPage * itemsPerPage) + 1} to {Math.min((currentPage + 1) * itemsPerPage, apiResponse.totalElements)} of {apiResponse.totalElements} results
+                    Showing {(currentPage * itemsPerPage) + 1} to {Math.min((currentPage + 1) * itemsPerPage, (apiResponse.page?.totalElements || apiResponse.totalElements || 0))} of {(apiResponse.page?.totalElements || apiResponse.totalElements || 0)} results
                   </div>
                   <div className="flex items-center space-x-2">
                     <button
@@ -527,7 +534,7 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
                     </button>
                     
                     <div className="flex space-x-1">
-                      {Array.from({ length: apiResponse.totalPages }, (_, i) => i).map(page => (
+                      {Array.from({ length: (apiResponse.page?.totalPages || apiResponse.totalPages || 0) }, (_, i) => i).map(page => (
                         <button
                           key={page}
                           onClick={() => handlePageChange(page)}
@@ -543,8 +550,8 @@ const LeaveSummaryTable: React.FC<LeaveSummaryTableProps> = () => {
                     </div>
 
                     <button
-                      onClick={() => handlePageChange(Math.min(currentPage + 1, apiResponse.totalPages - 1))}
-                      disabled={currentPage === apiResponse.totalPages - 1}
+                      onClick={() => handlePageChange(Math.min(currentPage + 1, (apiResponse.page?.totalPages || apiResponse.totalPages || 1) - 1))}
+                      disabled={currentPage === ((apiResponse.page?.totalPages || apiResponse.totalPages || 1) - 1)}
                       className="flex items-center space-x-1 px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
                     >
                       <span>Next</span>

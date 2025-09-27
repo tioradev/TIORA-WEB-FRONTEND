@@ -42,7 +42,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { webSocketLeaveService, WebSocketLeaveCallbacks } from '../services/webSocketLeaveService';
+import { webSocketLeaveService } from '../services/webSocketLeaveService';
 import { LeaveRequest } from '../types';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';

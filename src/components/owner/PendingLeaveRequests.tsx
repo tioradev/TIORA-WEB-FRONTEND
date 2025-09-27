@@ -118,7 +118,7 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
       console.log('📊 [DEBUG] API Response for pending leaves:', {
         totalElements: response.totalElements,
         content: response.content,
-        contentWithStatus: response.content.map(item => ({
+        contentWithStatus: (response.content || []).map(item => ({
           id: item.id || 'undefined', // Leave request ID (may be undefined)
           employeeId: item.employeeId,
           employeeName: item.employeeName,
@@ -362,11 +362,11 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
       )}
 
       {/* Pagination */}
-      {apiResponse && apiResponse.totalPages > 1 && (
+      {apiResponse && (apiResponse.totalPages || 0) > 1 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-700">
-              Showing {(currentPage * itemsPerPage) + 1} to {Math.min((currentPage + 1) * itemsPerPage, apiResponse.totalElements)} of {apiResponse.totalElements} requests
+              Showing {(currentPage * itemsPerPage) + 1} to {Math.min((currentPage + 1) * itemsPerPage, apiResponse.totalElements || 0)} of {apiResponse.totalElements || 0} requests
             </div>
             <div className="flex items-center space-x-2">
               <button
@@ -378,7 +378,7 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
               </button>
               
               <div className="flex space-x-1">
-                {Array.from({ length: apiResponse.totalPages }, (_, i) => i).map(page => (
+                {Array.from({ length: apiResponse.totalPages || 0 }, (_, i) => i).map((page: number) => (
                   <button
                     key={page}
                     onClick={() => handlePageChange(page)}
@@ -394,8 +394,8 @@ const PendingLeaveRequests: React.FC<PendingLeaveRequestsProps> = ({ onAction })
               </div>
 
               <button
-                onClick={() => handlePageChange(Math.min(currentPage + 1, apiResponse.totalPages - 1))}
-                disabled={currentPage === apiResponse.totalPages - 1}
+                onClick={() => handlePageChange(Math.min(currentPage + 1, (apiResponse.totalPages || 1) - 1))}
+                disabled={currentPage === ((apiResponse.totalPages || 1) - 1)}
                 className="px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next

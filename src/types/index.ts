@@ -214,8 +214,39 @@ export interface LeaveDetailApiResponse {
 }
 
 export interface LeaveDetailsPaginatedResponse {
-  content: LeaveDetailApiResponse[];
-  pageable: {
+  // Main page structure
+  page?: {
+    content: LeaveDetailApiResponse[];
+    pageable: {
+      pageNumber: number;
+      pageSize: number;
+      sort: {
+        empty: boolean;
+        sorted: boolean;
+        unsorted: boolean;
+      };
+      offset: number;
+      paged: boolean;
+      unpaged: boolean;
+    };
+    totalPages: number;
+    totalElements: number;
+    last: boolean;
+    size: number;
+    number: number;
+    sort: {
+      empty: boolean;
+      sorted: boolean;
+      unsorted: boolean;
+    };
+    numberOfElements: number;
+    first: boolean;
+    empty: boolean;
+  };
+  
+  // Direct content fields (for backward compatibility)
+  content?: LeaveDetailApiResponse[];
+  pageable?: {
     pageNumber: number;
     pageSize: number;
     sort: {
@@ -227,19 +258,56 @@ export interface LeaveDetailsPaginatedResponse {
     paged: boolean;
     unpaged: boolean;
   };
-  totalPages: number;
-  totalElements: number;
-  last: boolean;
-  size: number;
-  number: number;
-  sort: {
+  totalPages?: number;
+  totalElements?: number;
+  last?: boolean;
+  size?: number;
+  number?: number;
+  sort?: {
     empty: boolean;
     sorted: boolean;
     unsorted: boolean;
   };
-  numberOfElements: number;
-  first: boolean;
-  empty: boolean;
+  numberOfElements?: number;
+  first?: boolean;
+  empty?: boolean;
+  
+  // New total count fields
+  totalApprovedCount: number;
+  totalRejectedCount: number;
+}
+
+// Backend Notification API Types
+export interface BackendNotification {
+  id: number;
+  salonId: number;
+  userId: number | null;
+  role: 'SALON_OWNER' | 'SALON_RECEPTION' | 'BARBER';
+  type: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+  appointmentId?: number;
+  customerName?: string;
+  amount?: number;
+  sessionTime?: string;
+}
+
+export interface BackendNotificationResponse {
+  notifications: BackendNotification[];
+  unreadCount: number;
+  totalCount: number;
+  page: number;
+  size: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
+}
+
+export interface MarkNotificationReadRequest {
+  notificationIds?: number[];
+  markAllAsRead: boolean;
 }
 
 export interface Earning {
