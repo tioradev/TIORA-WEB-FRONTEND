@@ -5,8 +5,10 @@ import { useNotifications } from '../../contexts/NotificationContext';
 const NotificationPanel: React.FC = () => {
   const { 
     notifications, 
+    backendNotifications,
     markAsRead, 
     removeNotification, 
+    markBackendNotificationAsRead,
     totalUnreadCount
   } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
@@ -36,14 +38,53 @@ const NotificationPanel: React.FC = () => {
     return `${Math.floor(diffInMinutes / 1440)}d ago`;
   };
 
+  // Convert backend notifications to unified format
+  const unifiedNotifications = [
+    // Local notifications
+    ...notifications,
+    // Backend notifications converted to unified format
+    ...backendNotifications.map(bn => ({
+      id: `backend-${bn.id}`,
+      type: bn.type === 'APPOINTMENT_CREATED' ? 'info' as const :
+            bn.type === 'PAYMENT_RECEIVED' ? 'success' as const :
+            bn.type === 'LEAVE_REQUEST' ? 'warning' as const : 'info' as const,
+      title: bn.title,
+      message: bn.message,
+      timestamp: new Date(bn.createdAt),
+      read: bn.isRead,
+      // Backend-specific fields
+      backendId: bn.id,
+      appointmentId: bn.appointmentId,
+      customerName: bn.customerName,
+      amount: bn.amount,
+      sessionTime: bn.sessionTime
+    }))
+  ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
   const handleMarkAsRead = (id: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    markAsRead(id);
+    
+    if (id.startsWith('backend-')) {
+      // Handle backend notification
+      const backendId = parseInt(id.replace('backend-', ''));
+      markBackendNotificationAsRead(backendId);
+    } else {
+      // Handle local notification
+      markAsRead(id);
+    }
   };
 
   const handleDelete = (id: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    removeNotification(id);
+    
+    if (id.startsWith('backend-')) {
+      // Backend notifications can't be deleted, only marked as read
+      const backendId = parseInt(id.replace('backend-', ''));
+      markBackendNotificationAsRead(backendId);
+    } else {
+      // Handle local notification deletion
+      removeNotification(id);
+    }
   };
 
   return (
@@ -95,7 +136,7 @@ const NotificationPanel: React.FC = () => {
 
             {/* Content */}
             <div className="max-h-96 overflow-y-auto">
-              {notifications.length === 0 ? (
+              {unifiedNotifications.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">
                   <div className="p-4 bg-gray-100 rounded-2xl w-fit mx-auto mb-4">
                     <Bell className="w-8 h-8 text-gray-300" />
@@ -105,7 +146,7 @@ const NotificationPanel: React.FC = () => {
                 </div>
               ) : (
                 <div className="divide-y divide-gray-100/50">
-                  {notifications.map((notification) => (
+                  {unifiedNotifications.map((notification) => (
                     <div
                       key={notification.id}
                       className={`p-4 hover:bg-gradient-to-r hover:from-gray-50/50 hover:to-blue-50/30 transition-all duration-200 cursor-pointer group ${
@@ -135,6 +176,20 @@ const NotificationPanel: React.FC = () => {
                               <p className="text-sm text-gray-500 mt-1 leading-relaxed">
                                 {notification.message}
                               </p>
+                              {/* Show additional backend notification details */}
+                              {notification.customerName && (
+                                <div className="flex items-center space-x-4 mt-2 text-xs text-gray-400">
+                                  {notification.customerName && (
+                                    <span>Customer: {notification.customerName}</span>
+                                  )}
+                                  {notification.amount && (
+                                    <span>Amount: Rs. {notification.amount}</span>
+                                  )}
+                                  {notification.sessionTime && (
+                                    <span>Time: {new Date(notification.sessionTime).toLocaleString()}</span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                             <div className="flex items-center space-x-2 ml-3">
                               <span className="text-xs text-gray-400 font-medium">
@@ -171,11 +226,19 @@ const NotificationPanel: React.FC = () => {
             </div>
 
             {/* Footer */}
-            {notifications.length > 0 && (
+            {unifiedNotifications.length > 0 && (
               <div className="p-4 border-t border-gray-100/50 bg-gradient-to-r from-gray-50/30 to-white/30">
                 <button
                   onClick={() => {
-                    notifications.forEach(n => !n.read && markAsRead(n.id));
+                    unifiedNotifications.forEach(n => {
+                      if (!n.read) {
+                        if (n.id.startsWith('backend-') && n.backendId) {
+                          markBackendNotificationAsRead(n.backendId);
+                        } else {
+                          markAsRead(n.id);
+                        }
+                      }
+                    });
                   }}
                   className="w-full text-sm text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 font-semibold py-3 px-4 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
                 >
