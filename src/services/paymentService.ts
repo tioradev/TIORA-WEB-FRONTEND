@@ -773,19 +773,24 @@ export class PaymentService {
   }
 
   /**
-   * Get current configuration status
+   * Get current configuration status (async)
    */
-  public getConfigStatus(): { isConfigured: boolean; testMode: boolean; missingFields: string[] } {
-    // Make this async if you want to always validate latest config
-    // For now, use cached config and validation
-    const validationPromise = validatePayableConfig();
-    // If validatePayableConfig is async, you should await it in callers
-    // Here, we assume it returns a Promise
-    return {
-      isConfigured: false, // Use async validation in callers for true status
-      testMode: false,
-      missingFields: []
-    };
+  public async getConfigStatus(): Promise<{ isConfigured: boolean; testMode: boolean; missingFields: string[] }> {
+    try {
+      const validation = await validatePayableConfig();
+      return {
+        isConfigured: validation.isValid,
+        testMode: validation.config.testMode,
+        missingFields: validation.missingFields
+      };
+    } catch (error) {
+      console.error('❌ [PAYMENT] Error getting config status:', error);
+      return {
+        isConfigured: false,
+        testMode: false,
+        missingFields: ['all']
+      };
+    }
   }
 
   /**

@@ -26,6 +26,9 @@ let configCache: PayableConfig | null = null;
 let cacheExpiry = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+// Export cached config for webhook validation
+export let cachedConfig: PayableConfig | null = null;
+
 export const getPayableConfig = async (): Promise<PayableConfig> => {
   // Use cached config if valid
   if (configCache && Date.now() < cacheExpiry) {
@@ -55,9 +58,11 @@ export const getPayableConfig = async (): Promise<PayableConfig> => {
       defaultCurrency: apiConfig.defaultCurrency
     };
     cacheExpiry = Date.now() + CACHE_DURATION;
+    cachedConfig = configCache; // Update cached config for webhook validation
     return configCache;
   } catch (error) {
     console.warn('⚠️ [PAYABLE] Failed to load config from API, using fallback:', error);
+    cachedConfig = fallbackConfig; // Update cached config even for fallback
     return fallbackConfig;
   }
 };

@@ -90,7 +90,11 @@ const PaymentBilling: React.FC = () => {
   const { salon } = useAuth();
   
   // Payable IPG Integration States
-  const [payableConfig] = useState(paymentService.getConfigStatus());
+  const [payableConfig, setPayableConfig] = useState<{ isConfigured: boolean; testMode: boolean; missingFields: string[] }>({
+    isConfigured: false,
+    testMode: false,
+    missingFields: []
+  });
   const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
   const [payableMerchantId, setPayableMerchantId] = useState<string>('');
   const [payableCustomerId, setPayableCustomerId] = useState<string>('');
@@ -159,6 +163,20 @@ const PaymentBilling: React.FC = () => {
       setSelectedCustomer('SALONCUSTOMER001');
     }
   }, [salon]);
+
+  // Load payable config on component mount
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const config = await paymentService.getConfigStatus();
+        setPayableConfig(config);
+      } catch (error) {
+        console.error('Failed to load payable config:', error);
+        setPayableConfig({ isConfigured: false, testMode: false, missingFields: ['all'] });
+      }
+    };
+    loadConfig();
+  }, []);
 
   useEffect(() => {
     if (payableConfig.isConfigured && selectedCustomer) {
