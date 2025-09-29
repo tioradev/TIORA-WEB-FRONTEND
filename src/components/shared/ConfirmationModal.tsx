@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, X, Loader } from 'lucide-react';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -12,6 +12,7 @@ interface ConfirmationModalProps {
   type?: 'danger' | 'warning' | 'info';
   requireTyping?: boolean;
   typeToConfirm?: string;
+  loading?: boolean;
 }
 
 const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
@@ -24,7 +25,8 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   cancelText = 'Cancel',
   type = 'danger',
   requireTyping = false,
-  typeToConfirm = 'DELETE'
+  typeToConfirm = 'DELETE',
+  loading = false
 }) => {
   const [typedText, setTypedText] = useState('');
 
@@ -125,20 +127,22 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           <div className="flex items-center justify-end space-x-3">
             <button
               onClick={handleClose}
-              className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors duration-200"
+              disabled={loading}
+              className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {cancelText}
             </button>
             <button
               onClick={handleConfirm}
-              disabled={!isTypingValid}
-              className={`px-4 py-2 text-white rounded-lg font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+              disabled={!isTypingValid || loading}
+              className={`px-4 py-2 text-white rounded-lg font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center space-x-2 ${
                 styles.buttonColor
               } ${
-                !isTypingValid ? 'opacity-50 cursor-not-allowed' : ''
+                (!isTypingValid || loading) ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
-              {confirmText}
+              {loading && <Loader className="w-4 h-4 animate-spin" />}
+              <span>{loading ? 'Processing...' : confirmText}</span>
             </button>
           </div>
         </div>

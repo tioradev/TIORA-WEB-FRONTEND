@@ -391,7 +391,7 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = () => {
                           </div>
                           <div className="flex items-center">
                             <DollarSign className="w-4 h-4 mr-2" />
-                            ₹{employee.baseSalary.toLocaleString()}
+                            Rs {employee.baseSalary.toLocaleString()}
                           </div>
                           <div className="flex items-center">
                             {renderStarRating(employee.ratings)}
@@ -517,7 +517,7 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Base Salary</label>
-                    <p className="text-gray-900">₹{selectedEmployee.baseSalary.toLocaleString()}</p>
+                    <p className="text-gray-900">Rs {selectedEmployee.baseSalary.toLocaleString()}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Rating</label>

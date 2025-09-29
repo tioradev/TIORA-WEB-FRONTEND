@@ -163,7 +163,7 @@ const AdvancedAnalytics: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-900">${revenueAnalytics.totalRevenue.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900">Rs {revenueAnalytics.totalRevenue.toLocaleString()}</p>
               <div className="flex items-center space-x-1 mt-1">
                 <ArrowUp className="w-4 h-4 text-green-600" />
                 <span className="text-sm text-green-600">+12.5%</span>
@@ -191,7 +191,7 @@ const AdvancedAnalytics: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Avg Ticket Size</p>
-              <p className="text-2xl font-bold text-gray-900">${revenueAnalytics.averageTicketSize}</p>
+              <p className="text-2xl font-bold text-gray-900">Rs {revenueAnalytics.averageTicketSize}</p>
               <div className="flex items-center space-x-1 mt-1">
                 <ArrowUp className="w-4 h-4 text-green-600" />
                 <span className="text-sm text-green-600">+3.7%</span>
@@ -248,7 +248,7 @@ const AdvancedAnalytics: React.FC = () => {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Service Revenue</span>
-                  <span className="font-semibold text-gray-900">${revenueAnalytics.serviceRevenue.toLocaleString()}</span>
+                  <span className="font-semibold text-gray-900">Rs {revenueAnalytics.serviceRevenue.toLocaleString()}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
@@ -259,7 +259,7 @@ const AdvancedAnalytics: React.FC = () => {
                 
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Product Revenue</span>
-                  <span className="font-semibold text-gray-900">${revenueAnalytics.productRevenue.toLocaleString()}</span>
+                  <span className="font-semibold text-gray-900">Rs {revenueAnalytics.productRevenue.toLocaleString()}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
@@ -286,7 +286,7 @@ const AdvancedAnalytics: React.FC = () => {
                         <p className="text-sm text-gray-600">{barber.appointmentCount} appointments</p>
                       </div>
                     </div>
-                    <span className="font-semibold text-gray-900">${barber.revenue.toLocaleString()}</span>
+                    <span className="font-semibold text-gray-900">Rs {barber.revenue.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -310,9 +310,9 @@ const AdvancedAnalytics: React.FC = () => {
                   {revenueAnalytics.topServices.map((service) => (
                     <tr key={service.serviceId} className="border-b border-gray-100">
                       <td className="py-3 px-4 font-medium text-gray-900">{service.serviceName}</td>
-                      <td className="py-3 px-4 text-right text-gray-900">${service.revenue.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-right text-gray-900">Rs {service.revenue.toLocaleString()}</td>
                       <td className="py-3 px-4 text-right text-gray-900">{service.count}</td>
-                      <td className="py-3 px-4 text-right text-gray-900">${(service.revenue / service.count).toFixed(2)}</td>
+                      <td className="py-3 px-4 text-right text-gray-900">Rs {(service.revenue / service.count).toFixed(2)}</td>
                       <td className="py-3 px-4 text-right text-gray-900">
                         {((service.revenue / revenueAnalytics.serviceRevenue) * 100).toFixed(1)}%
                       </td>
@@ -342,7 +342,7 @@ const AdvancedAnalytics: React.FC = () => {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Average Lifetime Value</span>
-                  <span className="font-semibold text-purple-600">${customerAnalytics.averageLifetimeValue}</span>
+                  <span className="font-semibold text-purple-600">Rs {customerAnalytics.averageLifetimeValue}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Churn Rate</span>
@@ -367,7 +367,7 @@ const AdvancedAnalytics: React.FC = () => {
                         <p className="text-sm text-gray-600">{customer.visitCount} visits</p>
                       </div>
                     </div>
-                    <span className="font-semibold text-gray-900">${customer.totalSpent}</span>
+                    <span className="font-semibold text-gray-900">Rs {customer.totalSpent}</span>
                   </div>
                 ))}
               </div>
@@ -430,15 +430,15 @@ const AdvancedAnalytics: React.FC = () => {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Next Month Projection</span>
-                  <span className="font-semibold text-green-600">${(revenueAnalytics.totalRevenue * 1.08).toLocaleString()}</span>
+                  <span className="font-semibold text-green-600">Rs {(revenueAnalytics.totalRevenue * 1.08).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Next Quarter Projection</span>
-                  <span className="font-semibold text-blue-600">${(revenueAnalytics.totalRevenue * 3.2).toLocaleString()}</span>
+                  <span className="font-semibold text-blue-600">Rs {(revenueAnalytics.totalRevenue * 3.2).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Annual Projection</span>
-                  <span className="font-semibold text-purple-600">${(revenueAnalytics.totalRevenue * 12.5).toLocaleString()}</span>
+                  <span className="font-semibold text-purple-600">Rs {(revenueAnalytics.totalRevenue * 12.5).toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -501,19 +501,19 @@ const AdvancedAnalytics: React.FC = () => {
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">Appointment Revenue</span>
                           <span className="font-medium text-green-600">
-                            ${branch.appointmentRevenue.toLocaleString()}
+                            Rs {branch.appointmentRevenue.toLocaleString()}
                           </span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">Service Charges</span>
                           <span className="font-medium text-red-600">
-                            -${branch.serviceCharges.toLocaleString()}
+                            -Rs {branch.serviceCharges.toLocaleString()}
                           </span>
                         </div>
                         <div className="flex justify-between text-sm font-semibold border-t pt-2">
                           <span className="text-gray-900">Net Income</span>
                           <span className="text-blue-600">
-                            ${branch.netIncome.toLocaleString()}
+                            Rs {branch.netIncome.toLocaleString()}
                           </span>
                         </div>
                       </div>
@@ -541,31 +541,31 @@ const AdvancedAnalytics: React.FC = () => {
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">Revenue</span>
                           <span className="font-medium text-green-600">
-                            ${branch.monthlyRevenue.toLocaleString()}
+                            Rs {branch.monthlyRevenue.toLocaleString()}
                           </span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">Service Charges</span>
                           <span className="font-medium text-red-600">
-                            -${branch.monthlyServiceCharges.toLocaleString()}
+                            -Rs {branch.monthlyServiceCharges.toLocaleString()}
                           </span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600 ml-2">Paid</span>
                           <span className="text-green-600">
-                            ${branch.paidServiceCharges.toLocaleString()}
+                            Rs {branch.paidServiceCharges.toLocaleString()}
                           </span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600 ml-2">Pending</span>
                           <span className="text-orange-600">
-                            ${branch.pendingServiceCharges.toLocaleString()}
+                            Rs {branch.pendingServiceCharges.toLocaleString()}
                           </span>
                         </div>
                         <div className="flex justify-between text-sm font-semibold border-t pt-2">
                           <span className="text-gray-900">Net Income</span>
                           <span className="text-blue-600">
-                            ${branch.monthlyNetIncome.toLocaleString()}
+                            Rs {branch.monthlyNetIncome.toLocaleString()}
                           </span>
                         </div>
                       </div>

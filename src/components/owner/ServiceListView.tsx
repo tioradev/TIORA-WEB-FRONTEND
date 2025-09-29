@@ -272,11 +272,11 @@ const ServiceListView: React.FC<ServiceListViewProps> = ({
                     <div className="flex items-center space-x-2">
                       {service.discountPrice ? (
                         <>
-                          <span className="text-lg font-semibold text-gray-900">${service.discountPrice}</span>
-                          <span className="text-sm text-gray-500 line-through">${service.price}</span>
+                          <span className="text-lg font-semibold text-gray-900">Rs {service.discountPrice}</span>
+                          <span className="text-sm text-gray-500 line-through">Rs {service.price}</span>
                         </>
                       ) : (
-                        <span className="text-lg font-semibold text-gray-900">${service.price}</span>
+                        <span className="text-lg font-semibold text-gray-900">Rs {service.price}</span>
                       )}
                     </div>
                   </div>

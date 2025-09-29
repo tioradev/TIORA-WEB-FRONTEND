@@ -1064,11 +1064,11 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                                     <span>
                                       {service.discount_price ? (
                                         <>
-                                          <span className="font-medium">Rs. {service.discount_price}</span>
-                                          <span className="line-through ml-1">Rs. {service.price}</span>
+                                          <span className="font-medium">Rs {service.discount_price}</span>
+                                          <span className="line-through ml-1">Rs {service.price}</span>
                                         </>
                                       ) : (
-                                        <span className="font-medium">Rs. {service.price}</span>
+                                        <span className="font-medium">Rs {service.price}</span>
                                       )}
                                     </span>
                                   </span>
@@ -1098,7 +1098,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                         <div className="flex items-center space-x-2">
                           <span className="text-blue-600">{service.duration} min</span>
                           <span className="font-semibold text-blue-900">
-                            Rs. {service.discountPrice || service.price}
+                            Rs {service.discountPrice || service.price}
                           </span>
                           <button
                             type="button"
@@ -1112,7 +1112,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                     ))}
                     <div className="pt-2 border-t border-blue-200 flex justify-between font-semibold text-blue-900">
                       <span>Total: {totalDuration} minutes</span>
-                      <span>Rs. {totalAmount.toFixed(2)}</span>
+                      <span>Rs {totalAmount.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -1162,11 +1162,11 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                   <div className="mt-2 space-y-1">
                     {formData.selectedServices.map((service: SelectedService) => (
                       <p key={service.id} className="text-sm text-blue-700">
-                        {service.name} - {service.duration} min - Rs. {service.discountPrice || service.price}
+                        {service.name} - {service.duration} min - Rs {service.discountPrice || service.price}
                       </p>
                     ))}
                     <div className="pt-2 border-t border-blue-200 font-semibold text-blue-900">
-                      Total: {totalDuration} minutes • Rs. {totalAmount.toFixed(2)}
+                      Total: {totalDuration} minutes • Rs {totalAmount.toFixed(2)}
                     </div>
                   </div>
                 </div>
@@ -1375,13 +1375,13 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                         {index + 1}. {service.name} ({service.duration} min)
                       </span>
                       <span className="font-semibold text-blue-900">
-                        Rs. {(service.discountPrice || service.price).toFixed(2)}
+                        Rs {(service.discountPrice || service.price).toFixed(2)}
                       </span>
                     </div>
                   ))}
                   <div className="pt-2 border-t border-blue-300 flex justify-between items-center font-bold text-blue-900">
                     <span>Total ({totalDuration} minutes)</span>
-                    <span className="text-lg">Rs. {totalAmount.toFixed(2)}</span>
+                    <span className="text-lg">Rs {totalAmount.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -1599,7 +1599,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                   </div>
                   <div className="flex justify-between">
                     <span className="text-green-700">Total Amount:</span>
-                    <span className="font-bold text-green-900 text-lg">Rs. {totalAmount.toFixed(2)}</span>
+                    <span className="font-bold text-green-900 text-lg">Rs {totalAmount.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -1741,7 +1741,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                     : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                {saving ? 'Booking...' : `${editingAppointment ? 'Update' : 'Book'} Appointment (Rs. ${totalAmount.toFixed(2)})`}
+                {saving ? 'Booking...' : `${editingAppointment ? 'Update' : 'Book'} Appointment (Rs ${totalAmount.toFixed(2)})`}
               </button>
             )}
           </div>

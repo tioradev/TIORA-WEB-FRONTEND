@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Edit, Trash2, User, Phone, 
   DollarSign, Star, Building, RotateCcw,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Loader
 } from 'lucide-react';
 import { 
   apiService, 
@@ -64,6 +64,11 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
   const [editingStaff, setEditingStaff] = useState<Staff | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Loading states for different operations
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isToggling, setIsToggling] = useState<string | null>(null);
+  const [isLoadingEdit, setIsLoadingEdit] = useState<string | null>(null);
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(0);
@@ -259,6 +264,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
 
   const handleEditStaff = async (staffMember: Staff) => {
     try {
+      setIsLoadingEdit(staffMember.id);
       // Fetch complete employee details from API
       const fullEmployeeData = await apiService.getEmployeeDetails(staffMember.id);
       console.log('Full employee data:', fullEmployeeData);
@@ -300,6 +306,8 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
       if (setError) {
         setError('Failed to load employee details. Some information may not be available.');
       }
+    } finally {
+      setIsLoadingEdit(null);
     }
   };
 
@@ -427,9 +435,12 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
   const confirmDeleteStaff = async () => {
     try {
       setError(null);
+      setIsDeleting(true);
       const { staffId, staffName } = deleteConfirmation;
       const response = await apiService.deleteEmployee(staffId);
-      if (response.success) {
+      
+      // Handle both success response object and 204 response
+      if (response.success || response.message) {
         console.log('Staff deleted successfully');
         showSuccess(
           'Employee Deleted',
@@ -451,6 +462,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
         `An error occurred while deleting ${deleteConfirmation.staffName}. Please check your connection and try again.`
       );
     } finally {
+      setIsDeleting(false);
       setDeleteConfirmation({ isOpen: false, staffId: '', staffName: '' });
     }
   };
@@ -462,6 +474,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
     
     try {
       setError(null);
+      setIsToggling(staffMember.id);
       const updateRequest: EmployeeUpdateRequest = {
         status: newStatus
       };
@@ -488,6 +501,8 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
         'Status Update Error',
         `An error occurred while updating ${staffName}'s status. Please check your connection and try again.`
       );
+    } finally {
+      setIsToggling(null);
     }
   };
 
@@ -763,21 +778,37 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
               <div className="flex items-center space-x-2 mt-4 pt-4 border-t border-gray-100">
                 <button
                   onClick={() => handleEditStaff(staffMember)}
-                  className="flex items-center space-x-1 px-3 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition-colors duration-200"
+                  disabled={isLoadingEdit === staffMember.id}
+                  className="flex items-center space-x-1 px-3 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Edit className="w-4 h-4" />
-                  <span>Edit</span>
+                  {isLoadingEdit === staffMember.id ? (
+                    <Loader className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Edit className="w-4 h-4" />
+                  )}
+                  <span>{isLoadingEdit === staffMember.id ? 'Loading...' : 'Edit'}</span>
                 </button>
                 <button
                   onClick={() => handleToggleStatus(staffMember)}
-                  className="flex items-center space-x-1 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                  disabled={isToggling === staffMember.id}
+                  className="flex items-center space-x-1 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <RotateCcw className="w-4 h-4" />
-                  <span>{staffMember.status === 'active' ? 'Deactivate' : 'Activate'}</span>
+                  {isToggling === staffMember.id ? (
+                    <Loader className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4" />
+                  )}
+                  <span>
+                    {isToggling === staffMember.id 
+                      ? 'Processing...' 
+                      : staffMember.status === 'active' ? 'Deactivate' : 'Activate'
+                    }
+                  </span>
                 </button>
                 <button
                   onClick={() => handleDeleteStaff(staffMember.id)}
-                  className="flex items-center space-x-1 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                  disabled={isDeleting}
+                  className="flex items-center space-x-1 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Delete</span>
@@ -927,6 +958,7 @@ This will permanently remove the employee from your salon system.`}
         cancelText="Cancel"
         type="danger"
         requireTyping={false}
+        loading={isDeleting}
       />
 
       {/* Floating Add Staff Button */}

@@ -72,6 +72,7 @@ const ENDPOINTS = {
     UPDATE_STATUS: '/employee-leave', // PUT /employee-leave/{id}/status?status={status}
   },
   PAYMENTS: {
+    CONFIG: '/payments/config',
     INITIATE_REGULAR: '/payments/initiate/regular',
     INITIATE_TOKENIZE: '/payments/initiate/tokenize',
     PAY_WITH_TOKEN: '/payments/initiate/pay-with-token',
@@ -195,9 +196,24 @@ class ApiService {
         throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
       }
 
-      const data = await response.json();
-      envLog.info('✅ [API] Success response:', data);
-      return data;
+      // Handle 204 No Content responses
+      if (response.status === 204) {
+        envLog.info('✅ [API] Success response: 204 No Content');
+        return { success: true, message: 'Operation completed successfully' } as T;
+      }
+
+      // Handle responses with content
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        envLog.info('✅ [API] Success response:', data);
+        return data;
+      } else {
+        // For non-JSON responses, return a generic success response
+        const text = await response.text();
+        envLog.info('✅ [API] Success response (non-JSON):', text);
+        return { success: true, message: text || 'Operation completed successfully' } as T;
+      }
     } catch (error) {
       envLog.error('❌ [API] Request failed:', error);
       throw error;
@@ -1487,6 +1503,12 @@ class ApiService {
       throw error;
     }
   }
+
+  // Get payment configuration from API
+  async getPaymentConfig(): Promise<PaymentConfigResponse> {
+    envLog.info('🔧 [API] Getting payment configuration...');
+    return this.request<PaymentConfigResponse>(ENDPOINTS.PAYMENTS.CONFIG);
+  }
 }
 
 // Types for API requests and responses
@@ -1495,6 +1517,17 @@ class ApiService {
 export interface LoginRequest {
   usernameOrEmail: string;
   password: string;
+}
+
+// Payment Configuration types
+export interface PaymentConfigResponse {
+  merchantToken: string;
+  baseUrl: string;
+  defaultCurrency: string;
+  testMode: boolean;
+  businessKey: string;
+  businessToken: string;
+  merchantKey: string;
 }
 
 // Branch types

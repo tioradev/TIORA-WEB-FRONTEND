@@ -326,7 +326,7 @@ const SalonManagement: React.FC = () => {
                 {loadingStats ? (
                   <Loader className="w-6 h-6 animate-spin text-gray-400" />
                 ) : (
-                  `LKR ${stats.totalRevenue.toLocaleString()}`
+                  `Rs ${stats.totalRevenue.toLocaleString()}`
                 )}
               </p>
               <p className="text-xs text-gray-500">All-time earnings</p>
@@ -464,7 +464,7 @@ const SalonManagement: React.FC = () => {
                   <p className="text-xs text-gray-600">Customers</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-bold text-gray-900">LKR {salon.totalIncome.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-gray-900">Rs {salon.totalIncome.toLocaleString()}</p>
                   <p className="text-xs text-gray-600">Revenue</p>
                 </div>
               </div>
@@ -731,7 +731,7 @@ const SalonManagement: React.FC = () => {
                       <p className="text-sm text-gray-600">Total Customers</p>
                     </div>
                     <div className="bg-gray-50 p-4 rounded-lg text-center">
-                      <p className="text-2xl font-bold text-gray-900">LKR {selectedSalon.totalIncome.toLocaleString()}</p>
+                      <p className="text-2xl font-bold text-gray-900">Rs {selectedSalon.totalIncome.toLocaleString()}</p>
                       <p className="text-sm text-gray-600">Total Income</p>
                     </div>
                     <div className="bg-gray-50 p-4 rounded-lg text-center">

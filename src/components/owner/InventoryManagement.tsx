@@ -276,7 +276,7 @@ const InventoryManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Inventory Value</p>
-              <p className="text-2xl font-bold text-gray-900">${totalInventoryValue.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-gray-900">Rs {totalInventoryValue.toFixed(2)}</p>
             </div>
             <DollarSign className="w-8 h-8 text-emerald-500" />
           </div>
@@ -410,7 +410,7 @@ const InventoryManagement: React.FC = () => {
                           ${item.unitPrice}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ${(item.currentStock * item.unitPrice).toFixed(2)}
+                          Rs {(item.currentStock * item.unitPrice).toFixed(2)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {item.supplierName}
@@ -598,15 +598,15 @@ const InventoryManagement: React.FC = () => {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Total Inventory Cost</span>
-                  <span className="font-semibold text-gray-900">${totalInventoryValue.toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900">Rs {totalInventoryValue.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Monthly Usage Cost</span>
-                  <span className="font-semibold text-gray-900">${(totalInventoryValue * 0.3).toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900">Rs {(totalInventoryValue * 0.3).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Waste/Expired</span>
-                  <span className="font-semibold text-red-600">${(totalInventoryValue * 0.05).toFixed(2)}</span>
+                  <span className="font-semibold text-red-600">Rs {(totalInventoryValue * 0.05).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-gray-200">
                   <span className="text-sm font-medium text-gray-900">Net Efficiency</span>
@@ -1032,7 +1032,7 @@ const ItemDetailsModal: React.FC<ItemDetailsModalProps> = ({ item, onClose }) =>
             </div>
             <div>
               <p className="text-sm text-gray-600">Total Value</p>
-              <p className="font-semibold text-gray-900">${(item.currentStock * item.unitPrice).toFixed(2)}</p>
+              <p className="font-semibold text-gray-900">Rs {(item.currentStock * item.unitPrice).toFixed(2)}</p>
             </div>
             <div>
               <p className="text-sm text-gray-600">Supplier</p>

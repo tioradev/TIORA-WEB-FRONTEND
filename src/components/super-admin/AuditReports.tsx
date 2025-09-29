@@ -410,7 +410,7 @@ const AuditReports: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-emerald-100">Total Revenue</p>
-                <p className="text-2xl font-bold">${mockEarnings.reduce((sum, e) => sum + e.finalAmount, 0)}</p>
+                <p className="text-2xl font-bold">Rs {mockEarnings.reduce((sum, e) => sum + e.finalAmount, 0)}</p>
               </div>
               <DollarSign className="w-8 h-8 text-emerald-200" />
             </div>

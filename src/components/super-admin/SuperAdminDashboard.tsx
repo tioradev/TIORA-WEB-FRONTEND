@@ -69,7 +69,7 @@ const SuperAdminDashboard: React.FC = () => {
             />
             <StatsCard
               title="System Revenue"
-              value={`$${totalRevenue.toLocaleString()}`}
+              value={`Rs ${totalRevenue.toLocaleString()}`}
               icon={DollarSign}
               color="emerald"
               change="+15% from last month"
@@ -207,7 +207,7 @@ const SuperAdminDashboard: React.FC = () => {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-xl text-gray-900">${salon.monthlyRevenue.toLocaleString()}</p>
+                    <p className="font-bold text-xl text-gray-900">Rs {salon.monthlyRevenue.toLocaleString()}</p>
                     <p className="text-sm text-gray-600">{salon.totalCustomers} customers</p>
                     <p className="text-xs text-emerald-600 font-medium mt-1">+{Math.floor(Math.random() * 20 + 5)}% growth</p>
                   </div>

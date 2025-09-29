@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Search, Filter, Download, Plus, Edit, Trash2, 
+  Search, Filter, Download, Plus, Trash2, 
   Eye, EyeOff, Mail, Phone, Calendar, Award,
   User, MapPin, Clock, DollarSign, X
 } from 'lucide-react';
@@ -184,7 +184,7 @@ const EmployeeManagement: React.FC = () => {
                 </div>
                 <div className="text-center">
                   <div className="text-lg font-semibold text-gray-900">
-                    {employee.salary ? `$${employee.salary.toLocaleString()}` : 'N/A'}
+                    {employee.salary ? `Rs ${employee.salary.toLocaleString()}` : 'N/A'}
                   </div>
                   <div className="text-xs text-gray-600">Salary</div>
                 </div>
@@ -317,7 +317,7 @@ const EmployeeManagement: React.FC = () => {
                     {selectedEmployee.salary && (
                       <div className="flex items-center space-x-3">
                         <DollarSign className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm text-gray-600">${selectedEmployee.salary}/month</span>
+                        <span className="text-sm text-gray-600">Rs {selectedEmployee.salary}/month</span>
                       </div>
                     )}
                   </div>

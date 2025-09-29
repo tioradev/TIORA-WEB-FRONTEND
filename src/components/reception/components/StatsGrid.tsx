@@ -26,7 +26,7 @@ const StatsGrid: React.FC<StatsGridProps> = ({ totalStatistics }) => {
       />
       <StatsCard
         title="Daily Income"
-        value={`Rs. ${totalStatistics.totalDailyIncome.toFixed(2)}`}
+        value={`Rs ${totalStatistics.totalDailyIncome.toFixed(2)}`}
         icon={DollarSign}
         color="emerald"
         subtitle="From completed payments"

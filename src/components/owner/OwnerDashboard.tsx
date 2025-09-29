@@ -196,7 +196,7 @@ const OwnerDashboard: React.FC = () => {
                     TODAY
                   </span>
                 </div>
-                <h3 className="text-2xl font-bold text-emerald-900 mb-1">LKR {dailyIncomeFromCharges.toFixed(2)}</h3>
+                <h3 className="text-2xl font-bold text-emerald-900 mb-1">Rs {dailyIncomeFromCharges.toFixed(2)}</h3>
                 <p className="text-emerald-700 text-sm font-medium mb-2">Today's Earnings</p>
                 <p className="text-emerald-600 text-xs">From appointment charges</p>
               </div>
@@ -214,7 +214,7 @@ const OwnerDashboard: React.FC = () => {
                     +12%
                   </span>
                 </div>
-                <h3 className="text-2xl font-bold text-blue-900 mb-1">LKR {todayEarnings.toFixed(2)}</h3>
+                <h3 className="text-2xl font-bold text-blue-900 mb-1">Rs {todayEarnings.toFixed(2)}</h3>
                 <p className="text-blue-700 text-sm font-medium mb-2">Monthly Earnings</p>
                 <p className="text-blue-600 text-xs">From yesterday</p>
               </div>
@@ -232,7 +232,7 @@ const OwnerDashboard: React.FC = () => {
                     PENDING
                   </span>
                 </div>
-                <h3 className="text-2xl font-bold text-orange-900 mb-1">LKR {pendingPaymentAmount.toFixed(2)}</h3>
+                <h3 className="text-2xl font-bold text-orange-900 mb-1">Rs {pendingPaymentAmount.toFixed(2)}</h3>
                 <p className="text-orange-700 text-sm font-medium mb-2">Pending Payments</p>
                 <p className="text-orange-600 text-xs">{todayAppointments.length} appointments today</p>
               </div>
@@ -420,7 +420,7 @@ const OwnerDashboard: React.FC = () => {
                   </div>
                   <div className="flex justify-between items-center p-3 bg-green-50 rounded-xl">
                     <span className="text-gray-600 font-medium">Total Appointment Charges</span>
-                    <span className="text-lg font-bold text-green-600">LKR {appointmentChargePerDay.toFixed(2)}</span>
+                    <span className="text-lg font-bold text-green-600">Rs {appointmentChargePerDay.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between items-center p-3 bg-red-50 rounded-xl">
                     <span className="text-gray-600 font-medium">Service Charges</span>

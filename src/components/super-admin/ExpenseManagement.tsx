@@ -181,7 +181,7 @@ const ExpenseManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Expenses</p>
-              <p className="text-2xl font-bold text-gray-900">${totalExpenses.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900">Rs {totalExpenses.toLocaleString()}</p>
             </div>
             <DollarSign className="w-8 h-8 text-red-500" />
           </div>
@@ -191,7 +191,7 @@ const ExpenseManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">This Month</p>
-              <p className="text-2xl font-bold text-gray-900">${(totalExpenses * 0.8).toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900">Rs {(totalExpenses * 0.8).toLocaleString()}</p>
             </div>
             <Calendar className="w-8 h-8 text-blue-500" />
           </div>
@@ -305,7 +305,7 @@ const ExpenseManagement: React.FC = () => {
                       {expense.description}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      ${expense.amount.toLocaleString()}
+                      Rs {expense.amount.toLocaleString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {paymentMethods.find(p => p.value === expense.paymentMethod)?.label}

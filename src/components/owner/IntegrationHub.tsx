@@ -89,7 +89,7 @@ const IntegrationHub: React.FC = () => {
       description: 'Cloud-based accounting software',
       category: 'Accounting',
       features: ['Invoicing', 'Expense tracking', 'Financial reports'],
-      pricing: 'Starting at $13/month',
+      pricing: 'Starting at Rs 1,950/month',
       logo: '📊',
     },
     {

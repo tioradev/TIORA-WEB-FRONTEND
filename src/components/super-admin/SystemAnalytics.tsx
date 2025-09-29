@@ -143,7 +143,7 @@ const SystemAnalytics: React.FC = () => {
             <TrendingUp className="w-5 h-5 text-green-500" />
           </div>
           <div>
-            <h3 className="text-2xl font-bold text-gray-900">${analytics.totalRevenue.toLocaleString()}</h3>
+            <h3 className="text-2xl font-bold text-gray-900">Rs {analytics.totalRevenue.toLocaleString()}</h3>
             <p className="text-sm font-medium text-gray-700">Total Revenue</p>
             <p className="text-xs text-green-600 mt-1">Monthly recurring</p>
           </div>
@@ -254,7 +254,7 @@ const SystemAnalytics: React.FC = () => {
                 </div>
                 <div className="flex justify-between">
                   <span>Revenue:</span>
-                  <span>${salon.monthlyRevenue.toLocaleString()}</span>
+                  <span>Rs {salon.monthlyRevenue.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Last Active:</span>

@@ -87,7 +87,7 @@ const ReceptionModals: React.FC<ModalProps> = ({
               <div className="bg-gray-50 rounded-lg p-4 mb-6">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Amount:</span>
-                  <span className="font-bold text-gray-900">LKR {paymentConfirmModal.appointment.finalAmount}</span>
+                  <span className="font-bold text-gray-900">Rs {paymentConfirmModal.appointment.finalAmount}</span>
                 </div>
                 <div className="flex justify-between items-center mt-2">
                   <span className="text-gray-600">Service:</span>
@@ -203,7 +203,7 @@ const ReceptionModals: React.FC<ModalProps> = ({
                 </div>
                 <div className="flex justify-between items-center mt-2">
                   <span className="text-gray-600">Amount:</span>
-                  <span className="text-gray-900">LKR {cancelAppointmentModal.appointment.finalAmount}</span>
+                  <span className="text-gray-900">Rs {cancelAppointmentModal.appointment.finalAmount}</span>
                 </div>
                 <div className="flex items-center justify-center mt-3 pt-3 border-t border-red-200">
                   <X className="w-5 h-5 text-red-600 mr-2" />

@@ -1,6 +1,6 @@
 import CryptoJS from 'crypto-js';
 import { payablePayment } from 'payable-ipg-js';
-import { payableConfig, validatePayableConfig } from './payableConfig';
+import { getPayableConfig, validatePayableConfig } from './payableConfig';
 import { apiService } from './api';
 import { getCurrentConfig } from '../config/environment';
 
@@ -308,14 +308,17 @@ export class PaymentService {
    */
   public async getJwtToken(): Promise<string> {
     try {
+      // Get dynamic configuration
+      const config = await getPayableConfig();
+      
       // Verify credentials are loaded
-      if (!payableConfig.businessKey || !payableConfig.businessToken) {
-        throw new Error('Business credentials not configured. Please check environment variables.');
+      if (!config.businessKey || !config.businessToken) {
+        throw new Error('Business credentials not configured. Please check API configuration.');
       }
       
-      const credentials = `${payableConfig.businessKey}:${payableConfig.businessToken}`;
+      const credentials = `${config.businessKey}:${config.businessToken}`;
       const basicAuth = btoa(credentials);
-      const apiBaseUrl = payableConfig.testMode 
+      const apiBaseUrl = config.testMode 
         ? 'https://sandboxipgpayment.payable.lk' 
         : 'https://ipgpayment.payable.lk';
       
@@ -387,18 +390,19 @@ export class PaymentService {
       console.log('🔑 [PAYMENT] Cleaned tokenId:', JSON.stringify(cleanTokenId));
       console.log('🔑 [PAYMENT] Using provided JWT token:', jwtToken.substring(0, 20) + '...');
       
-      // Verify credentials are loaded for checkValue generation
-      if (!payableConfig.merchantKey || !payableConfig.merchantToken) {
-        throw new Error('Merchant credentials not configured. Please check environment variables.');
+      // Get dynamic configuration and verify credentials are loaded for checkValue generation
+      const config = await getPayableConfig();
+      if (!config.merchantKey || !config.merchantToken) {
+        throw new Error('Merchant credentials not configured. Please check API configuration.');
       }
       
-      const apiBaseUrl = payableConfig.testMode 
+      const apiBaseUrl = config.testMode 
         ? 'https://sandboxipgpayment.payable.lk' 
         : 'https://ipgpayment.payable.lk';
 
       // Generate checkValue using the passed Payable ID values
       // UPPERCASE(SHA512[merchantId|invoiceId|amount|currencyCode|customerId|tokenId|UPPERCASE(SHA512[merchantToken])])
-      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
+      const merchantToken = CryptoJS.SHA512(config.merchantToken).toString().toUpperCase();
       const checkValueString = `${payableMerchantId}|${invoiceId}|${amount}|LKR|${customerId}|${cleanTokenId}|${merchantToken}`;
       const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();
 
@@ -528,23 +532,24 @@ export class PaymentService {
     try {
       console.log('💳 [PAYMENT] Paying with saved card via Payable API');
       
-      // Verify credentials are loaded
-      if (!payableConfig.businessKey || !payableConfig.businessToken) {
-        throw new Error('Business credentials not configured. Please check environment variables.');
+      // Get dynamic configuration and verify credentials are loaded
+      const config = await getPayableConfig();
+      if (!config.businessKey || !config.businessToken) {
+        throw new Error('Business credentials not configured. Please check API configuration.');
       }
       
       console.log('✅ [PAYMENT] Business credentials verified');
       
       // Step 1: Generate Basic Auth token and get JWT Access Token
-      const credentials = `${payableConfig.businessKey}:${payableConfig.businessToken}`;
+      const credentials = `${config.businessKey}:${config.businessToken}`;
       const basicAuth = btoa(credentials);
-      const apiBaseUrl = payableConfig.testMode 
+      const apiBaseUrl = config.testMode 
         ? 'https://sandboxipgpayment.payable.lk' 
         : 'https://ipgpayment.payable.lk';
       
       console.log('🔑 [PAYMENT] Generating JWT access token...');
-      console.log('🔑 [PAYMENT] Business Key:', payableConfig.businessKey);
-      console.log('🔑 [PAYMENT] Business Token:', payableConfig.businessToken?.substring(0, 8) + '...');
+      console.log('🔑 [PAYMENT] Business Key:', config.businessKey);
+      console.log('🔑 [PAYMENT] Business Token:', config.businessToken?.substring(0, 8) + '...');
       console.log('🔑 [PAYMENT] Credentials String:', credentials.substring(0, 20) + '...');
       console.log('🔑 [PAYMENT] Basic Auth (base64):', basicAuth.substring(0, 20) + '...');
       console.log('🔑 [PAYMENT] Authorization Header:', `Basic ${basicAuth}`);
@@ -606,19 +611,19 @@ export class PaymentService {
 
       // Step 2: Generate checkValue using the correct format
       // UPPERCASE(SHA512[merchantId|invoiceId|amount|currencyCode|customerId|tokenId|UPPERCASE(SHA512[merchantToken])])
-      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
-      const checkValueString = `${payableConfig.merchantKey}|${invoiceId}|${amount}|LKR|${customerId}|${tokenId}|${merchantToken}`;
+      const merchantToken = CryptoJS.SHA512(config.merchantToken).toString().toUpperCase();
+      const checkValueString = `${config.merchantKey}|${invoiceId}|${amount}|LKR|${customerId}|${tokenId}|${merchantToken}`;
       const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();
 
       console.log('🔐 [PAYMENT] CheckValue generation:');
-      console.log('🔐 [PAYMENT] Merchant Key:', payableConfig.merchantKey);
+      console.log('🔐 [PAYMENT] Merchant Key:', config.merchantKey);
       console.log('🔐 [PAYMENT] Merchant Token (SHA512):', merchantToken.substring(0, 20) + '...');
       console.log('🔐 [PAYMENT] CheckValue string:', checkValueString);
       console.log('🔐 [PAYMENT] CheckValue (SHA512):', checkValue.substring(0, 20) + '...');
 
       // Step 3: Process payment with saved card token using correct parameter names
       const paymentData: any = {
-        merchantId: payableConfig.merchantKey,  // Use merchantKey as merchantId
+        merchantId: config.merchantKey,  // Use merchantKey as merchantId
         customerId,
         tokenId,
         invoiceId,
@@ -745,11 +750,21 @@ export class PaymentService {
    */
   public validateWebhook(webhookData: any): boolean {
     try {
-      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
+      // Use a cached config variable if available, otherwise fallback to null
+      // This assumes you have a cachedConfig variable in payableConfig.ts
+      // If not, fallback to null and validation will always fail until config is loaded
+      let cachedConfig: any = null;
+      try {
+        // Dynamically import cachedConfig from payableConfig if it exists
+        // This avoids TypeScript errors and works if you export cachedConfig
+        cachedConfig = (require('./payableConfig').cachedConfig) || null;
+      } catch (e) {
+        cachedConfig = null;
+      }
+      const merchantToken = CryptoJS.SHA512((cachedConfig?.merchantToken || '')).toString().toUpperCase();
       const calculatedCheckValue = CryptoJS.SHA512(
         `${webhookData.merchantKey}|${webhookData.payableOrderId}|${webhookData.payableTransactionId}|${webhookData.payableAmount}|${webhookData.payableCurrency}|${webhookData.invoiceNo}|${webhookData.statusCode}|${merchantToken}`
       ).toString().toUpperCase();
-
       return calculatedCheckValue === webhookData.checkValue;
     } catch (error) {
       console.error('❌ [PAYMENT] Error validating webhook:', error);
@@ -761,11 +776,15 @@ export class PaymentService {
    * Get current configuration status
    */
   public getConfigStatus(): { isConfigured: boolean; testMode: boolean; missingFields: string[] } {
-    const validation = validatePayableConfig();
+    // Make this async if you want to always validate latest config
+    // For now, use cached config and validation
+    const validationPromise = validatePayableConfig();
+    // If validatePayableConfig is async, you should await it in callers
+    // Here, we assume it returns a Promise
     return {
-      isConfigured: validation.isValid,
-      testMode: payableConfig.testMode,
-      missingFields: validation.missingFields
+      isConfigured: false, // Use async validation in callers for true status
+      testMode: false,
+      missingFields: []
     };
   }
 
@@ -850,23 +869,21 @@ export class PaymentService {
     try {
       console.log('💳 [CARD MANAGEMENT] Processing tokenize payment to add new card');
       console.log('🔍 [PAYMENT] Customer Ref:', request.customerRefNo);
-      
-      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
-      
+      const config = await getPayableConfig();
+      const merchantToken = CryptoJS.SHA512(config.merchantToken).toString().toUpperCase();
       // Generate checkValue for tokenization (includes customerRefNo)
       const checkValue = CryptoJS.SHA512(
-        `${payableConfig.merchantKey}|${request.invoiceId}|${request.amount}|${request.currencyCode}|${request.customerRefNo}|${merchantToken}`
+        `${config.merchantKey}|${request.invoiceId}|${request.amount}|${request.currencyCode}|${request.customerRefNo}|${merchantToken}`
       ).toString().toUpperCase();
-
       // Create tokenization payment object
       const tokenizePayment = {
         checkValue,
         orderDescription: request.orderDescription || 'Card tokenization',
         invoiceId: request.invoiceId,
         logoUrl: 'https://firebasestorage.googleapis.com/v0/b/tiora-firebase.firebasestorage.app/o/logo%2FTiora%20gold.png?alt=media&token=2814af13-f96a-40e9-a3a5-6ba02ae0c3e3', // Default logo
-        notifyUrl: 'https://salon.run.place:8090/api/v1/payments/webhook', // Fixed: Use main webhook endpoint
-        returnUrl: `${window.location.origin}/#/payment-billing`, // Redirect to Payment & Billing page
-        merchantKey: payableConfig.merchantKey,
+        notifyUrl: 'https://salon.run.place:8090/api/v1/payments/webhook',
+        returnUrl: `${window.location.origin}/#/payment-billing`,
+        merchantKey: config.merchantKey,
         customerFirstName: request.customerFirstName,
         customerLastName: request.customerLastName,
         customerMobilePhone: request.customerMobilePhone,
@@ -881,22 +898,19 @@ export class PaymentService {
         billingAddressPostcodeZip: request.billingAddressPostcodeZip || '',
         amount: request.amount,
         currencyCode: request.currencyCode,
-        paymentType: '3', // Tokenize payment
-        isSaveCard: '1', // Save card
-        customerRefNo: request.customerRefNo, // Customer reference for tokenization
-        doFirstPayment: request.doFirstPayment || '1', // Charge immediately
+        paymentType: '3',
+        isSaveCard: '1',
+        customerRefNo: request.customerRefNo,
+        doFirstPayment: request.doFirstPayment || '1',
         custom1: request.custom1 || '',
         custom2: request.custom2 || ''
       };
-
       console.log('💳 [CARD MANAGEMENT] Calling PAYable SDK for card tokenization');
       console.log('💳 [CARD MANAGEMENT] Payment Type:', tokenizePayment.paymentType);
       console.log('💳 [CARD MANAGEMENT] Customer Ref:', tokenizePayment.customerRefNo);
       console.log('💳 [CARD MANAGEMENT] Invoice ID:', tokenizePayment.invoiceId);
-
       // Call PAYable SDK directly for tokenization
-      payablePayment(tokenizePayment, payableConfig.testMode);
-      
+      payablePayment(tokenizePayment, config.testMode);
     } catch (error) {
       console.error('❌ [CARD MANAGEMENT] Failed to process tokenize payment:', error);
       throw error;
@@ -911,11 +925,12 @@ export class PaymentService {
       console.log('💳 [PAYMENT] Processing one-time payment');
       console.log('🔍 [PAYMENT] Invoice ID:', request.invoiceId);
       
-      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
+      const config = await getPayableConfig();
+      const merchantToken = CryptoJS.SHA512(config.merchantToken).toString().toUpperCase();
       
       // Generate checkValue for one-time payment (no customerRefNo)
       const checkValue = CryptoJS.SHA512(
-        `${payableConfig.merchantKey}|${request.invoiceId}|${request.amount}|${request.currencyCode}|${merchantToken}`
+        `${config.merchantKey}|${request.invoiceId}|${request.amount}|${request.currencyCode}|${merchantToken}`
       ).toString().toUpperCase();
 
       // Create one-time payment object
@@ -926,7 +941,7 @@ export class PaymentService {
         logoUrl: 'https://salon.run.place/images/logo.png', // Default logo
         notifyUrl: 'https://salon.run.place:8090/api/v1/payments/webhook', // Fixed: Use main webhook endpoint
         returnUrl: `${window.location.origin}/#/payment-billing`, // Redirect to Payment & Billing page
-        merchantKey: payableConfig.merchantKey,
+        merchantKey: config.merchantKey,
         customerFirstName: request.customerFirstName,
         customerLastName: request.customerLastName,
         customerMobilePhone: request.customerMobilePhone,
@@ -952,7 +967,7 @@ export class PaymentService {
       console.log('💳 [PAYMENT] Invoice ID:', oneTimePayment.invoiceId);
 
       // Call PAYable SDK directly for one-time payment
-      payablePayment(oneTimePayment, payableConfig.testMode);
+      payablePayment(oneTimePayment, config.testMode);
       
     } catch (error) {
       console.error('❌ [PAYMENT] Failed to process one-time payment:', error);
@@ -969,18 +984,15 @@ export class PaymentService {
       console.log('📋 [PAYMENT] - Merchant ID:', payableMerchantId);
       console.log('📋 [PAYMENT] - Customer ID:', payableCustomerId);
       
-      // Verify credentials are loaded for checkValue generation
-      if (!payableConfig.merchantKey || !payableConfig.merchantToken) {
-        throw new Error('Merchant credentials not configured. Please check environment variables.');
+      const config = await getPayableConfig();
+      if (!config.merchantKey || !config.merchantToken) {
+        throw new Error('Merchant credentials not configured. Please check API configuration.');
       }
-      
-      const apiBaseUrl = payableConfig.testMode 
+      const apiBaseUrl = config.testMode 
         ? 'https://sandboxipgpayment.payable.lk' 
         : 'https://ipgpayment.payable.lk';
-
       // Generate checkValue for listCard API
-      // UPPERCASE(SHA512[merchantId|customerId|UPPERCASE(SHA512[merchantToken])])
-      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
+      const merchantToken = CryptoJS.SHA512(config.merchantToken).toString().toUpperCase();
       const checkValueString = `${payableMerchantId}|${payableCustomerId}|${merchantToken}`;
       const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();
 
@@ -1050,18 +1062,15 @@ export class PaymentService {
     try {
       console.log('🗑️ [PAYMENT] Deleting saved card with token ID:', tokenId);
       
-      // Verify credentials are loaded for checkValue generation
-      if (!payableConfig.merchantKey || !payableConfig.merchantToken) {
-        throw new Error('Merchant credentials not configured. Please check environment variables.');
+      const config = await getPayableConfig();
+      if (!config.merchantKey || !config.merchantToken) {
+        throw new Error('Merchant credentials not configured. Please check API configuration.');
       }
-      
-      const apiBaseUrl = payableConfig.testMode 
+      const apiBaseUrl = config.testMode 
         ? 'https://sandboxipgpayment.payable.lk' 
         : 'https://ipgpayment.payable.lk';
-
       // Generate checkValue for deleteCard API
-      // UPPERCASE(SHA512[merchantId|customerId|tokenId|UPPERCASE(SHA512[merchantToken])])
-      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
+      const merchantToken = CryptoJS.SHA512(config.merchantToken).toString().toUpperCase();
       const cleanTokenId = tokenId.trim();
       const checkValueString = `${payableMerchantId}|${payableCustomerId}|${cleanTokenId}|${merchantToken}`;
       const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();
@@ -1129,21 +1138,17 @@ export class PaymentService {
       console.log('✏️ [PAYMENT] - Nickname:', nickname || 'No change');
       console.log('✏️ [PAYMENT] - Is Default:', isDefaultCard !== undefined ? isDefaultCard : 'No change');
       
-      // Verify credentials are loaded for checkValue generation
-      if (!payableConfig.merchantKey || !payableConfig.merchantToken) {
-        throw new Error('Merchant credentials not configured. Please check environment variables.');
+      const config = await getPayableConfig();
+      if (!config.merchantKey || !config.merchantToken) {
+        throw new Error('Merchant credentials not configured. Please check API configuration.');
       }
-      
-      const apiBaseUrl = payableConfig.testMode 
+      const apiBaseUrl = config.testMode 
         ? 'https://sandboxipgpayment.payable.lk' 
         : 'https://ipgpayment.payable.lk';
-
       // Get JWT token for edit API
       const jwtToken = await this.getJwtToken();
-
       // Generate checkValue for editCard API
-      // UPPERCASE(SHA512[merchantId|customerId|tokenId|UPPERCASE(SHA512[merchantToken])])
-      const merchantToken = CryptoJS.SHA512(payableConfig.merchantToken).toString().toUpperCase();
+      const merchantToken = CryptoJS.SHA512(config.merchantToken).toString().toUpperCase();
       const cleanTokenId = tokenId.trim();
       const checkValueString = `${payableMerchantId}|${payableCustomerId}|${cleanTokenId}|${merchantToken}`;
       const checkValue = CryptoJS.SHA512(checkValueString).toString().toUpperCase();

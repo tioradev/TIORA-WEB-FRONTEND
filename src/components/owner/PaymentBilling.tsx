@@ -636,7 +636,7 @@ const PaymentBilling: React.FC = () => {
         amount: totalAmount,
         currencyCode: 'LKR',
         invoiceId,
-        orderDescription: `Salon Service Charges - Rs. ${totalPendingAmount.toFixed(2)}`,
+        orderDescription: `Salon Service Charges - Rs ${totalPendingAmount.toFixed(2)}`,
         customerFirstName: salon?.ownerFirstName || 'Salon',
         customerLastName: salon?.ownerLastName || 'Owner',
         customerEmail: salon?.ownerEmail || 'owner@salon.com',
@@ -705,7 +705,7 @@ const PaymentBilling: React.FC = () => {
       setRedirectingToIPG(true);
       
       const invoiceId = paymentService.generateInvoiceId();
-      const orderDescription = `Salon Service Charges - Rs. ${totalPendingAmount.toFixed(2)}`;
+      const orderDescription = `Salon Service Charges - Rs ${totalPendingAmount.toFixed(2)}`;
       
       // Subscribe to payment status via WebSocket
       webSocketPaymentService.subscribeToPayment(invoiceId, (status: PaymentStatusEvent) => {
@@ -899,7 +899,7 @@ const PaymentBilling: React.FC = () => {
                 <p className="text-sm font-medium text-gray-600 mb-1">Pending Payments</p>
                 <p className="text-3xl font-bold text-amber-600">Rs. {totalPendingAmount.toFixed(2)}</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {totalPendingAmount > 0 ? `Rs. ${totalPendingAmount.toFixed(2)} pending` : 'All paid up'}
+                  {totalPendingAmount > 0 ? `Rs ${totalPendingAmount.toFixed(2)} pending` : 'All paid up'}
                 </p>
               </div>
               <div className="p-3 bg-amber-50 rounded-xl">
