@@ -11,8 +11,8 @@ export const ENV_CONFIG = {
   },
   
   production: {
-    API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'https://salon.run.place:8090/api/v1',
-    WS_BASE_URL: import.meta.env.VITE_WS_BASE_URL || 'wss://salon.run.place:8090',
+    API_BASE_URL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+    WS_BASE_URL: import.meta.env.VITE_WS_BASE_URL || '/ws',
     API_TIMEOUT: 30000,
     ENABLE_LOGGING: false,
   }
@@ -31,6 +31,32 @@ export const isDevelopment = () => {
 // Helper function to check if we're in production
 export const isProduction = () => {
   return ENV_CONFIG.CURRENT_ENV === 'production';
+};
+
+// Helper function to get full webhook URL for external services
+export const getWebhookUrl = (path: string = '/payments/webhook') => {
+  const config = getCurrentConfig();
+  const isDev = isDevelopment();
+  
+  console.log('🔗 [WEBHOOK] Environment detection:', {
+    currentEnv: ENV_CONFIG.CURRENT_ENV,
+    isDevelopment: isDev,
+    config: config,
+    viteEnv: import.meta.env.VITE_ENVIRONMENT
+  });
+  
+  if (isDev) {
+    // In development, use the full URL
+    const url = `${config.API_BASE_URL}${path}`;
+    console.log('🔗 [WEBHOOK] Development URL:', url);
+    return url;
+  } else {
+    // In production, always use the production domain
+    // This ensures external services like Payable can reach our webhook
+    const url = `https://salon.publicvm.com/api/v1${path}`;
+    console.log('🔗 [WEBHOOK] Production URL:', url);
+    return url;
+  }
 };
 
 // Console logging helper that respects environment

@@ -3,7 +3,7 @@
  * Run this to verify your environment variables are loaded correctly
  */
 
-import { ENV_CONFIG, getCurrentConfig } from '../config/environment';
+import { ENV_CONFIG, getCurrentConfig, isDevelopment, isProduction, getWebhookUrl } from '../config/environment';
 
 export function testEnvironmentVariables() {
   console.log('🔍 [ENV TEST] Environment Variable Configuration');
@@ -32,7 +32,7 @@ export function testEnvironmentVariables() {
   console.log('Final WebSocket URL:', wsUrl);
   
   // Test webhook URL formation
-  const webhookUrl = `${currentConfig.API_BASE_URL.replace('/api/v1', '')}/api/payments/webhook`;
+  const webhookUrl = getWebhookUrl('/payments/webhook');
   console.log('\n🔗 Webhook URL Formation:');
   console.log('Expected Webhook URL:', webhookUrl);
   
@@ -47,21 +47,21 @@ export function testEnvironmentVariables() {
       actual: ENV_CONFIG.CURRENT_ENV
     },
     {
-      name: 'API URL points to salon.run.place',
-      pass: currentConfig.API_BASE_URL.includes('salon.run.place'),
-      expected: 'https://salon.run.place/api/v1',
+      name: 'API URL uses relative path',
+      pass: currentConfig.API_BASE_URL.startsWith('/api/v1'),
+      expected: '/api/v1',
       actual: currentConfig.API_BASE_URL
     },
     {
       name: 'WebSocket URL uses secure connection',
       pass: wsUrl.startsWith('wss://'),
-      expected: 'wss://salon.run.place/ws',
+      expected: '/ws',
       actual: wsUrl
     },
     {
       name: 'Webhook URL is correctly formed',
-      pass: webhookUrl === 'https://salon.run.place/api/payments/webhook',
-      expected: 'https://salon.run.place/api/payments/webhook',
+      pass: webhookUrl === 'https://salon.publicvm.com/api/payments/webhook',
+      expected: 'https://salon.publicvm.com/api/payments/webhook',
       actual: webhookUrl
     }
   ];
@@ -94,7 +94,7 @@ export function testEnvironmentVariables() {
   console.log('\n✅ Validation:');
   const isProduction = ENV_CONFIG.CURRENT_ENV === 'production';
   const hasCorrectProtocol = wsUrl.startsWith(isProduction ? 'wss://' : 'ws://');
-  const hasCorrectDomain = wsUrl.includes('salon.run.place');
+  const hasCorrectDomain = wsUrl.includes('/ws') || wsUrl.includes('salon.publicvm.com');
   
   console.log('Is Production Environment:', isProduction);
   console.log('Has Correct Protocol (wss for prod):', hasCorrectProtocol);

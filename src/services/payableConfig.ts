@@ -37,15 +37,25 @@ export const getPayableConfig = async (): Promise<PayableConfig> => {
   try {
     const token = localStorage.getItem('authToken');
     if (!token) throw new Error('No auth token found');
-    const response = await fetch('https://salon.run.place:8090/api/payments/config', {
+    
+    // Use environment configuration for API URL
+    const { getCurrentConfig } = await import('../config/environment');
+    const config = getCurrentConfig();
+    // Remove /api/v1 from base URL and add /api/payments/config
+    const baseUrl = config.API_BASE_URL.replace('/api/v1', '');
+    const apiUrl = `${baseUrl}/api/payments/config`;
+    
+    console.log('🔧 [PAYABLE] Fetching config from:', apiUrl);
+    const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
         'accept': '*/*',
         'Authorization': `Bearer ${token}`
       }
     });
-    if (!response.ok) throw new Error('Failed to fetch payment config');
+    if (!response.ok) throw new Error(`Failed to fetch payment config: ${response.status}`);
     const apiConfig = await response.json();
+    console.log('✅ [PAYABLE] Config received:', apiConfig);
     // Map API response to PayableConfig
     configCache = {
       merchantKey: apiConfig.merchantKey,
@@ -57,6 +67,7 @@ export const getPayableConfig = async (): Promise<PayableConfig> => {
       baseUrl: apiConfig.baseUrl,
       defaultCurrency: apiConfig.defaultCurrency
     };
+    console.log('🔧 [PAYABLE] Mapped config - baseUrl:', configCache.baseUrl, 'testMode:', configCache.testMode);
     cacheExpiry = Date.now() + CACHE_DURATION;
     cachedConfig = configCache; // Update cached config for webhook validation
     return configCache;

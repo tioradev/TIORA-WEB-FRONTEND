@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Environment & Webhook Debug</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        code { background: #f8f9fa; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+        .test-result { margin: 10px 0; padding: 15px; border-radius: 6px; }
+        h1, h2 { color: #343a40; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <h1>🔧 Environment & Webhook URL Debug Dashboard</h1>
+    
+    <div class="container info">
+        <h2>📍 Current Page Context</h2>
+        <p><strong>Protocol:</strong> <span id="protocol"></span></p>
+        <p><strong>Host:</strong> <span id="host"></span></p>
+        <p><strong>Full URL:</strong> <span id="fullUrl"></span></p>
+        <p><strong>User Agent:</strong> <span id="userAgent"></span></p>
+    </div>
+
+    <div class="grid">
+        <div class="container">
+            <h2>🎯 Expected Production Config</h2>
+            <div class="test-result success">
+                <p><strong>Environment:</strong> production</p>
+                <p><strong>API Base URL:</strong> /api/v1</p>
+                <p><strong>Webhook URL:</strong> https://salon.publicvm.com/api/v1/payments/webhook</p>
+                <p><strong>WebSocket URL:</strong> /ws</p>
+            </div>
+        </div>
+
+        <div class="container">
+            <h2>🧪 Simulated Environment Test</h2>
+            <div id="testResults"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>🔍 Environment Variable Analysis</h2>
+        <div id="envAnalysis"></div>
+    </div>
+
+    <div class="container">
+        <h2>💡 Troubleshooting Steps</h2>
+        <div class="test-result info">
+            <ol>
+                <li>Deploy the newly built <code>dist</code> folder to your server</li>
+                <li>Clear browser cache completely (Ctrl+Shift+Delete)</li>
+                <li>Check browser console for webhook debug logs when making payment</li>
+                <li>Verify the deployed .env.production file has correct settings</li>
+                <li>Ensure the backend is running on port 8090</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // Display current context
+        document.getElementById('protocol').textContent = window.location.protocol;
+        document.getElementById('host').textContent = window.location.host;
+        document.getElementById('fullUrl').textContent = window.location.href;
+        document.getElementById('userAgent').textContent = navigator.userAgent;
+
+        // Simulate the exact environment configuration from the React app
+        const importMeta = {
+            env: {
+                VITE_API_BASE_URL: '/api/v1',
+                VITE_WS_BASE_URL: '/ws',
+                VITE_ENVIRONMENT: 'production'
+            }
+        };
+
+        const ENV_CONFIG = {
+            CURRENT_ENV: (importMeta.env.VITE_ENVIRONMENT || 'production'),
+            development: {
+                API_BASE_URL: importMeta.env.VITE_API_BASE_URL || 'http://localhost:8090/api/v1',
+                WS_BASE_URL: importMeta.env.VITE_WS_BASE_URL || 'ws://localhost:8090',
+                API_TIMEOUT: 10000,
+                ENABLE_LOGGING: true,
+            },
+            production: {
+                API_BASE_URL: importMeta.env.VITE_API_BASE_URL || '/api/v1',
+                WS_BASE_URL: importMeta.env.VITE_WS_BASE_URL || '/ws',
+                API_TIMEOUT: 30000,
+                ENABLE_LOGGING: false,
+            }
+        };
+
+        const getCurrentConfig = () => ENV_CONFIG[ENV_CONFIG.CURRENT_ENV];
+        const isDevelopment = () => ENV_CONFIG.CURRENT_ENV === 'development';
+
+        // The exact webhook function from the React app
+        const getWebhookUrl = (path = '/payments/webhook') => {
+            const config = getCurrentConfig();
+            const isDev = isDevelopment();
+            
+            console.log('🔗 [WEBHOOK] Environment detection:', {
+                currentEnv: ENV_CONFIG.CURRENT_ENV,
+                isDevelopment: isDev,
+                config: config,
+                viteEnv: importMeta.env.VITE_ENVIRONMENT
+            });
+            
+            if (isDev) {
+                const url = `${config.API_BASE_URL}${path}`;
+                console.log('🔗 [WEBHOOK] Development URL:', url);
+                return url;
+            } else {
+                const url = `https://salon.publicvm.com/api/v1${path}`;
+                console.log('🔗 [WEBHOOK] Production URL:', url);
+                return url;
+            }
+        };
+
+        // Run tests
+        const config = getCurrentConfig();
+        const webhookUrl = getWebhookUrl('/payments/webhook');
+        const isDev = isDevelopment();
+
+        // Display test results
+        const testResultsDiv = document.getElementById('testResults');
+        const envAnalysisDiv = document.getElementById('envAnalysis');
+
+        // Test results
+        let testClass = 'success';
+        let testMessage = '✅ PASS: Webhook URL is correct!';
+        
+        if (webhookUrl !== 'https://salon.publicvm.com/api/v1/payments/webhook') {
+            testClass = 'error';
+            testMessage = '❌ FAIL: Webhook URL is incorrect!';
+        }
+
+        testResultsDiv.innerHTML = `
+            <div class="test-result ${testClass}">
+                <p><strong>Generated Webhook URL:</strong> <code>${webhookUrl}</code></p>
+                <p><strong>Test Status:</strong> ${testMessage}</p>
+            </div>
+        `;
+
+        // Environment analysis
+        envAnalysisDiv.innerHTML = `
+            <div class="test-result info">
+                <p><strong>Current Environment:</strong> <code>${ENV_CONFIG.CURRENT_ENV}</code></p>
+                <p><strong>Is Development:</strong> <code>${isDev}</code></p>
+                <p><strong>VITE_ENVIRONMENT:</strong> <code>${importMeta.env.VITE_ENVIRONMENT}</code></p>
+                <p><strong>API Base URL:</strong> <code>${config.API_BASE_URL}</code></p>
+                <p><strong>WebSocket URL:</strong> <code>${config.WS_BASE_URL}</code></p>
+                <p><strong>Logging Enabled:</strong> <code>${config.ENABLE_LOGGING}</code></p>
+            </div>
+        `;
+
+        // Log debug information
+        console.log('🔧 [DEBUG] Full Environment Analysis:', {
+            ENV_CONFIG,
+            currentConfig: config,
+            webhookUrl,
+            isDevelopment: isDev,
+            viteEnvironment: importMeta.env.VITE_ENVIRONMENT,
+            windowLocation: {
+                protocol: window.location.protocol,
+                host: window.location.host,
+                href: window.location.href
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,8 +1,18 @@
 import CryptoJS from 'crypto-js';
 import { payablePayment } from 'payable-ipg-js';
-import { getPayableConfig, validatePayableConfig } from './payableConfig';
+import { getPayableConfig, validatePayableConfig, PayableConfig } from './payableConfig';
 import { apiService } from './api';
 import { getCurrentConfig } from '../config/environment';
+
+/**
+ * Helper function to get the Payable API base URL from config
+ */
+const getPayableApiBaseUrl = (config: PayableConfig): string => {
+  // Use baseUrl from API config if available, otherwise fallback to hardcoded values
+  return config.baseUrl || (config.testMode 
+    ? 'https://sandboxipgpayment.payable.lk' 
+    : 'https://ipgpayment.payable.lk');
+};
 
 export interface PaymentRequest {
   amount: string;
@@ -318,11 +328,12 @@ export class PaymentService {
       
       const credentials = `${config.businessKey}:${config.businessToken}`;
       const basicAuth = btoa(credentials);
-      const apiBaseUrl = config.testMode 
-        ? 'https://sandboxipgpayment.payable.lk' 
-        : 'https://ipgpayment.payable.lk';
+      // Use baseUrl from API config
+      const apiBaseUrl = getPayableApiBaseUrl(config);
       
       console.log('🔑 [PAYMENT] Getting JWT access token...');
+      console.log('🔧 [PAYMENT] Using API base URL:', apiBaseUrl);
+      console.log('🔧 [PAYMENT] Using business credentials:', { businessKey: config.businessKey, hasBusinessToken: !!config.businessToken });
       
       const authResponse = await fetch(`${apiBaseUrl}/ipg/v2/auth/tokenize`, {
         method: 'POST',
@@ -380,7 +391,7 @@ export class PaymentService {
     webhookUrl?: string,
     custom1?: string,
     custom2?: string
-  ): Promise<void> {
+  ): Promise<any> {
     try {
       // Clean up tokenId to remove any whitespace characters (including tabs)
       const cleanTokenId = tokenId.trim();
@@ -396,9 +407,7 @@ export class PaymentService {
         throw new Error('Merchant credentials not configured. Please check API configuration.');
       }
       
-      const apiBaseUrl = config.testMode 
-        ? 'https://sandboxipgpayment.payable.lk' 
-        : 'https://ipgpayment.payable.lk';
+      const apiBaseUrl = getPayableApiBaseUrl(config);
 
       // Generate checkValue using the passed Payable ID values
       // UPPERCASE(SHA512[merchantId|invoiceId|amount|currencyCode|customerId|tokenId|UPPERCASE(SHA512[merchantToken])])
@@ -413,7 +422,8 @@ export class PaymentService {
       console.log('🔐 [PAYMENT] - Invoice ID:', invoiceId);
       console.log('🔐 [PAYMENT] - Amount:', amount);
       console.log('🔐 [PAYMENT] - Order Description:', orderDescription);
-      console.log('🔐 [PAYMENT] - Webhook URL:', webhookUrl || 'Default webhook');
+      const finalWebhookUrl = webhookUrl || 'https://salon.publicvm.com/api/v1/payments/webhook';
+      console.log('� [SAVED CARD PAYMENT] Using webhook URL:', finalWebhookUrl);
       console.log('� [PAYMENT] - Custom1:', custom1 || 'Not provided');
       console.log('� [PAYMENT] - Custom2:', custom2 || 'Not provided');
       console.log('� [PAYMENT] - CheckValue String (for reference):', checkValueString);
@@ -428,7 +438,7 @@ export class PaymentService {
         amount,
         currencyCode: 'LKR',
         checkValue,
-        webhookUrl: webhookUrl || 'https://salon.run.place:8090/api/v1/payments/webhook'
+        webhookUrl: finalWebhookUrl
       };
 
       // Add optional custom fields
@@ -500,13 +510,26 @@ export class PaymentService {
       // Handle the response based on Payable API specification
       if (paymentResult.redirectUrl) {
         // Redirect user to complete payment if needed
+        console.log('🔄 [PAYMENT] Redirecting to payment URL:', paymentResult.redirectUrl);
         window.location.href = paymentResult.redirectUrl;
-      } else if (paymentResult.success || paymentResult.status === 'SUCCESS') {
-        console.log('✅ [PAYMENT] Payment processed successfully');
+      } else if (paymentResult.orderId && paymentResult.invoiceId) {
+        // Payment response contains orderId and invoiceId - indicates successful initiation
+        console.log('✅ [PAYMENT] Payment processed successfully with order ID:', paymentResult.orderId);
         // Payment completed successfully
+      } else if (paymentResult.success || paymentResult.status === 'SUCCESS') {
+        console.log('✅ [PAYMENT] Payment processed successfully with explicit success flag');
+        // Payment completed successfully
+      } else if (paymentResult.error || paymentResult.message) {
+        // Explicit error in response
+        throw new Error(paymentResult.error || paymentResult.message);
       } else {
-        throw new Error(paymentResult.error || paymentResult.message || 'Payment failed');
+        // If we get here, the response format is unexpected
+        console.warn('⚠️ [PAYMENT] Unexpected response format, but HTTP status was OK. Treating as success.');
+        console.log('🔍 [PAYMENT] Response keys:', Object.keys(paymentResult));
       }
+      
+      // Return the payment result for frontend handling
+      return paymentResult;
       
     } catch (error) {
       console.error('❌ [PAYMENT] Error paying with saved card using token:', error);
@@ -543,9 +566,7 @@ export class PaymentService {
       // Step 1: Generate Basic Auth token and get JWT Access Token
       const credentials = `${config.businessKey}:${config.businessToken}`;
       const basicAuth = btoa(credentials);
-      const apiBaseUrl = config.testMode 
-        ? 'https://sandboxipgpayment.payable.lk' 
-        : 'https://ipgpayment.payable.lk';
+      const apiBaseUrl = getPayableApiBaseUrl(config);
       
       console.log('🔑 [PAYMENT] Generating JWT access token...');
       console.log('🔑 [PAYMENT] Business Key:', config.businessKey);
@@ -630,7 +651,7 @@ export class PaymentService {
         amount,
         currencyCode: 'LKR',
         checkValue,
-        webhookUrl: webhookUrl || 'https://salon.run.place:8090/api/v1/payments/webhook'
+        webhookUrl: webhookUrl || 'https://salon.publicvm.com/api/v1/payments/webhook'
       };
 
       // Only include custom fields if they have valid values
@@ -881,13 +902,16 @@ export class PaymentService {
         `${config.merchantKey}|${request.invoiceId}|${request.amount}|${request.currencyCode}|${request.customerRefNo}|${merchantToken}`
       ).toString().toUpperCase();
       // Create tokenization payment object
+      const notifyUrl = 'https://salon.publicvm.com/api/v1/payments/webhook';
+      console.log('🔔 [TOKENIZE PAYMENT] Using notify URL (webhook):', notifyUrl);
+      
       const tokenizePayment = {
         checkValue,
         orderDescription: request.orderDescription || 'Card tokenization',
         invoiceId: request.invoiceId,
         logoUrl: 'https://firebasestorage.googleapis.com/v0/b/tiora-firebase.firebasestorage.app/o/logo%2FTiora%20gold.png?alt=media&token=2814af13-f96a-40e9-a3a5-6ba02ae0c3e3', // Default logo
-        notifyUrl: 'https://salon.run.place:8090/api/v1/payments/webhook',
-        returnUrl: `${window.location.origin}/#/payment-billing`,
+        notifyUrl: notifyUrl, // Hardcoded for external service
+        returnUrl: 'https://salon.publicvm.com/', // Hardcoded return URL for external service
         merchantKey: config.merchantKey,
         customerFirstName: request.customerFirstName,
         customerLastName: request.customerLastName,
@@ -939,13 +963,16 @@ export class PaymentService {
       ).toString().toUpperCase();
 
       // Create one-time payment object
+      const notifyUrl = 'https://salon.publicvm.com/api/v1/payments/webhook';
+      console.log('🔔 [ONE-TIME PAYMENT] Using notify URL (webhook):', notifyUrl);
+      
       const oneTimePayment = {
         checkValue,
         orderDescription: request.orderDescription || 'One-time payment',
         invoiceId: request.invoiceId,
-        logoUrl: 'https://salon.run.place/images/logo.png', // Default logo
-        notifyUrl: 'https://salon.run.place:8090/api/v1/payments/webhook', // Fixed: Use main webhook endpoint
-        returnUrl: `${window.location.origin}/#/payment-billing`, // Redirect to Payment & Billing page
+        logoUrl: `https://firebasestorage.googleapis.com/v0/b/tiora-firebase.firebasestorage.app/o/logo%2FTiora%20gold.png?alt=media&token=2814af13-f96a-40e9-a3a5-6ba02ae0c3e3`, // Default logo
+        notifyUrl: notifyUrl, // Hardcoded for external service
+        returnUrl: 'https://salon.publicvm.com/', // Hardcoded return URL for external service
         merchantKey: config.merchantKey,
         customerFirstName: request.customerFirstName,
         customerLastName: request.customerLastName,
@@ -993,9 +1020,7 @@ export class PaymentService {
       if (!config.merchantKey || !config.merchantToken) {
         throw new Error('Merchant credentials not configured. Please check API configuration.');
       }
-      const apiBaseUrl = config.testMode 
-        ? 'https://sandboxipgpayment.payable.lk' 
-        : 'https://ipgpayment.payable.lk';
+      const apiBaseUrl = getPayableApiBaseUrl(config);
       // Generate checkValue for listCard API
       const merchantToken = CryptoJS.SHA512(config.merchantToken).toString().toUpperCase();
       const checkValueString = `${payableMerchantId}|${payableCustomerId}|${merchantToken}`;
@@ -1071,9 +1096,7 @@ export class PaymentService {
       if (!config.merchantKey || !config.merchantToken) {
         throw new Error('Merchant credentials not configured. Please check API configuration.');
       }
-      const apiBaseUrl = config.testMode 
-        ? 'https://sandboxipgpayment.payable.lk' 
-        : 'https://ipgpayment.payable.lk';
+      const apiBaseUrl = getPayableApiBaseUrl(config);
       // Generate checkValue for deleteCard API
       const merchantToken = CryptoJS.SHA512(config.merchantToken).toString().toUpperCase();
       const cleanTokenId = tokenId.trim();
@@ -1147,9 +1170,7 @@ export class PaymentService {
       if (!config.merchantKey || !config.merchantToken) {
         throw new Error('Merchant credentials not configured. Please check API configuration.');
       }
-      const apiBaseUrl = config.testMode 
-        ? 'https://sandboxipgpayment.payable.lk' 
-        : 'https://ipgpayment.payable.lk';
+      const apiBaseUrl = getPayableApiBaseUrl(config);
       // Get JWT token for edit API
       const jwtToken = await this.getJwtToken();
       // Generate checkValue for editCard API

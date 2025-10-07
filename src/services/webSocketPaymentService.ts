@@ -3,6 +3,8 @@
  * Real-time payment status updates using native WebSocket (matching appointments pattern)
  */
 
+import { ENV_CONFIG } from '../config/environment';
+
 interface PaymentStatusEvent {
   invoiceId: string;
   status: 'SUCCESS' | 'FAILED' | 'PENDING';
@@ -36,14 +38,13 @@ class WebSocketPaymentService {
 
     // Use the same pattern as appointments WebSocket but for payments
     // TEMPORARY: Use appointments endpoint until backend adds payment WebSocket support
-    const WS_BASE = import.meta.env.PROD 
-      ? 'wss://salon.run.place' 
-      : 'ws://localhost:8090';
+    const config = ENV_CONFIG[ENV_CONFIG.CURRENT_ENV];
+    const WS_BASE = config.WS_BASE_URL;
     
     // Use payment endpoint if enabled, otherwise use appointments endpoint temporarily  
     const endpoint = this.usePaymentEndpoint 
-      ? `/ws/payments/salon/${salonId}`
-      : `/ws/appointments/${salonId}`;
+      ? `/payments/salon/${salonId}`
+      : `/appointments/${salonId}`;
     const wsUrl = `${WS_BASE}${endpoint}`;
     
     console.log('🔌 [WEBSOCKET] Connecting to:', wsUrl, 'Environment:', import.meta.env.PROD ? 'production' : 'development');

@@ -4,9 +4,10 @@
  */
 
 import { BackendNotificationResponse, MarkNotificationReadRequest } from '../types';
+import { ENV_CONFIG } from '../config/environment';
 
 class BackendNotificationService {
-  private baseUrl = import.meta.env.PROD ? 'https://salon.run.place:8090' : 'http://localhost:8090';
+  private baseUrl = ENV_CONFIG[ENV_CONFIG.CURRENT_ENV].API_BASE_URL;
 
   /**
    * Get authentication token from localStorage
@@ -34,7 +35,7 @@ class BackendNotificationService {
       console.log('📡 [NOTIFICATION-API] Fetching notifications:', { salonId, page, size });
       
       const response = await fetch(
-        `${this.baseUrl}/api/v1/notifications?salonId=${salonId}&page=${page}&size=${size}`,
+        `${this.baseUrl}/notifications?salonId=${salonId}&page=${page}&size=${size}`,
         {
           method: 'GET',
           headers: this.getHeaders(),
@@ -65,7 +66,7 @@ class BackendNotificationService {
       console.log('📡 [NOTIFICATION-API] Marking notifications as read:', { salonId, request });
       
       const response = await fetch(
-        `${this.baseUrl}/api/v1/notifications/mark-read?salonId=${salonId}`,
+        `${this.baseUrl}/notifications/mark-read?salonId=${salonId}`,
         {
           method: 'PUT',
           headers: this.getHeaders(),

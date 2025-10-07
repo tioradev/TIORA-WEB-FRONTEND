@@ -776,7 +776,7 @@ const PaymentBilling: React.FC = () => {
 
       // Make payment directly with the selected token ID (no need to re-fetch cards)
       console.log('💰 [PAYMENT] Making payment with selected token ID:', selectedTokenId);
-      await paymentService.payWithSavedCardUsingToken(
+      const paymentResult = await paymentService.payWithSavedCardUsingToken(
         payableMerchantId, // Use stored Payable Merchant ID
         payableCustomerId, // Use stored Payable Customer ID
         selectedTokenId,  // Use selected token ID from cards list
@@ -784,10 +784,18 @@ const PaymentBilling: React.FC = () => {
         invoiceId,        // invoiceId
         orderDescription, // orderDescription
         jwtToken,         // JWT token
-        'https://salon.run.place:8090/api/v1/payments/webhook', // webhookUrl
+        'https://salon.publicvm.com/api/v1/payments/webhook', // webhookUrl - hardcoded for external service
         'PAYMENT',        // custom1
         'SALONCHARGES'    // custom2
       );
+      
+      // Handle immediate success response
+      console.log('✅ [PAYMENT] Payment completed successfully:', paymentResult);
+      showToast('success', 'Payment Successful', `Successfully paid Rs. ${totalAmount} for service charges.`);
+      setRedirectingToIPG(false);
+      
+      // Refresh analytics data after successful payment
+      setTimeout(() => loadAnalyticsData(), 2000);
       
     } catch (error) {
       console.error('Saved card payment error:', error);

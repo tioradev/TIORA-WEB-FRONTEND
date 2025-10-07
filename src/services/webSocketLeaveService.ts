@@ -4,6 +4,7 @@
  */
 
 import { LeaveRequest } from '../types';
+import { ENV_CONFIG } from '../config/environment';
 
 export interface WebSocketLeaveCallbacks {
   onLeaveRequestSubmitted?: (leaveRequest: LeaveRequest) => void;
@@ -27,10 +28,8 @@ class WebSocketLeaveService {
 
   // Leave WebSocket endpoint - using appointments endpoint as specified
   private getWebSocketUrl(salonId: number): string {
-    const WS_BASE = import.meta.env.PROD 
-      ? 'wss://salon.run.place:8090' 
-      : 'ws://localhost:8090';
-    return `${WS_BASE}/ws/appointments/${salonId}`;
+    const config = ENV_CONFIG[ENV_CONFIG.CURRENT_ENV];
+    return `${config.WS_BASE_URL}/ws/appointments/${salonId}`;
   }
 
   /**
