@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { User, Lock, Eye, EyeOff, ArrowLeft, Mail } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, ArrowLeft, Mail, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
 import { envLog } from '../config/environment';
+import { validatePassword, formatPasswordErrors } from '../utils/passwordValidation';
 import TioraLogo from '../assets/images/Tiora black png.png';
 
 const Login: React.FC = () => {
@@ -16,7 +17,30 @@ const Login: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [resetCodeExpiresIn, setResetCodeExpiresIn] = useState(0);
+  const [passwordValidationErrors, setPasswordValidationErrors] = useState<string[]>([]);
   const { login } = useAuth();
+
+  // Helper function to clear form states
+  const clearFormStates = () => {
+    setError('');
+    setSuccess('');
+    setPasswordValidationErrors([]);
+    setIsLoading(false);
+  };
+
+  // Helper function to reset forgot password form
+  const resetForgotPasswordForm = () => {
+    setShowForgotPassword(false);
+    setOtpSent(false);
+    setForgotPasswordEmail('');
+    setOtp('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setResetCodeExpiresIn(0);
+    clearFormStates();
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +90,12 @@ const Login: React.FC = () => {
           name: response.employee?.fullName || response.username, 
           email: response.employee?.email || '', 
           role: userRole,
+          profilePicture: response.employee?.profileImageUrl || response.salon?.ownerImgUrl || undefined,
         };
+        
+        envLog.info('🖼️ [LOGIN] Profile picture extracted:', user.profilePicture);
+        envLog.info('📋 [LOGIN] Employee profileImageUrl:', response.employee?.profileImageUrl);
+        envLog.info('🏢 [LOGIN] Salon ownerImgUrl:', response.salon?.ownerImgUrl);
         
         // Extract salon data if user is a salon owner
         let salonData = undefined;
@@ -170,14 +199,125 @@ const Login: React.FC = () => {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement forgot password with API
-    console.log('Forgot password for:', forgotPasswordEmail);
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+    
+    try {
+      // Validate email format
+      if (!forgotPasswordEmail.trim()) {
+        throw new Error('Please enter your email address');
+      }
+      
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(forgotPasswordEmail)) {
+        throw new Error('Please enter a valid email address');
+      }
+
+      envLog.info('🔐 [FORGOT PASSWORD] Initiating password reset for:', forgotPasswordEmail);
+      
+      // Call the password reset initiate API
+      const response = await apiService.initiatePasswordReset(forgotPasswordEmail);
+      
+      envLog.info('✅ [FORGOT PASSWORD] Reset code sent successfully:', response);
+
+      if (response.success) {
+        setOtpSent(true);
+        setResetCodeExpiresIn(response.expiresInMinutes);
+        setSuccess(response.message);
+        envLog.info('📧 [FORGOT PASSWORD] Reset code expires in:', response.expiresInMinutes, 'minutes');
+      } else {
+        throw new Error(response.message || 'Failed to send reset code');
+      }
+      
+    } catch (error) {
+      envLog.error('❌ [FORGOT PASSWORD] Error:', error);
+      
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('Failed to send reset code. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement password reset with API
-    console.log('Reset password with OTP:', otp);
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+    setPasswordValidationErrors([]);
+    
+    try {
+      // Validate required fields
+      if (!otp.trim()) {
+        throw new Error('Please enter the verification code');
+      }
+      
+      if (!newPassword.trim()) {
+        throw new Error('Please enter a new password');
+      }
+      
+      if (!confirmPassword.trim()) {
+        throw new Error('Please confirm your new password');
+      }
+      
+      // Validate password match
+      if (newPassword !== confirmPassword) {
+        throw new Error('Passwords do not match');
+      }
+      
+      // Validate password strength
+      const passwordValidation = validatePassword(newPassword);
+      if (!passwordValidation.isValid) {
+        setPasswordValidationErrors(passwordValidation.errors);
+        throw new Error('Password does not meet security requirements');
+      }
+
+      envLog.info('🔐 [RESET PASSWORD] Verifying reset code and setting new password');
+      
+      // Call the password reset verify API
+      const response = await apiService.verifyPasswordReset({
+        email: forgotPasswordEmail,
+        resetCode: otp,
+        newPassword: newPassword
+      });
+      
+      envLog.info('✅ [RESET PASSWORD] Password reset successful:', response);
+
+      if (response.success) {
+        setSuccess(response.message);
+        
+        // Reset all form states
+        setTimeout(() => {
+          setShowForgotPassword(false);
+          setOtpSent(false);
+          setForgotPasswordEmail('');
+          setOtp('');
+          setNewPassword('');
+          setConfirmPassword('');
+          setSuccess('');
+          setError('Password reset successful! Please log in with your new password.');
+        }, 2000);
+        
+        envLog.info('🎉 [RESET PASSWORD] Password reset completed successfully');
+      } else {
+        throw new Error(response.message || 'Failed to reset password');
+      }
+      
+    } catch (error) {
+      envLog.error('❌ [RESET PASSWORD] Error:', error);
+      
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('Failed to reset password. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -214,7 +354,19 @@ const Login: React.FC = () => {
 
         {error && (
           <div className="mb-6 p-4 bg-red-50/80 backdrop-blur border border-red-200/50 rounded-xl">
-            <p className="text-red-600 text-sm font-medium">{error}</p>
+            <div className="flex items-start space-x-2">
+              <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <p className="text-red-600 text-sm font-medium">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {success && (
+          <div className="mb-6 p-4 bg-green-50/80 backdrop-blur border border-green-200/50 rounded-xl">
+            <div className="flex items-start space-x-2">
+              <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+              <p className="text-green-600 text-sm font-medium">{success}</p>
+            </div>
           </div>
         )}
 
@@ -291,7 +443,10 @@ const Login: React.FC = () => {
             <div className="text-center">
               <button
                 type="button"
-                onClick={() => setShowForgotPassword(true)}
+                onClick={() => {
+                  clearFormStates();
+                  setShowForgotPassword(true);
+                }}
                 className="text-sm text-blue-600 hover:text-blue-700 font-medium hover:underline transition-colors"
                 disabled={isLoading}
               >
@@ -303,8 +458,9 @@ const Login: React.FC = () => {
           <div className="space-y-4">
             <div className="flex items-center mb-4">
               <button
-                onClick={() => setShowForgotPassword(false)}
+                onClick={resetForgotPasswordForm}
                 className="mr-3 p-2 hover:bg-gray-100/50 rounded-xl transition-colors"
+                disabled={isLoading}
               >
                 <ArrowLeft className="w-4 h-4 text-gray-600" />
               </button>
@@ -322,18 +478,31 @@ const Login: React.FC = () => {
                     <input
                       type="email"
                       value={forgotPasswordEmail}
-                      onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                      onChange={(e) => {
+                        setForgotPasswordEmail(e.target.value);
+                        setError('');
+                        setSuccess('');
+                      }}
                       className="w-full pl-11 pr-4 py-3 bg-gray-50/50 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-200 placeholder-gray-400"
                       placeholder="Enter your email address"
                       required
+                      disabled={isLoading}
                     />
                   </div>
                 </div>
                 <button
                   type="submit"
-                  className="w-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-blue-600 hover:via-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-blue-500/30 transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg"
+                  disabled={isLoading || !forgotPasswordEmail}
+                  className="w-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-blue-600 hover:via-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg"
                 >
-                  Send Reset Code
+                  {isLoading ? (
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white mr-3"></div>
+                      <span>Sending Code...</span>
+                    </div>
+                  ) : (
+                    'Send Reset Code'
+                  )}
                 </button>
               </form>
             ) : (
@@ -343,10 +512,16 @@ const Login: React.FC = () => {
                   <input
                     type="text"
                     value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
+                    onChange={(e) => {
+                      setOtp(e.target.value);
+                      setError('');
+                      setSuccess('');
+                    }}
                     className="w-full py-3 px-4 bg-gray-50/50 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-200 placeholder-gray-400"
-                    placeholder="Enter 6-digit code"
+                    placeholder="Enter verification code from email"
+                    maxLength={6}
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <div>
@@ -354,28 +529,62 @@ const Login: React.FC = () => {
                   <input
                     type="password"
                     value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      setPasswordValidationErrors([]);
+                      setError('');
+                    }}
                     className="w-full py-3 px-4 bg-gray-50/50 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-200 placeholder-gray-400"
                     placeholder="Enter new password"
+                    minLength={8}
                     required
+                    disabled={isLoading}
                   />
+                  <p className="text-xs text-gray-500 mt-1">Minimum 8 characters with uppercase, lowercase, and number</p>
+                  {passwordValidationErrors.length > 0 && (
+                    <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                      <ul className="text-xs text-red-600 space-y-1">
+                        {passwordValidationErrors.map((error, index) => (
+                          <li key={index} className="flex items-start space-x-1">
+                            <span className="text-red-500 mt-0.5">•</span>
+                            <span>{error}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Confirm Password</label>
                   <input
                     type="password"
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      setError('');
+                    }}
                     className="w-full py-3 px-4 bg-gray-50/50 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-200 placeholder-gray-400"
                     placeholder="Confirm new password"
                     required
+                    disabled={isLoading}
                   />
+                  {confirmPassword && newPassword !== confirmPassword && (
+                    <p className="text-xs text-red-600 mt-1">Passwords do not match</p>
+                  )}
                 </div>
                 <button
                   type="submit"
-                  className="w-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-blue-600 hover:via-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-blue-500/30 transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg"
+                  disabled={isLoading || !otp || !newPassword || !confirmPassword || newPassword !== confirmPassword}
+                  className="w-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-blue-600 hover:via-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg"
                 >
-                  Reset Password
+                  {isLoading ? (
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white mr-3"></div>
+                      <span>Resetting Password...</span>
+                    </div>
+                  ) : (
+                    'Reset Password'
+                  )}
                 </button>
               </form>
             )}

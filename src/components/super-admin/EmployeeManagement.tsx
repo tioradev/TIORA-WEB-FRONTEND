@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { 
   Search, Filter, Download, Plus, Trash2, 
   Eye, EyeOff, Mail, Phone, Calendar, Award,
-  User, MapPin, Clock, DollarSign, X
+  User, MapPin, Clock, X
 } from 'lucide-react';
+import RupeeIcon from '../shared/RupeeIcon';
 import { mockBarbers } from '../../data/mockData';
 import { Barber } from '../../types';
 
@@ -316,7 +317,7 @@ const EmployeeManagement: React.FC = () => {
                     </div>
                     {selectedEmployee.salary && (
                       <div className="flex items-center space-x-3">
-                        <DollarSign className="w-4 h-4 text-gray-400" />
+                        <RupeeIcon className="w-4 h-4 text-gray-400" />
                         <span className="text-sm text-gray-600">Rs {selectedEmployee.salary}/month</span>
                       </div>
                     )}

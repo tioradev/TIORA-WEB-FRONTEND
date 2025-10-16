@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, User, Mail, Phone, MapPin, DollarSign, Clock, Users, Shield, Camera, RotateCcw } from 'lucide-react';
+import { X, User, Mail, Phone, MapPin, Clock, Users, Shield, Camera, RotateCcw } from 'lucide-react';
+import RupeeIcon from '../shared/RupeeIcon';
 import { apiService, EmployeeRegistrationRequest, EmployeeWeeklySchedule, BranchResponse } from '../../services/api';
 import { getCurrentConfig } from '../../config/environment';
 import { useToast } from '../../contexts/ToastProvider';
@@ -794,7 +795,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    <DollarSign className="w-4 h-4 inline mr-2" />
+                    <RupeeIcon className="w-4 h-4 inline mr-2" />
                     Base Salary *
                   </label>
                   <input
@@ -810,7 +811,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ onClose, onAdd, sal
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    <DollarSign className="w-4 h-4 inline mr-2" />
+                    <RupeeIcon className="w-4 h-4 inline mr-2" />
                     Experience (Years)
                   </label>
                   <input

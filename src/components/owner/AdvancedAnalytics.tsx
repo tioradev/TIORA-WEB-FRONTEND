@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  TrendingUp, DollarSign, Users,
+  TrendingUp, Users,
   BarChart3, Target, Award,
   ArrowUp, ArrowDown, Download
 } from 'lucide-react';
+import RupeeIcon from '../shared/RupeeIcon';
 import { RevenueAnalytics, CustomerAnalytics } from '../../types';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -124,7 +125,7 @@ const AdvancedAnalytics: React.FC = () => {
   };
 
   const tabs = [
-    { id: 'revenue', label: 'Revenue Analytics', icon: DollarSign },
+    { id: 'revenue', label: 'Revenue Analytics', icon: RupeeIcon },
     { id: 'customers', label: 'Customer Analytics', icon: Users },
     { id: 'services', label: 'Service Performance', icon: BarChart3 },
     { id: 'branches', label: 'Branch Performance', icon: Target },
@@ -169,7 +170,7 @@ const AdvancedAnalytics: React.FC = () => {
                 <span className="text-sm text-green-600">+12.5%</span>
               </div>
             </div>
-            <DollarSign className="w-8 h-8 text-emerald-500" />
+            <RupeeIcon className="w-8 h-8 text-emerald-500" />
           </div>
         </div>
         

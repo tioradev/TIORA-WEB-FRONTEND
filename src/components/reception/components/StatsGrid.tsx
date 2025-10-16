@@ -1,5 +1,6 @@
 import React from 'react';
-import { Calendar, DollarSign, Clock, Users } from 'lucide-react';
+import { Calendar, Clock, Users } from 'lucide-react';
+import RupeeIcon from '../../shared/RupeeIcon';
 import StatsCard from '../../shared/StatsCard';
 import { TotalStatistics } from '../hooks/useStatistics';
 
@@ -27,7 +28,7 @@ const StatsGrid: React.FC<StatsGridProps> = ({ totalStatistics }) => {
       <StatsCard
         title="Daily Income"
         value={`Rs ${totalStatistics.totalDailyIncome.toFixed(2)}`}
-        icon={DollarSign}
+        icon={RupeeIcon}
         color="emerald"
         subtitle="From completed payments"
         loading={totalStatistics.loading}

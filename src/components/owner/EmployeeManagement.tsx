@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, Download, Plus, Trash2, 
   Eye, EyeOff, Mail, Phone, Award,
-  DollarSign, Users, Star, X
+  Users, Star, X
 } from 'lucide-react';
+import RupeeIcon from '../shared/RupeeIcon';
 import { useToast } from '../../contexts/ToastProvider';
 import { useAuth } from '../../contexts/AuthContext';
 import AddEmployeeModal from './AddEmployeeModal';
@@ -390,7 +391,7 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = () => {
                             {employee.phoneNumber}
                           </div>
                           <div className="flex items-center">
-                            <DollarSign className="w-4 h-4 mr-2" />
+                            <RupeeIcon className="w-4 h-4 mr-2" />
                             Rs {employee.baseSalary.toLocaleString()}
                           </div>
                           <div className="flex items-center">

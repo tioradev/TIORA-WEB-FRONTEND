@@ -5,7 +5,7 @@ import LoadingSpinner from './LoadingSpinner';
 interface StatsCardProps {
   title: string;
   value: string | number;
-  icon: LucideIcon;
+  icon: LucideIcon | React.ComponentType<{ className?: string }>;
   color: 'blue' | 'purple' | 'emerald' | 'amber' | 'red';
   change?: string;
   subtitle?: string;

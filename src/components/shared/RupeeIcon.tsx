@@ -1,4 +1,5 @@
 import React from 'react';
+import SriLankanRupeeIconSVG from '../../assets/images/Srilankan Rupee icon.svg';
 
 interface RupeeIconProps {
   className?: string;
@@ -6,21 +7,11 @@ interface RupeeIconProps {
 
 const RupeeIcon: React.FC<RupeeIconProps> = ({ className = "w-4 h-4" }) => {
   return (
-    <svg 
-      className={className} 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
-      strokeLinejoin="round"
-    >
-      <path d="M6 3h12"/>
-      <path d="M6 8h12"/>
-      <path d="m6 13 8.5 8"/>
-      <path d="M6 13h3"/>
-      <path d="M9 13c6.667 0 6.667-10 0-10"/>
-    </svg>
+    <img 
+      src={SriLankanRupeeIconSVG} 
+      alt="Sri Lankan Rupee" 
+      className={className}
+    />
   );
 };
 

@@ -10,6 +10,8 @@ import type {
 const ENDPOINTS = {
   AUTH: {
     LOGIN: '/auth/login',
+    PASSWORD_RESET_INITIATE: '/auth/password-reset/initiate',
+    PASSWORD_RESET_VERIFY: '/auth/password-reset/verify',
   },
   SALONS: {
     REGISTER: '/salons/comprehensive',
@@ -235,6 +237,34 @@ class ApiService {
       this.setAuthToken(response.token);
     }
     
+    return response;
+  }
+
+  // Initiate Password Reset
+  async initiatePasswordReset(email: string): Promise<PasswordResetInitiateResponse> {
+    const response = await this.request<PasswordResetInitiateResponse>(
+      ENDPOINTS.AUTH.PASSWORD_RESET_INITIATE,
+      {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      }
+    );
+    
+    envLog.info('🔐 [AUTH] Password reset initiated for email:', email);
+    return response;
+  }
+
+  // Verify Password Reset Code and Set New Password
+  async verifyPasswordReset(resetData: PasswordResetVerifyRequest): Promise<PasswordResetVerifyResponse> {
+    const response = await this.request<PasswordResetVerifyResponse>(
+      ENDPOINTS.AUTH.PASSWORD_RESET_VERIFY,
+      {
+        method: 'POST',
+        body: JSON.stringify(resetData),
+      }
+    );
+    
+    envLog.info('🔐 [AUTH] Password reset verified and completed for email:', resetData.email);
     return response;
   }
 
@@ -1728,6 +1758,27 @@ export interface LoginResponse {
   };
   message?: string;
   success?: boolean;
+}
+
+// Password reset types
+export interface PasswordResetInitiateResponse {
+  success: boolean;
+  message: string;
+  resetCodeSent: string;
+  expiresInMinutes: number;
+}
+
+export interface PasswordResetVerifyRequest {
+  email: string;
+  resetCode: string;
+  newPassword: string;
+}
+
+export interface PasswordResetVerifyResponse {
+  success: boolean;
+  message: string;
+  resetCodeSent: string | null;
+  expiresInMinutes: number;
 }
 
 // Salon registration types - updated format to match new API requirements

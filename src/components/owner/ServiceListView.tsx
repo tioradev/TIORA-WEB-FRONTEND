@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Edit, Trash2, Eye, EyeOff, Users, Clock, DollarSign } from 'lucide-react';
+import { Edit, Trash2, Eye, EyeOff, Users, Clock } from 'lucide-react';
+import RupeeIcon from '../shared/RupeeIcon';
 import { mockServices } from '../../data/mockData';
 import { Service } from '../../types';
 import { apiService } from '../../services/api';
@@ -268,7 +269,7 @@ const ServiceListView: React.FC<ServiceListViewProps> = ({
 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <DollarSign className="w-4 h-4 text-gray-400" />
+                    <RupeeIcon className="w-4 h-4 text-gray-400" />
                     <div className="flex items-center space-x-2">
                       {service.discountPrice ? (
                         <>
@@ -346,7 +347,7 @@ const ServiceListView: React.FC<ServiceListViewProps> = ({
 
       {filteredServices.length === 0 && (
         <div className="text-center py-12">
-          <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <RupeeIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600">No services found matching your filters.</p>
         </div>
       )}

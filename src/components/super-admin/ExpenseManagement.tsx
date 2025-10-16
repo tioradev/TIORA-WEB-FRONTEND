@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { 
   Plus, Search, Filter, Download, Edit, Trash2, 
-  DollarSign, Calendar, Tag, Receipt, CreditCard, X
+  Calendar, Tag, Receipt, CreditCard, X
 } from 'lucide-react';
+import RupeeIcon from '../shared/RupeeIcon';
 import { Expense } from '../../types';
 
 const ExpenseManagement: React.FC = () => {
@@ -183,7 +184,7 @@ const ExpenseManagement: React.FC = () => {
               <p className="text-sm font-medium text-gray-600">Total Expenses</p>
               <p className="text-2xl font-bold text-gray-900">Rs {totalExpenses.toLocaleString()}</p>
             </div>
-            <DollarSign className="w-8 h-8 text-red-500" />
+            <RupeeIcon className="w-8 h-8 text-red-500" />
           </div>
         </div>
         
@@ -452,7 +453,7 @@ const ExpenseModal: React.FC<ExpenseModalProps> = ({
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
             <div className="relative">
-              <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <RupeeIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="number"
                 value={formData.amount}

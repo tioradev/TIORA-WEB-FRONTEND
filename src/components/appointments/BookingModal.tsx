@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Clock, User, ChevronRight, Plus, Minus, DollarSign, Users } from 'lucide-react';
+import { X, Calendar, Clock, User, ChevronRight, Plus, Minus, Users } from 'lucide-react';
+import RupeeIcon from '../shared/RupeeIcon';
 import { apiService, TimeSlot, CreateAppointmentRequest } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastProvider';
@@ -1060,7 +1061,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
                                     <span>{service.duration_minutes || 60} min</span>
                                   </span>
                                   <span className="flex items-center space-x-1">
-                                    <DollarSign className="w-3 h-3" />
+                                    <RupeeIcon className="w-3 h-3" />
                                     <span>
                                       {service.discount_price ? (
                                         <>
@@ -1364,7 +1365,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, onBook, ed
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-semibold text-blue-900 flex items-center space-x-2">
-                    <DollarSign className="w-5 h-5" />
+                    <RupeeIcon className="w-5 h-5" />
                     <span>Booking Summary</span>
                   </h4>
                 </div>

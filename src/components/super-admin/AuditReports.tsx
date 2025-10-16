@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { 
-  Download, Calendar, FileText, DollarSign, 
+  Download, Calendar, FileText, 
   Users, Activity,
   Building
 } from 'lucide-react';
+import RupeeIcon from '../shared/RupeeIcon';
 import { mockEarnings, mockAppointments, mockBarbers, mockSalons } from '../../data/mockData';
 
 const AuditReports: React.FC = () => {
@@ -19,7 +20,7 @@ const AuditReports: React.FC = () => {
     { value: 'comprehensive', label: 'Comprehensive Report', icon: FileText, description: 'Complete system overview' },
     { value: 'salon-overview', label: 'Salon Overview', icon: Building, description: 'All salon performance metrics' },
     { value: 'system-analytics', label: 'System Analytics', icon: Activity, description: 'Technical system performance' },
-    { value: 'income', label: 'Income Report', icon: DollarSign, description: 'Revenue and earnings analysis' },
+    { value: 'income', label: 'Income Report', icon: RupeeIcon, description: 'Revenue and earnings analysis' },
     { value: 'employee', label: 'Employee Report', icon: Users, description: 'Staff performance across salons' },
     { value: 'customer', label: 'Customer Report', icon: Activity, description: 'Client analytics and trends' },
   ];
@@ -412,7 +413,7 @@ const AuditReports: React.FC = () => {
                 <p className="text-emerald-100">Total Revenue</p>
                 <p className="text-2xl font-bold">Rs {mockEarnings.reduce((sum, e) => sum + e.finalAmount, 0)}</p>
               </div>
-              <DollarSign className="w-8 h-8 text-emerald-200" />
+              <RupeeIcon className="w-8 h-8 text-emerald-200" />
             </div>
           </div>
           

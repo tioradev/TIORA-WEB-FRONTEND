@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Edit, Trash2, User, Phone, 
-  DollarSign, Star, Building, RotateCcw,
+  Star, Building, RotateCcw,
   ChevronLeft, ChevronRight, Loader
 } from 'lucide-react';
+import RupeeIcon from '../shared/RupeeIcon';
 import { 
   apiService, 
   EmployeeUpdateRequest,
@@ -759,7 +760,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onAddStaffClick }) =>
                   <span>{branches.find(b => b.id === staffMember.branchId)?.name || 'Unknown Branch'}</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <DollarSign className="w-4 h-4" />
+                  <RupeeIcon className="w-4 h-4" />
                   <span>LKR {staffMember.monthlySalary.toLocaleString()}/month</span>
                 </div>
                 {staffMember.specialties.length > 0 && (

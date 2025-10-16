@@ -207,8 +207,10 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
         console.log('🌐 [PROFILE] Making API call to update employee profile...');
         console.log('📋 [PROFILE] Employee ID:', employeeId);
         console.log('📋 [PROFILE] Update data:', employeeUpdateData);
+        console.log('🔧 [PROFILE] Using salon-specific endpoint: /employees/salon/{id} (updateEmployee method)');
         
-        const response = await apiService.updateEmployeeProfile(employeeId, employeeUpdateData);
+        // Use salon-specific endpoint for reception users (updateEmployee instead of updateEmployeeProfile)
+        const response = await apiService.updateEmployee(employeeId, employeeUpdateData);
         console.log('✅ [PROFILE] Reception employee profile update response:', response);
         
         // Update the user data in AuthContext
@@ -278,11 +280,11 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
         console.error('🔒 [PROFILE] Current token status:', apiService.getTokenStatus());
         console.error('🔒 [PROFILE] localStorage token:', !!localStorage.getItem('authToken'));
         
-        // Clear the invalid token and show user-friendly message
-        logout();
-        alert('Your session has expired. Please refresh the page and log in again to continue.');
+        // Show a more user-friendly message but don't immediately log out
+        // The endpoint change should fix the authorization issue
+        alert('Profile update failed due to authorization error. This might be a permission issue. Please try refreshing the page.');
         
-        // Close the modal and don't update local state for authentication errors
+        // Close the modal but keep the user logged in
         onClose();
         return;
       }
@@ -344,11 +346,13 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
         // Call the employee update API with the new profile image URL
         console.log('🌐 [PROFILE] Calling employee update API...');
         console.log('📋 [PROFILE] Using employee ID:', employeeId);
+        console.log('🔧 [PROFILE] Using salon-specific endpoint: /employees/salon/{id} for image upload');
         const employeeUpdateData = {
           profile_image_url: downloadURL
         };
 
-        const response = await apiService.updateEmployeeProfile(employeeId, employeeUpdateData);
+        // Use salon-specific endpoint for reception users
+        const response = await apiService.updateEmployee(employeeId, employeeUpdateData);
         console.log('✅ [PROFILE] Employee profile updated successfully via API:', response);
         
       } catch (error) {

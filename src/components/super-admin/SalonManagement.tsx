@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Download, Trash2, 
   Eye, Building, Mail, Phone, MapPin,
-  DollarSign, Users, Activity,
+  Users, Activity,
   CheckCircle, X, Loader,
   ChevronLeft, ChevronRight
 } from 'lucide-react';
+import RupeeIcon from '../shared/RupeeIcon';
 import { apiService, SalonResponse } from '../../services/api';
 import type { PaginatedResponse } from '../../types';
 import { useToast } from '../../contexts/ToastProvider';
@@ -331,7 +332,7 @@ const SalonManagement: React.FC = () => {
               </p>
               <p className="text-xs text-gray-500">All-time earnings</p>
             </div>
-            <DollarSign className="w-8 h-8 text-orange-600" />
+            <RupeeIcon className="w-8 h-8 text-orange-600" />
           </div>
         </div>
       </div>
